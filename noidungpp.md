@@ -114,13 +114,16 @@ graph TD
 
 ---
 
-### SLIDE 6: PHÂN CÔNG NHIỆM VỤ TRONG NHÓM
+### SLIDE 6: PHÂN CÔNG NHIỆM VỤ THEO TỪNG MODULE (WBS)
 
-| Thành viên phụ trách | Phân hệ đảm nhận | Hạng mục công việc chi tiết | Công nghệ chủ đạo |
-|---|---|---|---|
-| **Ngô Công Thành**<br>*(MSSV: 2212461 - Trưởng nhóm)* | **Thị giác Máy tính (CV) & Mô hình AI OCR** | • Xây dựng tập dữ liệu 13.125 mẫu ảnh dòng chữ.<br>• Thuật toán Deskew, khử chấm, phóng đại chữ viết tay và CLAHE.<br>• Huấn luyện mô hình VietOCR Transformer.<br>• Thuật toán bóc tách cấu trúc Bảng biểu lưới ô. | PyTorch, VietOCR, OpenCV, PyMuPDF |
-| **Phan Thành Phát**<br>*(MSSV: 2212463)* | **Backend API, CSDL & Elasticsearch** | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên FastAPI.<br>• Tác vụ xử lý ngầm bất đồng bộ không nghẽn luồng.<br>• Cấu hình cụm chỉ mục Elasticsearch 8.12.0 tiếng Việt. | FastAPI, PostgreSQL, Elasticsearch 8, Redis, SQLAlchemy |
-| **Lý Gia Bảo**<br>*(MSSV: 2213934)* | **Frontend Web SPA, UI/UX & Docker** | • Thiết kế giao diện React 18 SPA với TailwindCSS.<br>• Lập trình Trình đối soát song song **Side-by-Side Live Editor**.<br>• Cơ chế Real-time Live Auto-Polling cập nhật OCR.<br>• Trang Xác thực mã QR và đóng gói Docker Compose. | React 18, TypeScript, Vite, Zustand, Docker Compose |
+| Module | Tên Phân Hệ Module | Sinh Viên Đảm Nhận | Nhiệm Vụ Phụ Trách Chi Tiết | Công Nghệ Chủ Đạo |
+|:---:|---|:---:|---|---|
+| **Module 1** | **Thu Thập & Tiền Xử Lý Ảnh** | **Ngô Công Thành**<br>*(2212461 - Trưởng nhóm)* | • Thu thập tập dữ liệu 13.125 mẫu ảnh CTSV.<br>• Xoay thẳng ảnh nghiêng (Deskew), khử đường chấm `...........`.<br>• Phóng đại chữ viết tay ($1.5\times - 2.5\times$) & tăng tương phản CLAHE. | OpenCV (cv2), PyMuPDF (fitz), Pillow, NumPy |
+| **Module 2** | **Mô Hình AI & VietOCR Pipeline** | **Ngô Công Thành**<br>*(2212461 - Trưởng nhóm)* | • Cắt dòng văn bản (Line Segmentation).<br>• Fine-tune mạng nơ-ron VietOCR Transformer (`vgg_transformer`).<br>• Thuật toán bóc tách lưới ô Bảng biểu ra Markdown Table.<br>• Hậu xử lý chuẩn hóa Unicode NFC & sửa lỗi từ điển. | PyTorch 2.x, VietOCR Transformer, Albumentations |
+| **Module 3** | **Bóc Tách Thực Thể & Elasticsearch** | **Phan Thành Phát**<br>*(MSSV: 2212463)* | • Xây dựng bộ luật Regex trích xuất MSSV 7 số, Họ tên, Số hiệu.<br>• Cấu hình cụm chỉ mục Elasticsearch 8.12.0 tiếng Việt.<br>• Lập trình API tìm kiếm mờ (Fuzzy Query) & Highlighting snippet. | Elasticsearch 8.x, Regular Expressions, Unicodedata |
+| **Module 4** | **Backend API & Quản Trị CSDL** | **Phan Thành Phát**<br>*(MSSV: 2212463)* | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên nền FastAPI.<br>• Tác vụ xử lý OCR ngầm bất đồng bộ không gây nghẽn luồng.<br>• Thiết lập JWT Authentication & phân quyền RBAC 3 vai trò. | FastAPI, PostgreSQL (Supabase), Redis 7 Cache, SQLAlchemy Async |
+| **Module 5** | **Frontend Web SPA & Đóng Gói DevOps** | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | • Thiết kế giao diện Web SPA React 18, TypeScript, TailwindCSS.<br>• Xây dựng Dashboard KPI, Upload kéo thả & Chụp ảnh Camera.<br>• **Trình đối soát Side-by-Side Live Editor** nhúng trực tiếp file gốc.<br>• Cơ chế Real-time Live Auto-Polling cập nhật OCR tức thì.<br>• Module Xác thực mã QR & Đóng gói Docker 4 Containers. | React 18, TypeScript, Vite, Zustand, Docker Compose |
+
 
 ---
 
