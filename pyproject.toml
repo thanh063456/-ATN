@@ -1,0 +1,142 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+# ============================================================
+# Project Metadata
+# ============================================================
+[project]
+name        = "student-document-ocr"
+version     = "0.1.0"
+description = "Hệ thống số hóa và quản lý tài liệu Công tác sinh viên ứng dụng OCR và Elasticsearch"
+readme      = "README.md"
+license     = { file = "LICENSE" }
+requires-python = ">=3.11"
+
+authors = [
+  { name = "ĐATN Author", email = "author@example.com" },
+]
+
+keywords = ["ocr", "elasticsearch", "fastapi", "document-management", "vietocr", "paddleocr"]
+
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Framework :: FastAPI",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# ── Runtime Dependencies (placeholder) ──────────────────────
+dependencies = [
+  # TODO: Pin exact versions after environment setup
+  # ── Web Framework ──────────────────────────────────────
+  "fastapi>=0.111.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.3.0",
+
+  # ── Database ───────────────────────────────────────────
+  "sqlalchemy>=2.0.0",
+  "alembic>=1.13.0",
+  "asyncpg>=0.29.0",
+
+  # ── Elasticsearch ──────────────────────────────────────
+  "elasticsearch[async]>=8.12.0",
+
+  # ── Object Storage ─────────────────────────────────────
+  "minio>=7.2.0",
+
+  # ── Task Queue ─────────────────────────────────────────
+  "celery[redis]>=5.4.0",
+  "redis>=5.0.0",
+
+  # ── OCR ────────────────────────────────────────────────
+  # "vietocr>=0.3.0",     # TODO: Uncomment after training setup
+  # "paddleocr>=2.7.0",   # TODO: Uncomment for PaddleOCR engine
+
+  # ── Image Processing ───────────────────────────────────
+  "opencv-python-headless>=4.9.0",
+  "Pillow>=10.3.0",
+  "pdf2image>=1.17.0",
+
+  # ── Auth ───────────────────────────────────────────────
+  "python-jose[cryptography]>=3.3.0",
+  "passlib[bcrypt]>=1.7.4",
+  "python-multipart>=0.0.9",
+
+  # ── Utilities ──────────────────────────────────────────
+  "python-dotenv>=1.0.0",
+  "httpx>=0.27.0",
+  "loguru>=0.7.0",
+]
+
+# ── Optional Dependencies ────────────────────────────────────
+[project.optional-dependencies]
+dev = [
+  # TODO: Pin exact versions
+  "pytest>=8.2.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-cov>=5.0.0",
+  "httpx>=0.27.0",
+  "ruff>=0.4.0",
+  "mypy>=1.10.0",
+  "pre-commit>=3.7.0",
+]
+training = [
+  # TODO: Pin exact versions after GPU environment setup
+  "torch>=2.3.0",
+  "torchvision>=0.18.0",
+  "transformers>=4.41.0",
+  "datasets>=2.19.0",
+  "albumentations>=1.4.0",
+  "tensorboard>=2.17.0",
+  "wandb>=0.17.0",
+]
+notebooks = [
+  "jupyter>=1.0.0",
+  "ipywidgets>=8.1.0",
+  "matplotlib>=3.9.0",
+  "seaborn>=0.13.0",
+  "pandas>=2.2.0",
+  "numpy>=1.26.0",
+]
+
+# ============================================================
+# Tool Configurations (Placeholders)
+# ============================================================
+
+# ── Ruff (Linter + Formatter) ────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length    = 120
+# TODO: Configure per-module ignore rules
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "ANN"]
+ignore = [
+  "ANN101",  # Missing type annotation for self
+  "ANN102",  # Missing type annotation for cls
+]
+
+# ── MyPy (Type Checker) ──────────────────────────────────────
+[tool.mypy]
+python_version         = "3.11"
+strict                 = false
+ignore_missing_imports = true
+# TODO: Gradually enable strict mode
+
+# ── Pytest ───────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths    = ["tests"]
+# TODO: Configure coverage threshold
+
+[tool.coverage.run]
+source = ["backend/app"]
+omit   = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+# TODO: Raise threshold as coverage improves

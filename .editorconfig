@@ -1,0 +1,36 @@
+root = true
+
+# ── All files ────────────────────────────────────────────────
+[*]
+charset                  = utf-8
+end_of_line              = lf
+indent_size              = 4
+indent_style             = space
+insert_final_newline     = true
+trim_trailing_whitespace = true
+max_line_length          = 120
+
+# ── Python ───────────────────────────────────────────────────
+[*.py]
+indent_size = 4
+
+# ── JavaScript / TypeScript ──────────────────────────────────
+[*.{js,jsx,ts,tsx}]
+indent_size = 2
+
+# ── JSON ─────────────────────────────────────────────────────
+[*.json]
+indent_size = 2
+
+# ── YAML ─────────────────────────────────────────────────────
+[*.{yml,yaml}]
+indent_size = 2
+
+# ── Markdown ─────────────────────────────────────────────────
+[*.md]
+trim_trailing_whitespace = false
+indent_size              = 2
+
+# ── Makefile ─────────────────────────────────────────────────
+[Makefile]
+indent_style = tab

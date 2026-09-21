@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-08-26T08:18:28.999127+00:00",
+  "dataset_status": "PROVIDED",
+  "current_version": "v0.1-draft",
+  "message": "Dataset files available.",
+  "statistics": {
+    "dataset_status": "PROVIDED",
+    "current_version": "v0.1-draft",
+    "number_of_documents": 3,
+    "number_of_files": 3,
+    "file_types": {
+      ".png": 3
+    },
+    "file_sizes": {
+      "total_bytes": 275444,
+      "min_bytes": 76174,
+      "max_bytes": 108678,
+      "mean_bytes": 91814.67
+    },
+    "pages": {
+      "total_pages": 0,
+      "pages_per_doc_mean": 0
+    },
+    "document_categories": {
+      "DON": 1,
+      "GIAY": 1,
+      "HOC": 1
+    },
+    "resolution": {
+      "min_dpi": null,
+      "max_dpi": null,
+      "distribution": {}
+    },
+    "quality": {
+      "GOOD": 0,
+      "ACCEPTABLE": 0,
+      "REJECT": 0,
+      "UNAUDITED": 3
+    },
+    "annotation_status": {
+      "UNANNOTATED": 3,
+      "IN_PROGRESS": 0,
+      "ANNOTATED": 0,
+      "VERIFIED": 0
+    },
+    "split_distribution": {
+      "TRAIN": 0,
+      "VAL": 0,
+      "TEST": 0,
+      "UNASSIGNED": 3
+    }
+  }
+}

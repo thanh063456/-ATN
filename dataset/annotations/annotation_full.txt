@@ -1,0 +1,13 @@
+﻿dataset/crops/DOC_DON_NGHI_HOC_20240601_abc12345_line_000.png	CONG HOA XA HOI CHU NGHIA VIET NAM
+dataset/crops/DOC_DON_NGHI_HOC_20240601_abc12345_line_001.png	Doc lap - Tu do - Hanh phuc
+dataset/crops/DOC_DON_NGHI_HOC_20240601_abc12345_line_002.png	------------------------------
+dataset/crops/DOC_DON_NGHI_HOC_20240601_abc12345_line_003.png	DON XIN NGHI HOC TAM THOI
+dataset/crops/DOC_DON_NGHI_HOC_20240601_abc12345_line_004.png	Kinh gui: Truong Dai hoc ...
+dataset/crops/DOC_DON_NGHI_HOC_20240601_abc12345_line_005.png	Ten toi la: Nguyen Van A
+dataset/crops/DOC_HOC_BONG_20240615_def67890_line_000.png	HO SO HOC BONG HOC KY 2 NAM 2024
+dataset/crops/DOC_HOC_BONG_20240615_def67890_line_001.png	Ho va ten: Tran Thi B
+dataset/crops/DOC_HOC_BONG_20240615_def67890_line_002.png	MSSV: 21005678
+dataset/crops/DOC_GIAY_XAC_NHAN_20240620_ghi11223_line_000.png	GIAY XAC NHAN SINH VIEN
+dataset/crops/DOC_GIAY_XAC_NHAN_20240620_ghi11223_line_001.png	Truong xac nhan sinh vien:
+dataset/crops/DOC_GIAY_XAC_NHAN_20240620_ghi11223_line_002.png	Ho ten: Le Van C
+dataset/crops/DOC_GIAY_XAC_NHAN_20240620_ghi11223_line_003.png	Ngay sinh: 01/01/2003

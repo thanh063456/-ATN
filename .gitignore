@@ -1,0 +1,109 @@
+# ============================================================
+# .gitignore — Student-Document-OCR
+# ============================================================
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ── Jupyter Notebooks ────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Node / Frontend ──────────────────────────────────────────
+node_modules/
+.next/
+.nuxt/
+dist/
+.cache/
+.parcel-cache/
+
+# ── Environment ──────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.env
+
+# ── IDE / Editor ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Docker ───────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── AI / ML ──────────────────────────────────────────────────
+*.pt
+*.pth
+*.onnx
+*.h5
+*.pkl
+*.bin
+checkpoints/
+runs/
+mlruns/
+wandb/
+
+# ── Datasets & LMDB ──────────────────────────────────────────
+dataset/raw/
+dataset/processed/
+dataset/augmented/
+train_data/
+valid_data/
+uploads/
+*.mdb
+*.db
+*.sqlite
+*.sqlite3
+*.zip
+*.tar.gz
+*.tar
+*.7z
+
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+tensorboard/
+
+# ── Coverage / Test ──────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+
+# ── Elasticsearch ────────────────────────────────────────────
+elasticsearch/data/
+
+# ── Misc ─────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.orig
+.mypy_cache/
+.ruff_cache/
+
+# ── Internal bootstrap / review scripts ──────────────────────
+scripts/_bootstrap_files.*
+scripts/_audit.*
+scripts/_review.*
+scripts/_*.py
+scripts/_*.ps1

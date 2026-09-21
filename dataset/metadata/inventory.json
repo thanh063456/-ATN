@@ -1,0 +1,47 @@
+[
+  {
+    "document_id": "30e5487f-c06c-4ecc-b477-50d4253e07fc",
+    "source_file": "DOC_DON_NGHI_HOC_20240601_abc12345.png",
+    "file_type": "PNG",
+    "file_size": 108678,
+    "document_type": "DON",
+    "page_count": null,
+    "resolution": null,
+    "language": "vi",
+    "quality": null,
+    "source": "PHONG_CTSV_SCAN",
+    "annotation_status": "UNANNOTATED",
+    "split": "UNASSIGNED",
+    "created_at": "2026-08-26T08:18:04.849564+00:00"
+  },
+  {
+    "document_id": "db45d6d9-ef5a-4887-b092-9ee39c5aff34",
+    "source_file": "DOC_GIAY_XAC_NHAN_20240620_ghi11223.png",
+    "file_type": "PNG",
+    "file_size": 90592,
+    "document_type": "GIAY",
+    "page_count": null,
+    "resolution": null,
+    "language": "vi",
+    "quality": null,
+    "source": "PHONG_CTSV_SCAN",
+    "annotation_status": "UNANNOTATED",
+    "split": "UNASSIGNED",
+    "created_at": "2026-08-26T08:18:04.875047+00:00"
+  },
+  {
+    "document_id": "861471d8-7a8f-4be8-9271-9fdf7071cb78",
+    "source_file": "DOC_HOC_BONG_20240615_def67890.png",
+    "file_type": "PNG",
+    "file_size": 76174,
+    "document_type": "HOC",
+    "page_count": null,
+    "resolution": null,
+    "language": "vi",
+    "quality": null,
+    "source": "PHONG_CTSV_SCAN",
+    "annotation_status": "UNANNOTATED",
+    "split": "UNASSIGNED",
+    "created_at": "2026-08-26T08:18:04.856208+00:00"
+  }
+]

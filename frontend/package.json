@@ -1,0 +1,32 @@
+{
+  "name": "student-document-ocr-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend placeholder — sẽ được thay thế ở Phase 8 (Frontend Implementation)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "@tanstack/react-query": "^5.50.0",
+    "axios": "^1.7.0",
+    "lucide-react": "^1.34.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.51.0",
+    "react-router-dom": "^6.24.0",
+    "zod": "^3.23.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1"
+  }
+}
