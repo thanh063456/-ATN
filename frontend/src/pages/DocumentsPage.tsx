@@ -158,11 +158,13 @@ export const DocumentsPage: React.FC = () => {
   };
 
   const filteredDocs = docs.filter((doc) => {
+    const uploaderName = doc.uploader_name || doc.student_name || "";
+    const uploaderMssv = doc.uploader_mssv || doc.student_id || "";
     const matchSearch =
       !searchFilter ||
       doc.title.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      (doc.uploader_name && doc.uploader_name.toLowerCase().includes(searchFilter.toLowerCase())) ||
-      (doc.uploader_mssv && doc.uploader_mssv.includes(searchFilter));
+      (uploaderName && uploaderName.toLowerCase().includes(searchFilter.toLowerCase())) ||
+      (uploaderMssv && uploaderMssv.includes(searchFilter));
 
     const isApproved = doc.ocr_status === "APPROVED";
     const matchApproval =
@@ -178,7 +180,7 @@ export const DocumentsPage: React.FC = () => {
   const pendingCount = docs.filter((d) => d.ocr_status !== "APPROVED" && d.ocr_status !== "REJECTED").length;
   const approvedCount = docs.filter((d) => d.ocr_status === "APPROVED").length;
   const avgConfidence = docs.length > 0
-    ? Math.round(docs.reduce((acc, cur) => acc + (cur.confidence_score || 0.95), 0) / docs.length * 100)
+    ? Math.round(docs.reduce((acc, cur) => acc + (cur.ocr_confidence ?? cur.confidence_score ?? 0.95), 0) / docs.length * 100)
     : 98;
 
   return (
@@ -485,12 +487,12 @@ export const DocumentsPage: React.FC = () => {
                       {/* Người nộp / MSSV */}
                       <td style={{ padding: "1rem 1rem", verticalAlign: "middle" }}>
                         <div style={{ fontWeight: 600, color: "var(--gray-800)", fontSize: "0.8125rem" }}>
-                          {doc.uploader_name || "Cán bộ CTSV (Đại học Đà Lạt)"}
+                          {doc.student_name || doc.uploader_name || "Cán bộ CTSV (Đại học Đà Lạt)"}
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "var(--gray-400)", marginTop: "0.15rem" }}>
-                          {doc.uploader_mssv ? (
+                          {doc.student_id || doc.uploader_mssv ? (
                             <span style={{ backgroundColor: "var(--gray-100)", padding: "0.1rem 0.35rem", borderRadius: "0.25rem", fontFamily: "monospace" }}>
-                              MSSV: {doc.uploader_mssv}
+                              MSSV: {doc.student_id || doc.uploader_mssv}
                             </span>
                           ) : (
                             <span style={{ color: "var(--gray-400)" }}>Trường Đại học Đà Lạt</span>
@@ -523,9 +525,11 @@ export const DocumentsPage: React.FC = () => {
                         <span style={{
                           fontWeight: 700,
                           fontSize: "0.8125rem",
-                          color: (doc.confidence_score ?? 0.95) >= 0.9 ? "#16a34a" : "#d97706"
+                          color: ((doc.ocr_confidence ?? doc.confidence_score ?? 0.95) >= 0.9) ? "#16a34a" : "#d97706"
                         }}>
-                          {doc.confidence_score ? `${Math.round(doc.confidence_score * 100)}%` : "97%"}
+                          {doc.ocr_confidence != null || doc.confidence_score != null
+                            ? `${Math.round(((doc.ocr_confidence ?? doc.confidence_score) as number) * 100)}%`
+                            : "97%"}
                         </span>
                       </td>
 

@@ -118,10 +118,10 @@ class DocumentResponse(BaseModel):
     file_size_bytes: int
     page_count: int | None = None
     category_id: UUID | None = None
-    uploaded_by: UUID
+    uploaded_by: UUID | None = None
     ocr_status: str
-    minio_object_key: str
-    is_deleted: bool
+    minio_object_key: str | None = None
+    is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -131,7 +131,11 @@ class DocumentListItem(DocumentResponse):
     uploader_name: str | None = None
     uploader_mssv: str | None = None
     category_name: str | None = None
+    category_code: str | None = None
     confidence_score: float | None = None
+    ocr_confidence: float | None = None
+    student_id: str | None = None
+    student_name: str | None = None
 
 
 class DocumentListResponse(BaseModel):

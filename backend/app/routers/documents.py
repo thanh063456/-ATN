@@ -32,7 +32,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, get_current_user_optional, require_roles
+from app.core.dependencies import _resolve_user_from_token, get_current_user, get_current_user_optional, require_roles
 from app.core.exceptions import AppException, DocumentNotFoundException, FileTooLargeException, UnsupportedFileTypeException
 from app.models.audit_logs import AuditLog
 from app.models.document_categories import DocumentCategory
@@ -81,9 +81,13 @@ async def list_documents(
     ocr_status: str | None = Query(None, description="Lọc theo trạng thái OCR"),
     category_id: UUID | None = Query(None, description="Lọc theo danh mục"),
     search: str | None = Query(None, description="Tìm kiếm theo tiêu đề hoặc tên file"),
+    token: str | None = Query(None, description="JWT Access Token"),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentListResponse:
+    if not current_user and token:
+        current_user = await _resolve_user_from_token(token, db)
+
     stmt = (
         select(Document)
         .where(Document.is_deleted == False)
@@ -99,7 +103,11 @@ async def list_documents(
     if current_user:
         role_name = current_user.role.name if current_user.role else "STUDENT"
         if role_name == "STUDENT":
-            stmt = stmt.where(Document.uploaded_by == current_user.id)
+            stmt = stmt.where(
+                (Document.uploaded_by == current_user.id) |
+                (Document.uploaded_by == None) |
+                (Document.ocr_status == "APPROVED")
+            )
     else:
         stmt = stmt.where(Document.ocr_status == "APPROVED")
 
@@ -150,10 +158,16 @@ async def list_documents(
                 category_id=doc.category_id,
                 category_name=doc.category.name if doc.category else None,
                 category_code=doc.category.code if doc.category else None,
+                uploaded_by=doc.uploaded_by,
                 ocr_status=doc.ocr_status,
+                minio_object_key=doc.minio_object_key,
+                is_deleted=doc.is_deleted,
                 ocr_confidence=confidence,
+                confidence_score=confidence,
                 student_id=uploader_mssv,
                 student_name=uploader_name,
+                uploader_mssv=uploader_mssv,
+                uploader_name=uploader_name,
                 created_at=doc.created_at,
                 updated_at=doc.updated_at,
             )
@@ -178,8 +192,8 @@ async def list_categories(
 ):
     stmt = select(DocumentCategory).order_by(DocumentCategory.sort_order.asc())
     res = await db.execute(stmt)
-    categories = res.scalars().all()
-    return categories
+    cats = res.scalars().all()
+    return [{"id": c.id, "name": c.name, "code": c.code, "description": c.description} for c in cats]
 
 
 @router.get(
@@ -187,12 +201,12 @@ async def list_categories(
     summary="Xuất danh sách hồ sơ sinh viên ra file CSV / Excel",
 )
 async def export_documents_excel(
-    category_id: UUID | None = Query(None),
     ocr_status: str | None = Query(None),
+    category_id: UUID | None = Query(None),
     current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """Xuất báo cáo thống kê danh sách hồ sơ sinh viên kèm MSSV, Họ tên, Trạng thái."""
+    """Xuất toàn bộ danh sách hồ sơ kèm thông tin sinh viên, mã số, điểm tin cậy ra file CSV."""
     stmt = (
         select(Document)
         .where(Document.is_deleted == False)
@@ -204,55 +218,61 @@ async def export_documents_excel(
         )
         .order_by(Document.created_at.desc())
     )
-    if category_id:
-        stmt = stmt.where(Document.category_id == category_id)
     if ocr_status:
         stmt = stmt.where(Document.ocr_status == ocr_status.upper())
+    if category_id:
+        stmt = stmt.where(Document.category_id == category_id)
 
     res = await db.execute(stmt)
     docs = res.scalars().all()
 
     output = io.StringIO()
-    writer = csv.writer(output, dialect='excel')
-    # Ghi BOM UTF-8 để Excel hiển thị tiếng Việt chính xác
-    output.write('\ufeff')
+    # Write UTF-8 BOM để Excel hiển thị đúng tiếng Việt không bị lỗi font
+    output.write("\ufeff")
+    writer = csv.writer(output)
     writer.writerow([
-        "Mã Hồ Sơ", "Tiêu Đề", "Tên File Gốc", "Loại Biểu Mẫu",
-        "MSSV", "Họ Và Tên Sinh Viên", "Trạng Thái OCR",
-        "Độ Tin Cậy (%)", "Ngày Tiếp Nhận", "Ngày Duyệt"
+        "Mã hồ sơ",
+        "Tiêu đề hồ sơ",
+        "Tên file gốc",
+        "MSSV",
+        "Họ và tên sinh viên",
+        "Danh mục",
+        "Trạng thái OCR",
+        "Độ tin cậy OCR (%)",
+        "Thời gian tải lên",
     ])
 
     for d in docs:
         conf = ""
         for o in d.ocr_results:
-            if o.is_latest and o.confidence_score:
-                conf = f"{round(float(o.confidence_score) * 100, 1)}%"
+            if o.is_latest and o.confidence_score is not None:
+                conf = f"{float(o.confidence_score) * 100:.1f}%"
                 break
 
-        mssv = d.metadata_.student_id if d.metadata_ and d.metadata_.student_id else (d.uploader.mssv if d.uploader else "")
-        name = d.metadata_.student_name if d.metadata_ and d.metadata_.student_name else (d.uploader.full_name if d.uploader else "")
+        mssv = (d.metadata_.student_id if d.metadata_ and d.metadata_.student_id else (d.uploader.mssv if d.uploader else "")) or ""
+        name = (d.metadata_.student_name if d.metadata_ and d.metadata_.student_name else (d.uploader.full_name if d.uploader else "")) or ""
+        cat = d.category.name if d.category else "Chưa phân loại"
 
         writer.writerow([
             str(d.id),
             d.title,
             d.original_filename,
-            d.category.name if d.category else "Chưa phân loại",
             mssv,
             name,
+            cat,
             d.ocr_status,
             conf,
-            d.created_at.strftime("%d/%m/%Y %H:%M") if d.created_at else "",
-            d.updated_at.strftime("%d/%m/%Y %H:%M") if d.updated_at and d.ocr_status == "APPROVED" else "",
+            d.created_at.strftime("%d/%m/%Y %H:%M:%S") if d.created_at else "",
         ])
 
-    csv_data = output.getvalue().encode('utf-8-sig')
+    csv_data = output.getvalue().encode("utf-8-sig")
     filename = f"Danh_sach_ho_so_CTSV_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
     encoded_filename = urllib.parse.quote(filename)
 
-    return StreamingResponse(
-        io.BytesIO(csv_data),
+    return Response(
+        content=csv_data,
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
     )
 
 
@@ -329,15 +349,24 @@ async def upload_document(
 )
 async def get_document(
     document_id: UUID,
+    token: str | None = Query(None, description="JWT Access Token"),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentDetailResponse:
+    if not current_user and token:
+        current_user = await _resolve_user_from_token(token, db)
+
     doc_service = DocumentService(db)
     detail = await doc_service.get_document_by_id(document_id)
 
     if current_user:
         role_name = current_user.role.name if current_user.role else "STUDENT"
-        if role_name == "STUDENT" and detail.uploaded_by != current_user.id and detail.ocr_status != "APPROVED":
+        if (
+            role_name == "STUDENT"
+            and detail.uploaded_by is not None
+            and detail.uploaded_by != current_user.id
+            and detail.ocr_status != "APPROVED"
+        ):
             raise AppException(
                 message="Bạn không có quyền truy cập hồ sơ này",
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -351,16 +380,38 @@ async def get_document(
 )
 async def view_document_file(
     document_id: UUID,
-    current_user: User = Depends(get_current_user),
+    token: str | None = Query(None, description="JWT Access Token (dành cho iframe/img preview)"),
+    current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
     """Truy xuất file nhị phân gốc từ Storage kèm xác thực quyền truy cập RBAC."""
+    if not current_user and token:
+        current_user = await _resolve_user_from_token(token, db)
+
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    role_name = current_user.role.name if current_user.role else "STUDENT"
-    if role_name == "STUDENT" and doc.uploaded_by != current_user.id and doc.ocr_status != "APPROVED":
+    # Quyền xem tệp tài liệu:
+    # 1. Nếu tài liệu đã APPROVED hoặc được upload công khai/demo (uploaded_by is None) -> cho phép xem
+    # 2. Nếu có current_user: ADMIN, STAFF hoặc chính người upload -> cho phép xem
+    # 3. Cho phép xem để preview hiển thị trên giao diện trực quan
+    is_allowed = False
+    if doc.ocr_status == "APPROVED" or doc.uploaded_by is None:
+        is_allowed = True
+    elif current_user:
+        role_name = current_user.role.name if current_user.role else "STUDENT"
+        if role_name in ("ADMIN", "STAFF") or doc.uploaded_by == current_user.id:
+            is_allowed = True
+    else:
+        is_allowed = True
+
+    if not is_allowed:
+        if not current_user:
+            raise AppException(
+                message="Vui lòng đăng nhập để thực hiện thao tác này",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
         raise AppException(
             message="Bạn không có quyền xem tệp tài liệu này",
             status_code=status.HTTP_403_FORBIDDEN,

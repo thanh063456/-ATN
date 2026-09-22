@@ -38,7 +38,7 @@ import { useToastStore } from "../stores/useToastStore";
 export const DocumentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
   const { addToast } = useToastStore();
 
   const isStaffOrAdmin = user?.role === "ADMIN" || user?.role === "STAFF";
@@ -528,15 +528,17 @@ export const DocumentDetailPage: React.FC = () => {
                     </button>
                   </>
                 )}
-                <a
-                  href={`${API_BASE_URL}/documents/${doc.id}/file`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ ...viewerIconBtn, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                  title="Mở file gốc trong tab mới"
-                >
-                  <ExternalLink size={14} />
-                </a>
+                {doc && (
+                  <a
+                    href={`${API_BASE_URL}/documents/${doc.id}/file${token ? `?token=${encodeURIComponent(token)}` : ""}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...viewerIconBtn, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                    title="Mở file gốc trong tab mới"
+                  >
+                    <ExternalLink size={14} />
+                  </a>
+                )}
               </div>
             </div>
 
@@ -566,7 +568,7 @@ export const DocumentDetailPage: React.FC = () => {
                 </div>
               ) : doc.file_type?.toUpperCase() === "PDF" ? (
                 <iframe
-                  src={`${API_BASE_URL}/documents/${doc.id}/file`}
+                  src={`${API_BASE_URL}/documents/${doc.id}/file${token ? `?token=${encodeURIComponent(token)}` : ""}`}
                   title={doc.original_filename}
                   style={{
                     width: "100%",
@@ -590,7 +592,7 @@ export const DocumentDetailPage: React.FC = () => {
                   }}
                 >
                   <img
-                    src={`${API_BASE_URL}/documents/${doc.id}/file`}
+                    src={`${API_BASE_URL}/documents/${doc.id}/file${token ? `?token=${encodeURIComponent(token)}` : ""}`}
                     alt={doc.original_filename}
                     style={{
                       width: `${zoomLevel * 3.8}px`,

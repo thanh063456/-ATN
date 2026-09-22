@@ -7,20 +7,24 @@ export interface DocumentSummary {
   file_type: string;
   file_size_bytes: number;
   ocr_status: "PENDING" | "PROCESSING" | "DONE" | "APPROVED" | "REJECTED" | "FAILED" | "SKIPPED";
-  minio_object_key: string;
+  minio_object_key?: string;
   created_at: string;
 }
 
 export interface DocumentListItem extends DocumentSummary {
   page_count?: number;
   category_id?: string;
-  uploaded_by: string;
-  is_deleted: boolean;
-  updated_at: string;
+  uploaded_by?: string;
+  is_deleted?: boolean;
+  updated_at?: string;
   uploader_name?: string;
   uploader_mssv?: string;
   category_name?: string;
+  category_code?: string;
   confidence_score?: number;
+  ocr_confidence?: number;
+  student_id?: string;
+  student_name?: string;
 }
 
 export interface DocumentListResponse {
@@ -72,7 +76,7 @@ export interface DocumentMetadata {
 export interface DocumentDetail extends DocumentSummary {
   page_count?: number;
   category_id?: string;
-  uploaded_by: string;
+  uploaded_by?: string;
   is_deleted: boolean;
   updated_at: string;
   ocr_result?: OCRResult;
