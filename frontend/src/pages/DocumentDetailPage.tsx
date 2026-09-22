@@ -625,23 +625,38 @@ export const DocumentDetailPage: React.FC = () => {
                 <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--gray-900)" }}>
                   Văn bản trích xuất OCR
                 </span>
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: 700,
-                    color: confidenceScore >= 90 ? "#16a34a" : "#d97706",
-                    backgroundColor: confidenceScore >= 90 ? "#dcfce7" : "#fef3c7",
-                    padding: "1px 6px",
-                    borderRadius: "4px",
-                  }}
-                >
-                  {confidenceScore}% Độ chính xác
-                </span>
-                {doc.ocr_result?.is_corrected && (
-                  <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#2563eb", backgroundColor: "#dbeafe", padding: "1px 6px", borderRadius: "4px" }}>
-                    Đã hiệu chỉnh
+                {doc.ocr_result?.is_corrected ? (
+                  <span
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      color: "#16a34a",
+                      backgroundColor: "#dcfce7",
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    ✓ 100% (Đã hiệu chỉnh & Xác thực)
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      color: confidenceScore >= 90 ? "#16a34a" : "#d97706",
+                      backgroundColor: confidenceScore >= 90 ? "#dcfce7" : "#fef3c7",
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                    }}
+                    title="Độ tin cậy ước tính của mô hình AI, cần đối chiếu với văn bản gốc"
+                  >
+                    {confidenceScore}% Độ tin cậy AI
                   </span>
                 )}
+
               </div>
 
               <div style={{ display: "flex", gap: "0.4rem" }}>

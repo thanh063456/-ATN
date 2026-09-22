@@ -337,6 +337,7 @@ class OCRService:
         Hậu xử lý văn bản tiếng Việt sau OCR:
         - Chuẩn hóa Unicode NFC (tránh lỗi font tổ hợp)
         - Sửa các lỗi quang học kinh điển trong văn bản hành chính & trường học
+        - Tự động sửa lỗi đầu mục (+ Bước -> % Bước), dấu ngoặc lạc, ký tự nhiễu
         """
         if not text:
             return ""
@@ -361,11 +362,23 @@ class OCRService:
             (r'\bGI[AẤ]Y\s*X[AÁ]C\s*NH[AẬ]N\b', 'GIẤY XÁC NHẬN'),
             (r'\b[ĐD][OƠ]N\s*XIN\b', 'ĐƠN XIN'),
             
-            # Địa danh & Ngày tháng tổng quát
+            # Địa danh & Ngày tháng
             (r'Lâm\s*Đông\b', 'Lâm Đồng'),
+            (r'LâmĐồng\b', 'Lâm Đồng'),
             (r'Đà\s*Lat\b', 'Đà Lạt'),
+            (r'Số\s*:\s*([0-9]+)\s*[\/|\\]\s*([A-Za-zĐđ-]+)', r'Số: \1/\2'),
             (r'\bng[àa]y\s+(\d{1,2})\s+th[áa]ng\s+(\d{1,2})\s+n[ăa]m\s+(\d{4})\b', r'ngày \1 tháng \2 năm \3'),
             (r'\bng[d|y|a|à]+\s+(\d{1,2})\s+th[áa]ng', r'ngày \1 tháng'),
+            
+            # Khắc phục lỗi quang học đầu mục: % Bước 1 -> + Bước 1, & Bước -> + Bước
+            (r'(?m)^[%\&]\s*(Bước\s*\d+)', r'+ \1'),
+            (r'(?m)^[%\&]\s*([0-9]+[\.\)])', r'\1'),
+            (r'(?m)^[%\&]\s*([a-zA-Z][\.\)])', r'- \1'),
+            
+            # Khắc phục lỗi dấu ngoặc vuông lạc / ký tự nhiễu trong từ
+            (r'([a-zA-ZÀ-ỹ0-9])\]\s+([a-zA-ZÀ-ỹ])', r'\1 \2'),
+            (r'([a-zA-ZÀ-ỹ0-9])\[\s+([a-zA-ZÀ-ỹ])', r'\1 \2'),
+            (r':\/\/', r':'),
             
             # Chữ số La Mã đầu mục
             (r'\bIH\.\s*', 'III. '),
@@ -376,10 +389,49 @@ class OCRService:
         for pattern, replacement in patterns:
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
+        # Xóa các dòng rác 1-2 ký tự (nhiễu viền con dấu / khung trang)
+        lines = text.split("\n")
+        cleaned_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Bỏ qua các dòng rác như "MA", "|", "---" đứng trơ trọi
+            if len(stripped) <= 2 and stripped.isupper() and stripped not in {"I", "V", "X", "TP", "UB", "ĐL"}:
+                continue
+            cleaned_lines.append(line)
+        text = "\n".join(cleaned_lines)
+
         # Xóa khoảng trắng thừa giữa các dòng
         text = re.sub(r'[ \t]+', ' ', text)
         text = re.sub(r'\n{3,}', '\n\n', text)
         return text.strip()
+
+    def calculate_confidence_score(self, text: str, engine: str = "vietocr") -> float:
+        """
+        Tính toán độ tin cậy thực tế của văn bản OCR dựa trên:
+        - Tỷ lệ ký tự tiếng Việt hợp lệ và từ ngữ có nghĩa
+        - Tần suất các lỗi quang học (ký tự rác, dấu ngoặc lạc, ký tự đặc biệt)
+        """
+        if not text or len(text.strip()) < 10:
+            return 0.60
+
+        base = 0.92 if engine == "vietocr" else 0.85
+
+        # Penalty cho ký tự rác / ký tự lạ không thuộc tiếng Việt
+        suspicious_chars = len(re.findall(r'[%~^|<>{}\[\]\\]', text))
+        char_penalty = min(0.12, (suspicious_chars / max(len(text), 1)) * 4.0)
+
+        # Bonus cho cấu trúc hành chính chuẩn (Quốc hiệu, Tiêu ngữ, Số hiệu, Ngày tháng)
+        bonus = 0.0
+        if "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM" in text:
+            bonus += 0.02
+        if "Độc lập - Tự do - Hạnh phúc" in text:
+            bonus += 0.02
+        if re.search(r'ngày\s+\d+\s+tháng\s+\d+\s+năm\s+\d+', text, re.IGNORECASE):
+            bonus += 0.02
+
+        final_score = max(0.65, min(0.98, base - char_penalty + bonus))
+        return round(final_score, 2)
+
 
     def _ocr_with_vietocr_lines(self, image: Image.Image) -> str:
         """Tách dòng và đưa từng dòng vào VietOCR Transformer."""
@@ -466,7 +518,7 @@ class OCRService:
                         full_text = self.post_process_vietnamese(full_text)
                         logger.info("Extracted direct text from PDF ({pages} pages, {chars} chars)",
                                     pages=len(doc), chars=len(full_text))
-                        return full_text, 0.99
+                        return full_text, self.calculate_confidence_score(full_text, engine="direct_pdf")
 
                     # Nếu không có text layer (PDF scan ảnh), render từng trang 300 DPI và OCR
                     ocr_pages = []
@@ -479,9 +531,10 @@ class OCRService:
 
                     if ocr_pages:
                         full_text = "\n\n".join(ocr_pages)
+                        full_text = self.post_process_vietnamese(full_text)
                         logger.info("OCR scanned PDF ({pages} pages, {chars} chars)",
                                     pages=len(doc), chars=len(full_text))
-                        return full_text, 0.97
+                        return full_text, self.calculate_confidence_score(full_text, engine="vietocr")
                 except Exception as exc:
                     logger.warning("PyMuPDF OCR failed: {err}", err=str(exc))
 
@@ -491,7 +544,8 @@ class OCRService:
                     reader = pypdf.PdfReader(io.BytesIO(file_bytes))
                     pypdf_texts = [p.extract_text() or "" for p in reader.pages if p.extract_text()]
                     if pypdf_texts and len("\n".join(pypdf_texts)) > 30:
-                        return self.post_process_vietnamese("\n\n".join(pypdf_texts)), 0.98
+                        processed = self.post_process_vietnamese("\n\n".join(pypdf_texts))
+                        return processed, self.calculate_confidence_score(processed, engine="pypdf")
                 except Exception:
                     pass
 
@@ -500,9 +554,11 @@ class OCRService:
             image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
             img_text = self._ocr_image(image)
             if img_text:
-                return img_text, 0.95
+                img_text = self.post_process_vietnamese(img_text)
+                return img_text, self.calculate_confidence_score(img_text, engine="vietocr")
         except Exception as exc:
             logger.warning("Image OCR failed: {err}", err=str(exc))
+
 
         # ── 3. Fallback thông báo nếu không thể trích xuất
         clean_name = "Tài liệu Công tác Sinh viên (Đại học Đà Lạt)"
