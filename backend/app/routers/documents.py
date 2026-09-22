@@ -116,10 +116,18 @@ async def list_documents(
     if category_id:
         stmt = stmt.where(Document.category_id == category_id)
     if search:
+        search_pattern = f"%{search.strip()}%"
+        stmt = stmt.outerjoin(Document.metadata_).outerjoin(Document.ocr_results).outerjoin(Document.uploader)
         stmt = stmt.where(
-            Document.title.ilike(f"%{search.strip()}%") |
-            Document.original_filename.ilike(f"%{search.strip()}%")
-        )
+            Document.title.ilike(search_pattern) |
+            Document.original_filename.ilike(search_pattern) |
+            DocumentMetadata.student_id.ilike(search_pattern) |
+            DocumentMetadata.student_name.ilike(search_pattern) |
+            User.mssv.ilike(search_pattern) |
+            User.full_name.ilike(search_pattern) |
+            OCRResult.raw_text.ilike(search_pattern) |
+            OCRResult.corrected_text.ilike(search_pattern)
+        ).distinct()
 
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total_res = await db.execute(count_stmt)

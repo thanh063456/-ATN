@@ -83,39 +83,56 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           <Menu size={20} />
         </button>
 
-        <div
-          onClick={() => navigate("/search")}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const target = e.currentTarget.elements.namedItem("headerSearch") as HTMLInputElement;
+            const term = target?.value?.trim();
+            if (term) {
+              navigate(`/search?q=${encodeURIComponent(term)}`);
+            } else {
+              navigate("/search");
+            }
+          }}
           style={{
             display: "flex",
             alignItems: "center",
             gap: "0.5rem",
             backgroundColor: "var(--gray-100)",
-            padding: "0.45rem 0.85rem",
+            padding: "0.35rem 0.75rem",
             borderRadius: "var(--radius-md)",
-            color: "var(--gray-500)",
-            fontSize: "0.8125rem",
-            cursor: "pointer",
-            width: "280px",
-            border: "1px solid transparent",
-            transition: "all 0.15s ease",
+            width: "300px",
+            border: "1px solid var(--border-color)",
           }}
         >
-          <Search size={15} />
-          <span>Tra cứu tài liệu CTSV...</span>
+          <Search size={15} color="var(--gray-500)" />
+          <input
+            name="headerSearch"
+            type="text"
+            placeholder="Tra cứu MSSV, tiêu đề, nội dung..."
+            style={{
+              border: "none",
+              backgroundColor: "transparent",
+              outline: "none",
+              fontSize: "0.8125rem",
+              width: "100%",
+              color: "var(--gray-800)",
+            }}
+          />
           <kbd
             style={{
-              marginLeft: "auto",
               padding: "0.1rem 0.35rem",
               backgroundColor: "#ffffff",
               border: "1px solid var(--border-color)",
               borderRadius: "4px",
               fontSize: "0.6875rem",
               color: "var(--gray-500)",
+              cursor: "pointer",
             }}
           >
-            ⌘K
+            Enter
           </kbd>
-        </div>
+        </form>
       </div>
 
       {/* Right section: System status, Static Role Indicator, Profile */}
