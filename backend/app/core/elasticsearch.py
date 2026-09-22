@@ -13,8 +13,24 @@ from loguru import logger
 
 from app.core.config import settings
 
+import socket
+from urllib.parse import urlparse
+
 # ── Elasticsearch Async Client ────────────────────────────────────────────────
 _es_client: AsyncElasticsearch | None = None
+
+
+def is_es_available() -> bool:
+    """Kiểm tra nhanh kết nối TCP tới Elasticsearch trong 150ms."""
+    try:
+        parsed = urlparse(settings.es_url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 9200
+        sock = socket.create_connection((host, port), timeout=0.15)
+        sock.close()
+        return True
+    except Exception:
+        return False
 
 
 def get_es_client() -> AsyncElasticsearch:
@@ -25,11 +41,12 @@ def get_es_client() -> AsyncElasticsearch:
         _es_client = AsyncElasticsearch(
             hosts=[settings.es_url],
             basic_auth=auth,
-            request_timeout=10.0,
-            max_retries=3,
-            retry_on_timeout=True,
+            request_timeout=1.5,
+            max_retries=1,
+            retry_on_timeout=False,
         )
     return _es_client
+
 
 
 # ── Index Definition & Mapping ────────────────────────────────────────────────

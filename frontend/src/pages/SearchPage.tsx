@@ -21,7 +21,24 @@ import { OCRStatusBadge } from "../components/common/Badge";
 import { searchApi, SearchResponse, SearchHit } from "../api/search";
 import { useToastStore } from "../stores/useToastStore";
 
+function formatDisplayTitle(rawTitle: string): { mainTitle: string; code?: string } {
+  if (!rawTitle) return { mainTitle: "Tài liệu không tên" };
+  let clean = rawTitle.replace(/^[0-9]+_/, "");
+  let codeMatch = clean.match(/^([0-9A-Za-z]+-[A-Za-zĐđ]+-[A-Za-zĐđ]+)/);
+  let code = codeMatch ? codeMatch[1].replace(/-/g, "/") : undefined;
+  if (codeMatch) {
+    clean = clean.replace(codeMatch[0], "").replace(/^[_\s-]+/, "");
+  }
+  clean = clean.replace(/_/g, " ").trim();
+  clean = clean.replace(/\.(pdf|jpg|jpeg|png|tiff)$/i, "");
+  if (!clean && code) {
+    clean = `Văn bản số ${code}`;
+  }
+  return { mainTitle: clean || rawTitle, code };
+}
+
 export const SearchPage: React.FC = () => {
+
   const { addToast } = useToastStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -364,10 +381,18 @@ export const SearchPage: React.FC = () => {
                           {hit.highlights?.title ? (
                             <span dangerouslySetInnerHTML={{ __html: hit.highlights.title[0] }} />
                           ) : (
-                            hit.title
+                            <>
+                              {formatDisplayTitle(hit.title).code && (
+                                <span style={{ color: "var(--primary-600)", marginRight: "0.4rem", fontWeight: 800 }}>
+                                  [{formatDisplayTitle(hit.title).code}]
+                                </span>
+                              )}
+                              {formatDisplayTitle(hit.title).mainTitle}
+                            </>
                           )}
                         </Link>
                       </h3>
+
 
                       {/* Metadata chips */}
                       <div style={{ display: "flex", gap: "1rem", marginTop: "0.35rem", fontSize: "0.75rem", color: "var(--gray-600)", flexWrap: "wrap" }}>

@@ -4,7 +4,7 @@ backend/app/routers/search.py — Full-Text Search API Endpoint
 Cung cấp API tìm kiếm toàn văn, tìm kiếm mờ (fuzzy) và lọc đa chiều:
 - Tìm kiếm trên Elasticsearch với bộ phân tích tiếng Việt (vietnamese_exact & vietnamese_ascii).
 - Tự động Fallback tìm kiếm thông minh trên PostgreSQL nếu Elasticsearch chưa khởi động / chưa sync / không có kết quả.
-- Tìm kiếm cả tiếng Việt có dấu và không dấu, tìm theo MSSV, Họ tên sinh viên, Tiêu đề và Nội dung văn bản OCR.
+- Lọc Stopwords và đối sánh cụm từ (n-grams) để tránh false positives (vd: tìm "miễn giảm học phí" không bị lẫn với "kế hoạch khám sức khỏe" chỉ vì có từ "học").
 - Trích xuất highlight các đoạn văn bản khớp từ khóa.
 - Ghi lịch sử truy vấn vào bảng `search_history` trong PostgreSQL.
 """
@@ -23,7 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user_optional
-from app.core.elasticsearch import INDEX_NAME, get_es_client
+from app.core.elasticsearch import INDEX_NAME, get_es_client, is_es_available
 from app.models.document_categories import DocumentCategory
 from app.models.document_metadata import DocumentMetadata
 from app.models.documents import Document
@@ -34,6 +34,14 @@ from app.schemas.search import SearchHit, SearchResponse
 
 router = APIRouter(prefix="/search", tags=["search"])
 
+GENERIC_STOPWORDS_ASCII = {
+    "hoc", "truong", "dai", "viet", "nam", "ngay", "thang", "nam", "so",
+    "cong", "hoa", "xa", "hoi", "chu", "nghia", "doc", "lap", "tu", "do",
+    "hanh", "phuc", "va", "cua", "cho", "ve", "cac", "tai", "theo", "duoc",
+    "co", "trong", "da", "la", "sinh", "vien", "bo", "phong", "to", "chuc",
+    "thong", "bao", "van", "ban", "ve"
+}
+
 
 def _strip_accents(text: str) -> str:
     """Chuyển đổi chuỗi tiếng Việt có dấu sang không dấu."""
@@ -41,43 +49,52 @@ def _strip_accents(text: str) -> str:
         return ""
     text = text.replace("đ", "d").replace("Đ", "D")
     normalized = unicodedata.normalize("NFD", text)
-    return "".join(c for c in normalized if unicodedata.category(c) != "Mn").lower()
+    return "".join(c for c in normalized if unicodedata.category(c) != "Mn").lower().strip()
 
 
-def _extract_highlight_snippet(content: str, query: str, max_length: int = 200) -> tuple[str, list[str]]:
-    """Tạo đoạn trích kèm thẻ <em> highlight cho từ khóa."""
-    if not content or not query:
-        return (content[:max_length] + "..." if content and len(content) > max_length else content or "", [])
+def _extract_highlight_snippet(content: str, target_terms: list[str], max_length: int = 220) -> tuple[str, list[str]]:
+    """Tạo đoạn trích kèm thẻ <em> highlight cho các từ khóa/cụm từ quan trọng."""
+    if not content:
+        return ("", [])
 
-    words = [w.strip() for w in query.split() if len(w.strip()) > 1]
-    if not words:
-        words = [query.strip()]
+    if not target_terms:
+        snippet = content[:max_length] + ("..." if len(content) > max_length else "")
+        return (snippet, [])
 
-    # Tìm vị trí xuất hiện đầu tiên của từ khóa
     ascii_content = _strip_accents(content)
     first_idx = -1
-    for word in words:
-        idx = ascii_content.find(_strip_accents(word))
-        if idx != -1 and (first_idx == -1 or idx < first_idx):
+    best_term = ""
+
+    # Ưu tiên tìm các cụm từ dài trước
+    sorted_terms = sorted(target_terms, key=len, reverse=True)
+    for term in sorted_terms:
+        term_ascii = _strip_accents(term)
+        idx = ascii_content.find(term_ascii)
+        if idx != -1:
             first_idx = idx
+            best_term = term
+            break
 
     if first_idx == -1:
         snippet = content[:max_length] + ("..." if len(content) > max_length else "")
-        return snippet, []
+        return (snippet, [])
 
-    start = max(0, first_idx - 60)
+    start = max(0, first_idx - 50)
     end = min(len(content), start + max_length)
     raw_snippet = ("..." if start > 0 else "") + content[start:end] + ("..." if end < len(content) else "")
 
     # Đánh dấu highlight
     highlighted = raw_snippet
     matched_fragments = []
-    for word in words:
-        pattern = re.compile(re.escape(word), re.IGNORECASE)
-        highlighted = pattern.sub(r"<em>\g<0></em>", highlighted)
-        matched_fragments.append(word)
+    for term in sorted_terms:
+        if len(term.strip()) <= 1:
+            continue
+        pattern = re.compile(re.escape(term.strip()), re.IGNORECASE)
+        if pattern.search(highlighted):
+            highlighted = pattern.sub(r"<em>\g<0></em>", highlighted)
+            matched_fragments.append(term.strip())
 
-    return highlighted, matched_fragments
+    return (highlighted, matched_fragments)
 
 
 @router.get(
@@ -113,132 +130,146 @@ async def search_documents(
     total_hits = 0
     used_es = False
 
-    # ── 1. Thử Tìm kiếm trên Elasticsearch ────────────────────────────────────
-    try:
-        es = get_es_client()
-        search_fields = [
-            "title^3",
-            "title.ascii^2",
-            "content^2",
-            "content.ascii^1.5",
-            "content_corrected^2",
-            "content_corrected.ascii^1.5",
-            "student_name^2.5",
-            "student_name.ascii^2",
-            "student_id^3",
-            "document_number^2",
-            "category_name^1.5",
-        ]
+    # ── 1. Thử Tìm kiếm trên Elasticsearch (Nếu có kết nối) ────────────────────
+    if is_es_available():
+        try:
+            es = get_es_client()
+            search_fields = [
+                "title^3",
+                "title.ascii^2",
+                "content^2",
+                "content.ascii^1.5",
+                "content_corrected^2",
+                "content_corrected.ascii^1.5",
+                "student_name^2.5",
+                "student_name.ascii^2",
+                "student_id^3",
+                "document_number^2",
+                "category_name^1.5",
+            ]
 
-        must_clause: list[dict[str, Any]] = [
-            {
-                "multi_match": {
-                    "query": query_str,
-                    "fields": search_fields,
-                    "type": "best_fields",
-                    "fuzziness": "AUTO" if fuzzy else "0",
-                    "prefix_length": 2 if fuzzy else 0,
+            must_clause: list[dict[str, Any]] = [
+                {
+                    "multi_match": {
+                        "query": query_str,
+                        "fields": search_fields,
+                        "type": "best_fields",
+                        "fuzziness": "AUTO" if fuzzy else "0",
+                        "prefix_length": 2 if fuzzy else 0,
+                    }
                 }
-            }
-        ]
+            ]
 
-        filter_clause: list[dict[str, Any]] = [
-            {"term": {"is_deleted": False}}
-        ]
+            filter_clause: list[dict[str, Any]] = [
+                {"term": {"is_deleted": False}}
+            ]
 
-        if role_name == "STUDENT":
-            user_id_str = str(current_user.id) if current_user else ""
-            filter_clause.append({
-                "bool": {
-                    "should": [
-                        {"term": {"uploaded_by": user_id_str}} if user_id_str else {"term": {"ocr_status": "APPROVED"}},
-                        {"term": {"ocr_status": "APPROVED"}},
-                    ],
-                    "minimum_should_match": 1,
-                }
-            })
+            if role_name == "STUDENT":
+                user_id_str = str(current_user.id) if current_user else ""
+                filter_clause.append({
+                    "bool": {
+                        "should": [
+                            {"term": {"uploaded_by": user_id_str}} if user_id_str else {"term": {"ocr_status": "APPROVED"}},
+                            {"term": {"ocr_status": "APPROVED"}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                })
 
-        if category_code:
-            filter_clause.append({"term": {"category_code": category_code}})
-        if ocr_status:
-            filter_clause.append({"term": {"ocr_status": ocr_status.upper()}})
-        if date_from or date_to:
-            range_query: dict[str, Any] = {}
-            if date_from:
-                range_query["gte"] = date_from
-            if date_to:
-                range_query["lte"] = date_to
-            filter_clause.append({"range": {"created_at": range_query}})
+            if category_code:
+                filter_clause.append({"term": {"category_code": category_code}})
+            if ocr_status:
+                filter_clause.append({"term": {"ocr_status": ocr_status.upper()}})
+            if date_from or date_to:
+                range_query: dict[str, Any] = {}
+                if date_from:
+                    range_query["gte"] = date_from
+                if date_to:
+                    range_query["lte"] = date_to
+                filter_clause.append({"range": {"created_at": range_query}})
 
-        body: dict[str, Any] = {
-            "from": from_offset,
-            "size": page_size,
-            "track_total_hits": True,
-            "query": {
-                "bool": {
-                    "must": must_clause,
-                    "filter": filter_clause,
-                }
-            },
-            "highlight": {
-                "pre_tags": ["<em>"],
-                "post_tags": ["</em>"],
-                "fields": {
-                    "content": {"fragment_size": 150, "number_of_fragments": 3},
-                    "content.ascii": {"fragment_size": 150, "number_of_fragments": 3},
-                    "title": {"number_of_fragments": 0},
-                    "student_name": {"number_of_fragments": 0},
+            body: dict[str, Any] = {
+                "from": from_offset,
+                "size": page_size,
+                "track_total_hits": True,
+                "query": {
+                    "bool": {
+                        "must": must_clause,
+                        "filter": filter_clause,
+                    }
                 },
-            },
-        }
+                "highlight": {
+                    "pre_tags": ["<em>"],
+                    "post_tags": ["</em>"],
+                    "fields": {
+                        "content": {"fragment_size": 150, "number_of_fragments": 3},
+                        "content.ascii": {"fragment_size": 150, "number_of_fragments": 3},
+                        "title": {"number_of_fragments": 0},
+                        "student_name": {"number_of_fragments": 0},
+                    },
+                },
+            }
 
-        es_res = await es.search(index=INDEX_NAME, body=body)
-        total_hits = es_res["hits"]["total"]["value"]
-        hits_raw = es_res["hits"]["hits"]
+            es_res = await es.search(index=INDEX_NAME, body=body)
+            total_hits = es_res["hits"]["total"]["value"]
+            hits_raw = es_res["hits"]["hits"]
 
-        if total_hits > 0:
-            used_es = True
-            for hit in hits_raw:
-                source = hit["_source"]
-                highlights = hit.get("highlight", {})
+            if total_hits > 0:
+                used_es = True
+                for hit in hits_raw:
+                    source = hit["_source"]
+                    highlights = hit.get("highlight", {})
 
-                snippet = None
-                if "content" in highlights and highlights["content"]:
-                    snippet = "... ".join(highlights["content"])
-                elif "content.ascii" in highlights and highlights["content.ascii"]:
-                    snippet = "... ".join(highlights["content.ascii"])
-                elif source.get("content"):
-                    snippet = source["content"][:200] + "..." if len(source["content"]) > 200 else source["content"]
+                    snippet = None
+                    if "content" in highlights and highlights["content"]:
+                        snippet = "... ".join(highlights["content"])
+                    elif "content.ascii" in highlights and highlights["content.ascii"]:
+                        snippet = "... ".join(highlights["content.ascii"])
+                    elif source.get("content"):
+                        snippet = source["content"][:200] + "..." if len(source["content"]) > 200 else source["content"]
 
-                doc_id_val = source.get("document_id") or hit.get("_id")
-                results.append(
-                    SearchHit(
-                        document_id=UUID(doc_id_val),
-                        title=source.get("title", ""),
-                        content_snippet=snippet,
-                        category_code=source.get("category_code"),
-                        category_name=source.get("category_name"),
-                        student_id=source.get("student_id"),
-                        student_name=source.get("student_name"),
-                        document_date=source.get("document_date"),
-                        document_number=source.get("document_number"),
-                        ocr_status=source.get("ocr_status", "DONE"),
-                        ocr_confidence=source.get("ocr_confidence"),
-                        score=round(float(hit.get("_score") or 0.0), 3),
-                        highlights=highlights,
-                        created_at=source.get("created_at"),
+                    doc_id_val = source.get("document_id") or hit.get("_id")
+                    results.append(
+                        SearchHit(
+                            document_id=UUID(doc_id_val),
+                            title=source.get("title", ""),
+                            content_snippet=snippet,
+                            category_code=source.get("category_code"),
+                            category_name=source.get("category_name"),
+                            student_id=source.get("student_id"),
+                            student_name=source.get("student_name"),
+                            document_date=source.get("document_date"),
+                            document_number=source.get("document_number"),
+                            ocr_status=source.get("ocr_status", "DONE"),
+                            ocr_confidence=source.get("ocr_confidence"),
+                            score=round(float(hit.get("_score") or 0.0), 3),
+                            highlights=highlights,
+                            created_at=source.get("created_at"),
+                        )
                     )
-                )
-    except Exception as exc:
-        logger.warning("Elasticsearch query notice (falling back to DB search): {err}", err=str(exc))
-        total_hits = 0
-        results = []
+        except Exception as exc:
+            logger.warning("Elasticsearch search failed: {err}, falling back to DB", err=str(exc))
+            total_hits = 0
+            results = []
 
-    # ── 2. Fallback Tìm kiếm trên PostgreSQL nếu ES không có kết quả ───────────
+    # ── 2. Fallback Tìm kiếm trên PostgreSQL nếu ES chưa chạy hoặc rỗng ────────
     if total_hits == 0 or len(results) == 0:
-        logger.info("Executing PostgreSQL fallback search for query: '{q}'", q=query_str)
         q_ascii = _strip_accents(query_str)
-        search_pattern = f"%{query_str}%"
+        raw_words = [w.strip() for w in query_str.split() if w.strip()]
+        raw_words_ascii = [_strip_accents(w) for w in raw_words]
+
+        # Trích xuất các cụm từ con (bi-grams, tri-grams)
+        sub_phrases: list[str] = []
+        if len(raw_words) >= 2:
+            sub_phrases.append(query_str)
+            for i in range(len(raw_words) - 1):
+                sub_phrases.append(f"{raw_words[i]} {raw_words[i+1]}")
+
+        # Lọc các từ khóa quan trọng (không phải stopword thông dụng)
+        important_words_ascii = [w for w in raw_words_ascii if w not in GENERIC_STOPWORDS_ASCII]
+        if not important_words_ascii:
+            # Nếu toàn bộ từ khóa nằm trong stopwords (vd: người dùng tìm đúng chữ "kế hoạch"), dùng lại từ gốc
+            important_words_ascii = raw_words_ascii
 
         stmt = (
             select(Document)
@@ -271,14 +302,10 @@ async def search_documents(
         if date_to:
             stmt = stmt.where(Document.created_at <= f"{date_to} 23:59:59")
 
-        # Lấy tất cả tài liệu khả dụng để đối soát toàn văn & không dấu
         res_db = await db.execute(stmt)
         all_docs = res_db.scalars().all()
 
         matched_items: list[tuple[float, Document, str | None, dict[str, list[str]]]] = []
-
-        query_terms = [t.strip().lower() for t in query_str.split() if t.strip()]
-        query_terms_ascii = [t.strip().lower() for t in q_ascii.split() if t.strip()]
 
         for doc in all_docs:
             ocr_text = ""
@@ -295,46 +322,70 @@ async def search_documents(
             cat_name = doc.category.name if doc.category else ""
             title = doc.title or ""
 
-            full_searchable = f"{title} {st_name} {st_id} {doc_num} {cat_name} {ocr_text}"
-            full_searchable_ascii = _strip_accents(full_searchable)
+            title_ascii = _strip_accents(title)
+            st_name_ascii = _strip_accents(st_name)
+            st_id_ascii = _strip_accents(st_id)
+            ocr_text_ascii = _strip_accents(ocr_text)
 
-            # Tính điểm liên quan BM25 giả lập
             score = 0.0
+            matched_terms_for_highlight: list[str] = []
             highlights: dict[str, list[str]] = {}
 
-            # Kiểm tra khớp chính xác tiêu đề
-            if query_str.lower() in title.lower() or q_ascii in _strip_accents(title):
-                score += 5.0
+            # 1. Khớp nguyên cụm từ đầy đủ (Exact Full Phrase)
+            if q_ascii in title_ascii:
+                score += 15.0
+                matched_terms_for_highlight.append(query_str)
                 highlights["title"] = [title]
-            
-            # Kiểm tra khớp MSSV
-            if st_id and (query_str.lower() in st_id.lower() or q_ascii in st_id.lower()):
-                score += 6.0
-                highlights["student_id"] = [st_id]
+            elif q_ascii in ocr_text_ascii:
+                score += 10.0
+                matched_terms_for_highlight.append(query_str)
 
-            # Kiểm tra khớp Tên sinh viên
-            if st_name and (query_str.lower() in st_name.lower() or q_ascii in _strip_accents(st_name)):
-                score += 4.5
+            # 2. Khớp MSSV hoặc Tên sinh viên chính xác
+            if st_id and (q_ascii in st_id_ascii or st_id_ascii in q_ascii):
+                score += 12.0
+                matched_terms_for_highlight.append(st_id)
+                highlights["student_id"] = [st_id]
+            if st_name and (q_ascii in st_name_ascii or any(w in st_name_ascii for w in important_words_ascii if len(w) >= 3)):
+                score += 8.0
+                matched_terms_for_highlight.append(st_name)
                 highlights["student_name"] = [st_name]
 
-            # Kiểm tra khớp Số hiệu / Danh mục
-            if doc_num and query_str.lower() in doc_num.lower():
+            # 3. Khớp các cụm từ con (sub-phrases)
+            for phrase in sub_phrases:
+                p_ascii = _strip_accents(phrase)
+                if p_ascii in title_ascii:
+                    score += 6.0
+                    matched_terms_for_highlight.append(phrase)
+                if p_ascii in ocr_text_ascii:
+                    score += 4.5
+                    matched_terms_for_highlight.append(phrase)
+
+            # 4. Khớp các từ khóa quan trọng (không phải stopword đơn lẻ)
+            important_title_matches = sum(1 for w in important_words_ascii if w in title_ascii)
+            important_ocr_matches = sum(1 for w in important_words_ascii if w in ocr_text_ascii)
+
+            if important_title_matches > 0:
+                score += important_title_matches * 3.0
+                matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
+
+            if important_ocr_matches >= len(important_words_ascii):
+                # Khớp toàn bộ các từ quan trọng trong nội dung
+                score += 5.0
+                matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
+            elif len(important_words_ascii) > 1 and important_ocr_matches >= 2:
                 score += 3.0
-            if cat_name and (query_str.lower() in cat_name.lower() or q_ascii in _strip_accents(cat_name)):
-                score += 2.0
+                matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
 
-            # Kiểm tra khớp nội dung OCR
-            if ocr_text:
-                if query_str.lower() in ocr_text.lower() or q_ascii in _strip_accents(ocr_text):
-                    score += 3.5
-                else:
-                    # Kiểm tra khớp từng từ
-                    term_match_count = sum(1 for term in query_terms_ascii if term in full_searchable_ascii)
-                    if term_match_count > 0:
-                        score += (term_match_count / max(len(query_terms_ascii), 1)) * 2.0
+            # ĐIỀU KIỆN QUYẾT ĐỊNH: Chỉ chấp nhận nếu có điểm khớp thực chất
+            # (Loại bỏ triệt để trường hợp chỉ trùng 1 chữ stopword thông dụng như "học" hay "nam")
+            has_genuine_match = (
+                score >= 3.0 or
+                (len(important_words_ascii) == 1 and important_ocr_matches >= 1)
+            )
 
-            if score > 0:
-                snippet, _ = _extract_highlight_snippet(ocr_text or title, query_str)
+            if has_genuine_match and score > 0:
+                target_terms = list(set(matched_terms_for_highlight)) if matched_terms_for_highlight else raw_words
+                snippet, _ = _extract_highlight_snippet(ocr_text or title, target_terms)
                 matched_items.append((score, doc, snippet, highlights))
 
         # Sắp xếp theo score giảm dần
