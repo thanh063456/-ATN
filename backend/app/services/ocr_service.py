@@ -347,7 +347,8 @@ class OCRService:
         Hậu xử lý văn bản tiếng Việt sau OCR:
         - Chuẩn hóa Unicode NFC (tránh lỗi font tổ hợp)
         - Sửa các lỗi quang học kinh điển trong văn bản hành chính & trường học
-        - Tự động sửa lỗi đầu mục (+ Bước -> % Bước), dấu ngoặc lạc, ký tự nhiễu
+        - Tự động định dạng lại cấu trúc Quốc hiệu, Tiêu ngữ, Cơ quan ban hành, Số hiệu, Ngày tháng
+        - Sửa lỗi đầu mục (+ Bước -> % Bước), dấu ngoặc lạc, dấu hai chấm, ký tự nhiễu
         """
         if not text:
             return ""
@@ -355,76 +356,92 @@ class OCRService:
         # 1. Chuẩn hóa NFC
         text = unicodedata.normalize("NFC", text)
 
-        # 2. Thay thế quy tắc chuẩn cho văn bản hành chính
-        patterns = [
-            # Quốc hiệu & Tiêu ngữ
-            (r'C[OỘÔ]NG\s*H[OÒÓ]A\s*X[AÃ]A?H?[OỘÔ]I\s*CH[UỦÙ]\s*NGH[IĨÍ]A\s*VI[EỆÊ]T\s*NAM', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM'),
-            (r'[ĐD][OÔỘ]C\s*L[AÂẬ]P\s*[-–—]\s*T[UỰƯ]\s*DO\s*[-–—]\s*H[AẠ][N|M]H\s*PH[UÚÙ]C', 'Độc lập - Tự do - Hạnh phúc'),
-            (r'B[OỘÔ]\s*GI[AÁ]O\s*D[UỤ]C\s*V[AÀ]\s*[ĐD][AÀ]O\s*T[AẠ]O', 'BỘ GIÁO DỤC VÀ ĐÀO TẠO'),
-            (r'TR[UƯỜ]NG\s*[ĐD][AẠ]I\s*H[OỌ]C\s*[ĐD][AÀ]\s*L[AẠ]T', 'TRƯỜNG ĐẠI HỌC ĐÀ LẠT'),
-            (r'PH[OÒ]NG\s*C[OÔ]NG\s*T[AÁ]C\s*SINH\s*VI[EÊ]N', 'PHÒNG CÔNG TÁC SINH VIÊN'),
-            
-            # Tiêu đề loại văn bản
-            (r'\bK[EÉÊ]\s*HO[AẠ]CH\b', 'KẾ HOẠCH'),
-            (r'\bQUY[EẾÊ]T\s*[ĐD][IỊ]NH\b', 'QUYẾT ĐỊNH'),
-            (r'\bTH[OÔ]NG\s*B[AÁ]O\b', 'THÔNG BÁO'),
-            (r'\bH[UƯ][OỚ]NG\s*D[AẪ]N\b', 'HƯỚNG DẪN'),
-            (r'\bGI[AẤ]Y\s*X[AÁ]C\s*NH[AẬ]N\b', 'GIẤY XÁC NHẬN'),
-            (r'\b[ĐD][OƠ]N\s*XIN\b', 'ĐƠN XIN'),
-            
-            # Địa danh & Ngày tháng
-            (r'Lâm\s*Đông\b', 'Lâm Đồng'),
-            (r'LâmĐồng\b', 'Lâm Đồng'),
-            (r'Đà\s*Lat\b', 'Đà Lạt'),
-            (r'Số\s*:\s*([0-9]+)\s*[\/|\\]\s*([A-Za-zĐđ-]+)', r'Số: \1/\2'),
-            (r'\bng[àa]y\s+(\d{1,2})\s+th[áa]ng\s+(\d{1,2})\s+n[ăa]m\s+(\d{4})\b', r'ngày \1 tháng \2 năm \3'),
-            (r'\bng[d|y|a|à]+\s+(\d{1,2})\s+th[áa]ng', r'ngày \1 tháng'),
-            
-            # Khắc phục lỗi quang học đầu mục: % Bước 1 -> + Bước 1, & Bước -> + Bước
-            (r'(?m)^[%\&\*]\s*(Bước\s*\d+)', r'+ \1'),
-            (r'(?m)^[%\&\*]\s*([0-9]+[\.\)])', r'\1'),
-            (r'(?m)^[%\&\*]\s*([a-zA-Z][\.\)])', r'- \1'),
-            (r'(?m)^[%\*]\s*([A-ZÀ-Ỹa-zà-ỹ])', r'+ \1'),
-            
-            # Khắc phục lỗi dấu hai chấm kèm slash/ký tự lạ: bịa đặt:// -> bịa đặt:
-            (r':\/{1,2}', r':'),
-            (r':\s*:\s*', r': '),
+        # 2. Loại bỏ mã số scan / barcode rác đầu trang (vd: 03610000199)
+        text = re.sub(r'^\s*0\d{8,14}\s*\n?', '', text)
 
-            # Khắc phục lỗi dấu ngoặc vuông lạc / ký tự nhiễu trong từ
-            (r'([a-zA-ZÀ-ỹ0-9])\]\s+([a-zA-ZÀ-ỹ])', r'\1 \2'),
-            (r'([a-zA-ZÀ-ỹ0-9])\[\s+([a-zA-ZÀ-ỹ])', r'\1 \2'),
-            (r'([a-zA-ZÀ-ỹ0-9])\}(\s+)', r'\1\2'),
-            (r'([a-zA-ZÀ-ỹ0-9])\{(\s+)', r'\1\2'),
-            
-            # Chữ số La Mã đầu mục
-            (r'\bIH\.\s*', 'III. '),
-            (r'\bTI\.\s*', 'II. '),
-            (r'\bIV\.\s*', 'IV. '),
-        ]
+        # 3. Chuẩn hóa Quốc hiệu, Tiêu ngữ & Đơn vị ban hành
+        text = re.sub(r'C[OỘÔ]NG\s*H[OÒÓA]A?\s*X[AÃ]A?H?[OỘÔ]I\s*CH[UỦÙ]\s*NGH[IĨÍ]A\s*VI[EỆÊ]T\s*NAM', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', text, flags=re.IGNORECASE)
+        text = re.sub(r'[ĐD][OÔỘ]C\s*L[AÂẬ]P\s*[\?\!\.\:\;\-–—~]\s*T[UỰƯ]\s*DO\s*[\?\!\.\:\;\-–—~]\s*H[AẠ][N|M]H\s*PH[UÚÙ]C', 'Độc lập - Tự do - Hạnh phúc', text, flags=re.IGNORECASE)
+        text = re.sub(r'B[OỘÔ]\s*GI[AÁ]O\s*D[UỤ]C\s*V[AÀ]\s*[ĐD][AÀ]O\s*T[AẠ]O', 'BỘ GIÁO DỤC VÀ ĐÀO TẠO', text, flags=re.IGNORECASE)
+        text = re.sub(r'TR[UƯỜ]NG\s*[ĐD][AẠ]I\s*H[OỌ]C\s*[ĐD][AÀ]\s*L[AẠ]T', 'TRƯỜNG ĐẠI HỌC ĐÀ LẠT', text, flags=re.IGNORECASE)
+        text = re.sub(r'PH[OÒ]NG\s*C[OÔ]NG\s*T[AÁ]C\s*SINH\s*VI[EÊ]N', 'PHÒNG CÔNG TÁC SINH VIÊN', text, flags=re.IGNORECASE)
 
-        for pattern, replacement in patterns:
-            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        # 4. Trích xuất thông tin Header (Số hiệu, Ngày tháng)
+        doc_no_match = re.search(r'Số\s*:\s*([0-9]+)\s*[\/|\\]\s*([A-Za-zĐđ-]+)', text)
+        doc_no = f'Số: {doc_no_match.group(1)}/{doc_no_match.group(2)}' if doc_no_match else None
 
-        # Xóa các dòng rác 1-2 ký tự (nhiễu viền con dấu / khung trang)
+        date_match = re.search(r'(?:Lâm\s*Đồng|Đà\s*Lạt)[\s,]+ng[àa]y\s+(\d{1,2})\s+th[áa]ng\s+(\d{1,2})\s+n[ăa]m\s+(\d{4})', text, re.IGNORECASE)
+        date_str = f'Lâm Đồng, ngày {date_match.group(1)} tháng {date_match.group(2)} năm {date_match.group(3)}' if date_match else None
+
+        # 5. Khắc phục lỗi quang học đầu mục: % Bước 1 -> + Bước 1, & Bước -> + Bước
+        text = re.sub(r'(?m)^[%\&\*]\s*(Bước\s*\d+)', r'+ \1', text)
+        text = re.sub(r'(?m)^[%\&\*]\s*([0-9]+[\.\)])', r'\1', text)
+        text = re.sub(r'(?m)^[%\&\*]\s*([a-zA-Z][\.\)])', r'- \1', text)
+        text = re.sub(r'(?m)^[%\*]\s*([A-ZÀ-Ỹa-zà-ỹ])', r'+ \1', text)
+
+        # 6. Khắc phục lỗi dấu hai chấm kèm slash/ký tự lạ: bịa đặt:// -> bịa đặt:
+        text = re.sub(r':\/{1,2}', r':', text)
+        text = re.sub(r':\s*:\s*', r': ', text)
+
+        # 7. Khắc phục lỗi dấu ngoặc vuông/nhọn lạc trong từ
+        text = re.sub(r'([a-zA-ZÀ-ỹ0-9])\]\s+([a-zA-ZÀ-ỹ])', r'\1 \2', text)
+        text = re.sub(r'([a-zA-ZÀ-ỹ0-9])\[\s+([a-zA-ZÀ-ỹ])', r'\1 \2', text)
+        text = re.sub(r'([a-zA-ZÀ-ỹ0-9])\}\s+([a-zA-ZÀ-ỹ])', r'\1 \2', text)
+        text = re.sub(r'([a-zA-ZÀ-ỹ0-9])\{\s+([a-zA-ZÀ-ỹ])', r'\1 \2', text)
+
+        # 8. Chuẩn hóa chữ số La Mã đầu mục
+        text = re.sub(r'\bIH\.\s*', 'III. ', text)
+        text = re.sub(r'\bTI\.\s*', 'II. ', text)
+        text = re.sub(r'\bIV\.\s*', 'IV. ', text)
+
+        # 9. Tách dòng và loại bỏ rác / dòng header phân mảnh
         allowed_short_tokens = {
             "I", "V", "X", "TP", "UB", "ĐL", "Số", "Kính gửi", "Lớp", "K49", "K48", "K47", "K46", "K45", "K44"
         }
         lines = text.split("\n")
-        cleaned_lines = []
-        for line in lines:
-            stripped = line.strip()
-            # Bỏ qua các dòng rác như "MA", "|", "---", "//", "\" đứng trơ trọi
-            if len(stripped) <= 2 and stripped.isupper() and stripped not in allowed_short_tokens:
+        body_lines = []
+        has_national_header = "CỘNG HÒA XÃ HỘI" in text or "TRƯỜNG ĐẠI HỌC ĐÀ LẠT" in text
+
+        for l in lines:
+            s = l.strip()
+            if not s:
                 continue
-            if stripped in {"|", "||", "---", "--", "...", "//", "\\", "[]", "{}"}:
+
+            # Nếu văn bản có header chuẩn, bỏ các dòng header phân mảnh khỏi body
+            if has_national_header and re.search(r'(CỘNG\s*H[OÒÓA]A?\s*XÃ\s*HỘI|BỘ\s*GIÁO\s*DỤC\s*VÀ\s*ĐÀO\s*TẠO|TRƯỜNG\s*ĐẠI\s*HỌC\s*Đ[AÀ]\s*L[AẠ]T|Đ[OÔỘ]C\s*L[AÂẬ]P\s*[-–—\?\!]\s*TỰ\s*DO)', s, re.IGNORECASE):
                 continue
-            cleaned_lines.append(line)
-        text = "\n".join(cleaned_lines)
+            if doc_no and doc_no.replace(" ", "") in s.replace(" ", ""):
+                continue
+            if date_str and ("Lâm Đồng, ngày" in s or "Đà Lạt, ngày" in s):
+                continue
+
+            # Bỏ qua các dòng rác 1-2 ký tự (như MA, ||, ---)
+            if len(s) <= 2 and s.isupper() and s not in allowed_short_tokens:
+                continue
+            if s in {"|", "||", "---", "--", "...", "//", "\\", "[]", "{}"}:
+                continue
+
+            body_lines.append(s)
+
+        if has_national_header:
+            d_no = doc_no or "Số: .../TB-ĐHĐL"
+            d_dt = date_str or ""
+            header_block = (
+                "BỘ GIÁO DỤC VÀ ĐÀO TẠO\n"
+                "TRƯỜNG ĐẠI HỌC ĐÀ LẠT\n"
+                f"{d_no}\n\n"
+                "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
+                "Độc lập - Tự do - Hạnh phúc\n"
+                f"{d_dt}\n\n"
+            )
+            result = header_block + "\n".join(body_lines)
+        else:
+            result = "\n".join(body_lines)
 
         # Xóa khoảng trắng thừa giữa các dòng
-        text = re.sub(r'[ \t]+', ' ', text)
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        return text.strip()
+        result = re.sub(r'[ \t]+', ' ', result)
+        result = re.sub(r'\n{3,}', '\n\n', result)
+        return result.strip()
 
     def calculate_confidence_score(self, text: str, engine: str = "vietocr") -> float:
         """
