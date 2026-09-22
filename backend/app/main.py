@@ -54,17 +54,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    ALLOWED_ORIGINS = {
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    }
+
     # ── CORS ──────────────────────────────────────────────────────────────────
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-        ],
+        allow_origins=list(ALLOWED_ORIGINS),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -72,6 +74,14 @@ def create_app() -> FastAPI:
     )
 
     # ── Global exception handler ───────────────────────────────────────────────
+    def _get_safe_cors_headers(request: Request) -> dict[str, str]:
+        req_origin = request.headers.get("origin", "")
+        origin = req_origin if req_origin in ALLOWED_ORIGINS else "http://localhost:3000"
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
         logger.warning(
@@ -80,14 +90,10 @@ def create_app() -> FastAPI:
             msg=exc.message,
             path=request.url.path,
         )
-        origin = request.headers.get("origin") or "http://localhost:3000"
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message},
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Credentials": "true",
-            },
+            headers=_get_safe_cors_headers(request),
         )
 
     @app.exception_handler(Exception)
@@ -97,14 +103,10 @@ def create_app() -> FastAPI:
             path=request.url.path,
             error=str(exc),
         )
-        origin = request.headers.get("origin") or "http://localhost:3000"
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Lỗi hệ thống: " + str(exc)},
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Credentials": "true",
-            },
+            headers=_get_safe_cors_headers(request),
         )
 
     # ── Routers ───────────────────────────────────────────────────────────────

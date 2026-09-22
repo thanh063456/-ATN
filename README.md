@@ -82,12 +82,12 @@ make docker-logs
 
 | Phase | Nội dung | Trạng thái |
 |-------|----------|-----------|
-| Phase 1 | Research & Environment Setup | 🔲 Todo |
-| Phase 2 | Data Collection & Model Training | 🔲 Todo |
-| Phase 3 | Backend API Development | 🔲 Todo |
-| Phase 4 | Frontend Development | 🔲 Todo |
-| Phase 5 | Integration & Testing | 🔲 Todo |
-| Phase 6 | Evaluation & Report | 🔲 Todo |
+| Phase 1 | Research & Architecture Design | ✅ Hoàn thành |
+| Phase 2 | Data Collection, Preprocessing & VietOCR Fine-tuning | ✅ Hoàn thành |
+| Phase 3 | FastAPI Backend RESTful API & Elasticsearch Indexing | ✅ Hoàn thành |
+| Phase 4 | React SPA Frontend, Side-by-Side Editor & Verification | ✅ Hoàn thành |
+| Phase 5 | Integration Testing, Security Hardening & Docker DevOps | ✅ Hoàn thành |
+| Phase 6 | IR Benchmarks, User Evaluation & Thesis Defense | 🔄 Đang hoàn thiện |
 
 Xem chi tiết: [`.ai/ROADMAP.md`](.ai/ROADMAP.md)
 

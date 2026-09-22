@@ -7,10 +7,18 @@ import httpx
 from app.core.security import create_access_token
 
 
+from httpx import ASGITransport
+from app.main import create_app
+
+
 @pytest_asyncio.fixture
 async def async_client() -> httpx.AsyncClient:
-    """Async test client kết nối trực tiếp backend server."""
-    async with httpx.AsyncClient(base_url="http://localhost:8000", timeout=15.0) as client:
+    """Async test client kết nối trực tiếp app FastAPI in-memory."""
+    from app.core.database import init_db
+    await init_db()
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client
 
 

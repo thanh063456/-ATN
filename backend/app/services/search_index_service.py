@@ -80,6 +80,31 @@ class SearchIndexService:
             logger.error("Failed to index document {id} in Elasticsearch: {err}", id=doc_id_str, err=str(exc))
             raise SearchIndexException(f"Lỗi khi index tài liệu {doc_id_str} vào Elasticsearch: {str(exc)}") from exc
 
+    async def update_document_status(
+        self,
+        document_id: UUID | str,
+        ocr_status: str,
+        updated_at: datetime | None = None,
+    ) -> None:
+        """Cập nhật trạng thái duyệt hồ sơ (ocr_status) mà không ghi đè mất nội dung OCR đã index."""
+        es = get_es_client()
+        doc_id_str = str(document_id)
+        now_iso = (updated_at or datetime.now()).isoformat()
+
+        try:
+            await es.update(
+                index=self.index_name,
+                id=doc_id_str,
+                doc={
+                    "ocr_status": ocr_status.upper(),
+                    "updated_at": now_iso,
+                },
+                refresh="wait_for",
+            )
+            logger.info("Updated status in ES for {id} to {status}", id=doc_id_str, status=ocr_status)
+        except Exception as exc:
+            logger.warning("Failed to update status in ES for {id}: {err}", id=doc_id_str, err=str(exc))
+
     async def update_corrected_text(
         self,
         document_id: UUID | str,

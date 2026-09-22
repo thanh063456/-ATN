@@ -16,7 +16,7 @@ Bao gồm:
 """
 import asyncio
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import io
 import math
@@ -148,34 +148,51 @@ async def list_documents(
                 file_size_bytes=doc.file_size_bytes,
                 page_count=doc.page_count,
                 category_id=doc.category_id,
-                uploaded_by=doc.uploaded_by,
+                category_name=doc.category.name if doc.category else None,
+                category_code=doc.category.code if doc.category else None,
                 ocr_status=doc.ocr_status,
-                minio_object_key=doc.minio_object_key,
-                is_deleted=doc.is_deleted,
+                ocr_confidence=confidence,
+                student_id=uploader_mssv,
+                student_name=uploader_name,
                 created_at=doc.created_at,
                 updated_at=doc.updated_at,
-                uploader_name=uploader_name,
-                uploader_mssv=uploader_mssv,
-                category_name=doc.category.name if doc.category else None,
-                confidence_score=confidence,
             )
         )
 
-    total_pages = math.ceil(total / page_size) if total > 0 else 1
-    return DocumentListResponse(items=items, total=total, page=page, page_size=page_size, total_pages=total_pages)
+    total_pages = math.ceil(total / page_size) if total > 0 else 0
+    return DocumentListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        items=items,
+    )
+
+
+@router.get(
+    "/categories",
+    summary="Lấy danh sách các danh mục tài liệu hành chính CTSV",
+)
+async def list_categories(
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(DocumentCategory).order_by(DocumentCategory.sort_order.asc())
+    res = await db.execute(stmt)
+    categories = res.scalars().all()
+    return categories
 
 
 @router.get(
     "/export/excel",
-    summary="Xuất danh sách hồ sơ CTSV ra file Excel/CSV",
+    summary="Xuất danh sách hồ sơ sinh viên ra file CSV / Excel",
 )
 async def export_documents_excel(
-    ocr_status: str | None = Query(None),
     category_id: UUID | None = Query(None),
+    ocr_status: str | None = Query(None),
     current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """Xuất danh sách tài liệu dưới dạng CSV UTF-8 mở được chuẩn trên Excel."""
+    """Xuất báo cáo thống kê danh sách hồ sơ sinh viên kèm MSSV, Họ tên, Trạng thái."""
     stmt = (
         select(Document)
         .where(Document.is_deleted == False)
@@ -187,62 +204,55 @@ async def export_documents_excel(
         )
         .order_by(Document.created_at.desc())
     )
-    if ocr_status:
-        stmt = stmt.where(Document.ocr_status == ocr_status.upper())
     if category_id:
         stmt = stmt.where(Document.category_id == category_id)
+    if ocr_status:
+        stmt = stmt.where(Document.ocr_status == ocr_status.upper())
 
     res = await db.execute(stmt)
     docs = res.scalars().all()
 
     output = io.StringIO()
-    # Ghi UTF-8 BOM để Microsoft Excel tiếng Việt không bị lỗi font
-    output.write("\ufeff")
-    writer = csv.writer(output, delimiter=",", quoting=csv.QUOTE_MINIMAL)
-
-    # Header columns
+    writer = csv.writer(output, dialect='excel')
+    # Ghi BOM UTF-8 để Excel hiển thị tiếng Việt chính xác
+    output.write('\ufeff')
     writer.writerow([
-        "Mã hồ sơ",
-        "Tiêu đề hồ sơ",
-        "Tên file gốc",
-        "MSSV",
-        "Họ và tên sinh viên",
-        "Danh mục",
-        "Trạng thái OCR",
-        "Độ tin cậy (%)",
-        "Thời gian nộp",
-        "Thời gian cập nhật",
+        "Mã Hồ Sơ", "Tiêu Đề", "Tên File Gốc", "Loại Biểu Mẫu",
+        "MSSV", "Họ Và Tên Sinh Viên", "Trạng Thái OCR",
+        "Độ Tin Cậy (%)", "Ngày Tiếp Nhận", "Ngày Duyệt"
     ])
 
-    for doc in docs:
-        confidence = "--"
-        for ocr in doc.ocr_results:
-            if ocr.is_latest and ocr.confidence_score is not None:
-                confidence = f"{round(ocr.confidence_score * 100)}%"
+    for d in docs:
+        conf = ""
+        for o in d.ocr_results:
+            if o.is_latest and o.confidence_score:
+                conf = f"{round(float(o.confidence_score) * 100, 1)}%"
                 break
 
-        mssv = doc.metadata_.student_id if doc.metadata_ and doc.metadata_.student_id else (doc.uploader.mssv if doc.uploader else "")
-        name = doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else "")
+        mssv = d.metadata_.student_id if d.metadata_ and d.metadata_.student_id else (d.uploader.mssv if d.uploader else "")
+        name = d.metadata_.student_name if d.metadata_ and d.metadata_.student_name else (d.uploader.full_name if d.uploader else "")
 
         writer.writerow([
-            str(doc.id),
-            doc.title,
-            doc.original_filename,
+            str(d.id),
+            d.title,
+            d.original_filename,
+            d.category.name if d.category else "Chưa phân loại",
             mssv,
             name,
-            doc.category.name if doc.category else "Chưa phân loại",
-            doc.ocr_status,
-            confidence,
-            doc.created_at.strftime("%d/%m/%Y %H:%M"),
-            doc.updated_at.strftime("%d/%m/%Y %H:%M"),
+            d.ocr_status,
+            conf,
+            d.created_at.strftime("%d/%m/%Y %H:%M") if d.created_at else "",
+            d.updated_at.strftime("%d/%m/%Y %H:%M") if d.updated_at and d.ocr_status == "APPROVED" else "",
         ])
 
-    output.seek(0)
-    filename = f"Danh_sach_ho_so_CTSV_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+    csv_data = output.getvalue().encode('utf-8-sig')
+    filename = f"Danh_sach_ho_so_CTSV_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    encoded_filename = urllib.parse.quote(filename)
+
     return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        io.BytesIO(csv_data),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
     )
 
 
@@ -295,7 +305,7 @@ async def upload_document(
     )
 
     celery_task_id = None
-    # Khởi chạy tác vụ OCR nền tức thì
+    # Khởi chạy tác vụ OCR nền
     asyncio.create_task(async_process_ocr(str(document.id), task_id="async_worker"))
 
     return DocumentUploadResponse(
@@ -337,16 +347,24 @@ async def get_document(
 
 @router.get(
     "/{document_id}/file",
-    summary="Xem trực tiếp file gốc của tài liệu (PDF / Hình ảnh)",
+    summary="Xem trực tiếp file gốc của tài liệu (PDF / Hình ảnh - Có kiểm soát RBAC)",
 )
 async def view_document_file(
     document_id: UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Truy xuất file nhị phân gốc từ Storage để render trực tiếp trên trình duyệt."""
+    """Truy xuất file nhị phân gốc từ Storage kèm xác thực quyền truy cập RBAC."""
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
+
+    role_name = current_user.role.name if current_user.role else "STUDENT"
+    if role_name == "STUDENT" and doc.uploaded_by != current_user.id and doc.ocr_status != "APPROVED":
+        raise AppException(
+            message="Bạn không có quyền xem tệp tài liệu này",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
 
     file_bytes = await asyncio.to_thread(storage_service.get_file, doc.minio_object_key)
     if not file_bytes:
@@ -398,7 +416,7 @@ async def correct_ocr_text(
     res = await db.execute(stmt)
     ocr_result = res.scalars().first()
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     if not ocr_result:
         ocr_result = OCRResult(
             document_id=document_id,
@@ -460,12 +478,9 @@ async def correct_ocr_text(
 
     # Cập nhật Elasticsearch
     try:
-        await search_index_service.index_document(
+        await search_index_service.update_corrected_text(
             document_id=doc.id,
-            title=doc.title,
-            content=ocr_result.raw_text or req.corrected_text,
-            ocr_status=doc.ocr_status,
-            updated_at=now,
+            corrected_text=req.corrected_text,
         )
     except Exception as exc:
         logger.warning("Failed to update corrected text in ES: {err}", err=str(exc))
@@ -477,13 +492,14 @@ async def correct_ocr_text(
 
 @router.post(
     "/{document_id}/reprocess-ocr",
-    summary="Chạy lại quy trình OCR cho tài liệu với mô hình VietOCR mới nhất",
+    summary="Chạy lại quy trình OCR cho tài liệu với mô hình VietOCR mới nhất (ADMIN, STAFF)",
 )
 async def reprocess_document_ocr(
     document_id: UUID,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """Kích hoạt lại tác vụ OCR đa tầng nền cho tài liệu."""
+    """Kích hoạt lại tác vụ OCR đa tầng nền cho tài liệu (bảo vệ quyền STAFF/ADMIN tránh DoS)."""
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
@@ -495,10 +511,11 @@ async def reprocess_document_ocr(
 @router.post(
     "/{document_id}/extract-fields",
     response_model=DocumentMetadataResponse,
-    summary="Tự động bóc tách MSSV, Họ tên, Lý do từ OCR text",
+    summary="Tự động bóc tách MSSV, Họ tên, Lý do từ OCR text (ADMIN, STAFF)",
 )
 async def trigger_extract_fields(
     document_id: UUID,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentMetadataResponse:
     """Chạy module Smart Form Field Extraction trích xuất thông tin sinh viên."""
@@ -540,6 +557,7 @@ async def trigger_extract_fields(
 )
 async def get_document_verification(
     document_id: UUID,
+    current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> VerificationResponse:
     """Lấy thông tin xác thực điện tử công khai và mã băm chứng chỉ."""
@@ -555,8 +573,27 @@ async def get_document_verification(
         raise DocumentNotFoundException(str(document_id))
 
     is_approved = doc.ocr_status == "APPROVED"
-    student_name = doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else "Sinh viên")
-    student_id = doc.metadata_.student_id if doc.metadata_ and doc.metadata_.student_id else (doc.uploader.mssv if doc.uploader else None)
+    raw_name = doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else "Sinh viên")
+    raw_mssv = doc.metadata_.student_id if doc.metadata_ and doc.metadata_.student_id else (doc.uploader.mssv if doc.uploader else None)
+
+    # Bảo vệ quyền riêng tư nếu người tra cứu không phải chủ tài liệu hoặc cán bộ
+    is_privileged = False
+    if current_user:
+        role_name = current_user.role.name if current_user.role else "STUDENT"
+        if role_name in ("ADMIN", "STAFF") or doc.uploaded_by == current_user.id:
+            is_privileged = True
+
+    if is_privileged:
+        student_name = raw_name
+        student_id = raw_mssv
+    else:
+        # Ẩn danh một phần thông tin cá nhân (Privacy-Preserving Verification)
+        if raw_name and len(raw_name) > 3:
+            parts = raw_name.split()
+            student_name = " ".join([p[0] + "***" for p in parts])
+        else:
+            student_name = "*** (Đã bảo mật)"
+        student_id = f"***{raw_mssv[-3:]}" if raw_mssv and len(raw_mssv) >= 3 else "***"
 
     # Sinh mã băm xác thực SHA-256
     raw_signature = f"DLU_CTSV_{doc.id}_{doc.title}_{doc.ocr_status}_{doc.created_at.isoformat()}"
@@ -594,7 +631,7 @@ async def approve_document(
         raise DocumentNotFoundException(str(document_id))
 
     old_status = doc.ocr_status
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     doc.ocr_status = "APPROVED"
     doc.updated_at = now
 
@@ -609,11 +646,10 @@ async def approve_document(
     db.add(audit)
     await db.commit()
 
+    # Cập nhật trạng thái ES (Partial update - không xóa nội dung content)
     try:
-        await search_index_service.index_document(
+        await search_index_service.update_document_status(
             document_id=doc.id,
-            title=doc.title,
-            content="",
             ocr_status="APPROVED",
             updated_at=now,
         )
@@ -640,7 +676,7 @@ async def reject_document(
         raise DocumentNotFoundException(str(document_id))
 
     old_status = doc.ocr_status
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     doc.ocr_status = "REJECTED"
     doc.updated_at = now
 
@@ -654,6 +690,16 @@ async def reject_document(
     )
     db.add(audit)
     await db.commit()
+
+    # Cập nhật trạng thái ES (Partial update)
+    try:
+        await search_index_service.update_document_status(
+            document_id=doc.id,
+            ocr_status="REJECTED",
+            updated_at=now,
+        )
+    except Exception as exc:
+        logger.warning("Failed to update status in ES: {err}", err=str(exc))
 
     logger.info("Rejected document {id} by user {user}", id=document_id, user=current_user.id)
     doc_service = DocumentService(db)

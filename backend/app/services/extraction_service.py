@@ -36,11 +36,12 @@ class ExtractionService:
         }
 
         # 1. Trích xuất MSSV (6 - 10 chữ số hoặc tiền tố SV)
-        # Các mẫu: MSSV: 20210678, Mã số sinh viên: 2212461, Mã SV: 20198812
+        # Ưu tiên từ khóa rõ ràng: MSSV: 2412461, Mã số sinh viên: 20210678, sau đó mới đến số 7-8 chữ số
         mssv_patterns = [
-            r"(?:MSSV|Mã\s*số\s*sinh\s*viên|Mã\s*SV|Mã\s*số\s*SV)[\s:\.\-]+([A-Za-z0-9]{6,12})",
+            r"(?:MSSV|Mã\s*số\s*sinh\s*viên|Mã\s*SV|Mã\s*số\s*SV|Mã\s*học\s*viên)[\s:\.\-]+([A-Za-z0-9]{6,12})",
             r"(?:Sinh\s*viên|SV)\s*số[\s:\.\-]+([0-9]{6,10})",
-            r"\b(20[12][0-9]{5,7}|2[1-9][0-9]{5,6})\b",  # Heuristic năm nhập học (vd: 2212461, 20210678)
+            r"(?:Mã\s*số)[\s:\.\-]+([0-9]{7,8})",
+            r"\b(2[0-9]{6,7}|1[89][0-9]{5,6})\b",  # Nhận diện cấu trúc MSSV 7-8 chữ số
         ]
         for pat in mssv_patterns:
             m = re.search(pat, clean_text, re.IGNORECASE)

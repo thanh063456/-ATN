@@ -38,53 +38,52 @@ Hệ thống **DocuCTSV (Student-Document-OCR)** được thiết kế nhằm gi
 
 ---
 
-## 2. BẢN PHÂN RÃ CHỨC NĂNG HỆ THỐNG (FUNCTIONAL DECOMPOSITION)
+## 2. BẢN PHÂN RÃ CHỨC NĂNG HỆ THỐNG (WBS - 6 MODULES)
 
-Dưới đây là sơ đồ phân rã chức năng (Work Breakdown Structure - WBS) toàn diện của hệ thống số hóa tài liệu CTSV:
+Dưới đây là sơ đồ phân rã chức năng (Work Breakdown Structure - WBS) của hệ thống số hóa tài liệu CTSV gồm 6 phân hệ:
 
 ```
-                          HỆ THỐNG SỐ HÓA TÀI LIỆU CTSV (DocuCTSV)
-                                            │
-   ┌────────────────────┬───────────────────┼───────────────────┬────────────────────┐
-   │                    │                   │                   │                    │
-┌──┴─────────────┐  ┌───┴────────────┐  ┌───┴────────────┐  ┌───┴─────────────┐  ┌───┴─────────────┐
-│ MODULE 1:      │  │ MODULE 2:      │  │ MODULE 3:      │  │ MODULE 4:       │  │ MODULE 5:       │
-│ THU THẬP &     │  │ MÔ HÌNH AI &   │  │ BÓC TÁCH       │  │ BACKEND API &   │  │ FRONTEND WEB    │
-│ TIỀN XỬ LÝ ẢNH │  │ NHẬN DIỆN OCR  │  │ TÌM KIẾM ES    │  │ QUẢN TRỊ CSDL   │  │ GIAO DIỆN (UI)  │
-└──┬─────────────┘  └───┬────────────┘  └───┬────────────┘  └───┬─────────────┘  └───┬─────────────┘
-   │                    │                   │                   │                    │
-   ├─ 1.1 Tải lên PDF/  ├─ 2.1 Cắt dòng     ├─ 3.1 Trích xuất   ├─ 4.1 FastAPI       ├─ 5.1 Dashboard
-   │      Ảnh/Camera    │      (Line Seg)   │      MSSV, Họ tên │      RESTful API   │      Thống kê KPI
-   │                    │                   │                   │                    │
-   ├─ 1.2 Phân giải     ├─ 2.2 Nhận diện    ├─ 3.2 Bóc tách     ├─ 4.2 Supabase /    ├─ 5.2 Upload đa
-   │      ảnh 300 DPI   │      VietOCR TF   │      Số hiệu/Ngày │      PostgreSQL DB │      phương thức
-   │                    │                   │                   │                    │
-   ├─ 1.3 Khử chấm form ├─ 2.3 Bóc tách     ├─ 3.3 Phân loại    ├─ 4.3 Async Worker  ├─ 5.3 Side-by-Side
-   │      (........... )│      lưới Bảng    │      văn bản tự   │      Background    │      OCR Editor
-   │                    │                   │      động         │      (to_thread)   │
-   ├─ 1.4 Dynamic Zoom  ├─ 2.4 Hậu xử lý    │                   │                    ├─ 5.4 Tra cứu ES
-   │      & CLAHE mực   │      Unicode NFC  ├─ 3.4 Elasticsearch├─ 4.4 Phân quyền   │      Highlighting
-   │                    │      tiếng Việt   │      Full-text    │      RBAC 3 vai trò│
-   └─ 1.5 Deskew xoay   │                   │      Search Index │      (Admin/Staff/ │ └─ 5.5 Xác thực
-          chỉnh thẳng   └─ 2.5 Nạp trọng số │                   │       Student)            QR Code &
-                               Fine-tuned   └─ 3.5 Highlighting │                           Chứng chỉ
-                               .pth weights        Snippet      └─ 4.5 Audit Logging
-                                                                       & Lưu trữ MinIO
+                                    HỆ THỐNG SỐ HÓA TÀI LIỆU CTSV (DocuCTSV)
+                                                      │
+         ┌──────────────────┬─────────────────┬───────┴─────────┬──────────────────┬──────────────────┐
+         │                  │                 │                 │                  │                  │
+  ┌──────┴───────┐   ┌──────┴───────┐  ┌──────┴───────┐  ┌──────┴───────┐   ┌──────┴───────┐   ┌──────┴───────┐
+  │  MODULE 1:   │   │  MODULE 2:   │  │  MODULE 3:   │  │  MODULE 4:   │   │  MODULE 5:   │   │  MODULE 6:   │
+  │ TIỀN XỬ LÝ   │   │ MÔ HÌNH AI & │  │ BÓC TÁCH &   │  │ BACKEND API  │   │ FRONTEND WEB │   │ BẢO MẬT &    │
+  │ HÌNH ẢNH     │   │ VIETOCR      │  │ ELASTICSEARCH│  │ & CSDL       │   │ SPA UI/UX    │   │ DEVOPS       │
+  └──────┬───────┘   └──────┬───────┘  └──────┬───────┘  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+         │                  │                 │                 │                  │                  │
+         ├─ 1.1 Render PDF  ├─ 2.1 Cắt dòng   ├─ 3.1 Trích xuất ├─ 4.1 FastAPI     ├─ 5.1 Dashboard   ├─ 6.1 Mã băm
+         │      300 DPI     │      Dilation   │      MSSV 7 số  │      RESTful API │      KPI động    │      SHA-256
+         │                  │                 │                 │                  │                  │
+         ├─ 1.2 Deskew      ├─ 2.2 VietOCR    ├─ 3.2 Bóc tách   ├─ 4.2 CSDL        ├─ 5.2 Upload đa   ├─ 6.2 Xác thực
+         │      xoay thẳng  │      Transformer│      Họ tên,Ngày│      PostgreSQL  │      phương thức │      QR an toàn
+         │                  │                 │                 │                  │                  │
+         ├─ 1.3 Khử chấm    ├─ 2.3 Bóc tách   ├─ 3.3 Chỉ mục    ├─ 4.3 Async Task  ├─ 5.3 Live Editor ├─ 6.3 Phân quyền
+         │      form        │      Lưới Bảng  │      ES 8.12    │      Worker ngầm │      Side-by-Side│      RBAC 3 role
+         │                  │                 │                 │                  │                  │
+         └─ 1.4 Dynamic Zoom└─ 2.4 Unicode    └─ 3.4 Fuzzy      └─ 4.4 Redis 7     └─ 5.4 Auto-Polling└─ 6.4 Docker
+                & CLAHE            NFC Hậu xử        Search            Cache              thời gian          Compose 4
+                                   lý                Highlight         Session            thực               Containers
 ```
 
 ---
 
-## 3. BẢNG PHÂN TÍCH MODULE & PHÂN CÔNG 3 THÀNH VIÊN (RESPONSIBILITY MATRIX)
+## 3. BẢNG PHÂN TÍCH 6 MODULE & PHÂN CÔNG 3 THÀNH VIÊN (RESPONSIBILITY MATRIX)
 
-Dự án được phân chia công việc rõ ràng, cân đối và chuyên sâu giữa 3 thành viên:
+Hệ thống gồm 6 phân hệ module, mỗi thành viên trong nhóm phụ trách chính xác **2 module chuyên sâu**:
 
-| Phân hệ Module | Chi tiết Hạng mục Công việc Phụ trách | Công nghệ & Công cụ | Thành viên Phụ trách | Tỉ lệ Hoàn thành |
-|---|---|---|:---:|:---:|
-| **PHÂN HỆ 1:<br>Thị giác Máy tính (CV) & Mô hình VietOCR Pipeline** | • **Thu thập & tiền xử lý dataset**: Thu thập 13.125 mẫu ảnh thực tế từ hồ sơ CTSV ĐH Đà Lạt.<br>• **Thuật toán xử lý ảnh**: Cắt dòng chữ (Line Segmentation), Deskew xoay thẳng góc, lọc đường chấm `...........`.<br>• **Xử lý chữ viết tay**: Thuật toán Dynamic Zooming $1.5\times - 2.5\times$, tăng tương phản CLAHE nét bút mờ và đệm viền 8px.<br>• **Bóc tách bảng biểu**: Thuật toán phát hiện lưới ô (Grid Cell Extraction) & xuất Markdown Table.<br>• **Huấn luyện mô hình**: Fine-tune mạng nơ-ron VietOCR Transformer (`vgg_transformer`), chuẩn hóa Unicode NFC và sửa lỗi chính tả hành chính. | • Python 3.11<br>• PyTorch 2.x<br>• VietOCR Transformer<br>• OpenCV (cv2)<br>• PyMuPDF (fitz)<br>• Albumentations | **Ngô Công Thành**<br>*(MSSV: 2212461 - Trưởng nhóm)* | **100%** |
-| **PHÂN HỆ 2:<br>Backend RESTful API, CSDL & Elasticsearch** | • **Thiết kế CSDL**: Xây dựng lược đồ cơ sở dữ liệu quan hệ chuẩn 3NF trên PostgreSQL / Supabase.<br>• **Xây dựng API Backend**: Thiết lập 25+ RESTful API endpoints chuẩn OpenAPI trên nền FastAPI.<br>• **Tác vụ nền bất đồng bộ**: Xây dựng Worker chạy ngầm (`asyncio.to_thread` / Celery) xử lý OCR không gây treo server.<br>• **Tìm kiếm toàn văn**: Cấu hình Elasticsearch 8.12.0 tiếng Việt, lập trình Fuzzy search và Highlighting snippet.<br>• **Bảo mật & Phân quyền**: Thiết lập cơ chế JWT Authentication và phân quyền RBAC 3 vai trò (Admin, Staff, Student). | • FastAPI<br>• PostgreSQL (Supabase)<br>• Elasticsearch 8.12.0<br>• Redis 7 Cache<br>• MinIO / S3 Storage<br>• SQLAlchemy Async | **Phan Thành Phát**<br>*(MSSV: 2212463)* | **100%** |
-| **PHÂN HỆ 3:<br>Frontend Web Application (UI/UX) & Đóng gói Hệ thống** | • **Thiết kế giao diện SPA**: Xây dựng UI/UX hiện đại theo Clean Design System với React 18, TypeScript, Vite.<br>• **Module Nghiệp vụ**: Xây dựng Dashboard KPI thống kê, Trang nộp hồ sơ (Kéo thả file & Chụp ảnh Camera trực tiếp).<br>• **Trình đối soát Side-by-Side OCR Live Editor**: Nhúng trực tiếp file gốc (Iframe PDF / Zoom-Rotate Ảnh) song song với trình sửa văn bản OCR.<br>• **Cơ chế Live Auto-Polling**: Tự động đồng bộ và hiển thị kết quả OCR thời gian thực.<br>• **Trang Xác thực & Báo cáo**: Module tra cứu công khai mã QR / SHA-256, xuất báo cáo Excel/CSV BOM UTF-8.<br>• **Container hóa**: Đóng gói Docker Compose đồng bộ 4 dịch vụ (`frontend`, `backend`, `elasticsearch`, `redis`). | • React 18 + TypeScript<br>• Vite & Zustand<br>• Lucide Icons<br>• Axios Client<br>• Docker / Docker Compose | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | **100%** |
+| STT | Phân hệ Module | Chi tiết Hạng mục Công việc Phụ trách | Công nghệ / Thư viện | Thành viên Phụ trách | Tỉ lệ Hoàn thành |
+|:---:|---|---|---|:---:|:---:|
+| **1** | **Module 1: Thu Thập & Tiền Xử Lý Ảnh** | • Thu thập tập dữ liệu 13.125 mẫu ảnh CTSV ĐH Đà Lạt.<br>• Thuật toán Deskew xoay thẳng góc nghiêng.<br>• Thuật toán lọc đường kẻ chấm form `...........`.<br>• Phóng đại dòng chữ viết tay ($1.5\times - 2.5\times$) & tăng tương phản CLAHE. | • OpenCV (cv2)<br>• PyMuPDF (fitz)<br>• Pillow / NumPy | **Ngô Công Thành**<br>*(MSSV: 2212461 - Trưởng nhóm)* | **100%** |
+| **2** | **Module 2: Mô Hình AI & VietOCR Pipeline** | • Cắt dòng chữ tự động (Line Segmentation).<br>• Huấn luyện & Fine-tune VietOCR Transformer (`vgg_transformer`).<br>• Giải thuật bóc tách cấu trúc lưới Bảng biểu (Table Grid) ra Markdown.<br>• Hậu xử lý chuẩn hóa Unicode NFC và sửa từ điển hành chính. | • PyTorch 2.x<br>• VietOCR Transformer<br>• Albumentations | **Ngô Công Thành**<br>*(MSSV: 2212461 - Trưởng nhóm)* | **100%** |
+| **3** | **Module 3: Bóc Tách Thực Thể & Elasticsearch** | • Bộ luật Regex trích xuất MSSV 7 số, Họ tên, Ngày ban hành, Số hiệu.<br>• Cấu hình cụm chỉ mục Elasticsearch 8.12.0 tiếng Việt.<br>• Xây dựng API tìm kiếm mờ (Fuzzy Query) và trích đoạn nổi bật (Highlighting). | • Elasticsearch 8.x<br>• Regular Expressions<br>• Unicodedata | **Phan Thành Phát**<br>*(MSSV: 2212463)* | **100%** |
+| **4** | **Module 4: Backend REST API & Quản Trị CSDL** | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên FastAPI.<br>• Tác vụ xử lý OCR nền bất đồng bộ (`asyncio.to_thread`) không gây nghẽn luồng.<br>• Quản trị phiên làm việc và caching với Redis 7. | • FastAPI<br>• PostgreSQL (Supabase)<br>• Redis 7 Cache<br>• SQLAlchemy Async | **Phan Thành Phát**<br>*(MSSV: 2212463)* | **100%** |
+| **5** | **Module 5: Frontend Web SPA & Trình Đối Soát** | • Thiết kế giao diện Web SPA React 18, TypeScript, TailwindCSS.<br>• Xây dựng Dashboard KPI, Upload kéo thả & Chụp ảnh Camera.<br>• **Trình đối soát Side-by-Side Live Editor** nhúng trực tiếp file gốc.<br>• Cơ chế Real-time Live Auto-Polling cập nhật OCR tức thì. | • React 18 + TypeScript<br>• Vite & Zustand<br>• TailwindCSS<br>• Axios Client | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | **100%** |
+| **6** | **Module 6: Bảo Mật, Xác Thực Số & DevOps** | • Mã băm SHA-256 kiểm tra tính toàn vẹn tài liệu gốc.<br>• Trang Xác thực công khai mã QR an toàn (tuân thủ Nghị định 13/2023/NĐ-CP).<br>• Thiết lập hệ thống phân quyền RBAC 3 vai trò (Admin, Staff, Student).<br>• Đóng gói Docker Compose đồng bộ 4 container vi dịch vụ. | • SHA-256 Hash<br>• QR Generator<br>• JWT Auth & RBAC<br>• Docker Compose | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | **100%** |
 
 ---
+
 
 ## 4. KIẾN TRÚC KỸ THUẬT & CÔNG NGHỆ ÁP DỤNG
 

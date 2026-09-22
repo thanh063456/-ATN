@@ -1,0 +1,10 @@
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_000.png	CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_001.png	Độc lập - Tự do - Hạnh phúc
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_002.png	ĐƠN XIN XÁC NHẬN SINH VIÊN
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_003.png	Kính gửi: Ban Giám hiệu Trường Đại học Đà Lạt
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_004.png	Phòng Công tác Sinh viên (CTSV)
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_005.png	Tên em là: Nguyễn Văn Nam
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_006.png	Mã số sinh viên: 2412461
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_007.png	Lớp: CTK48 - Khoa Công nghệ Thông tin
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_008.png	Lý do: Bổ sung hồ sơ vay vốn tín dụng sinh viên ngân hàng chính sách
+dataset/crops/DOC_TEST_EVAL_20240901_test001_line_009.png	Đà Lạt, ngày 15 tháng 10 năm 2025

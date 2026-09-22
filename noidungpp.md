@@ -55,15 +55,16 @@ mindmap
 
 ---
 
-### SLIDE 4: BẢN PHÂN RÃ CHỨC NĂNG HỆ THỐNG (WBS)
+### SLIDE 4: BẢN PHÂN RÃ CHỨC NĂNG HỆ THỐNG (WBS - 6 MODULES)
 
 ```mermaid
 graph TD
     Root["HỆ THỐNG SỐ HÓA TÀI LIỆU CTSV (DocuCTSV)"] --> M1["1. Tiền xử lý Ảnh"]
     Root --> M2["2. AI & VietOCR Pipeline"]
-    Root --> M3["3. Bóc tách & Tìm kiếm"]
+    Root --> M3["3. Bóc tách & Elasticsearch"]
     Root --> M4["4. Backend API & CSDL"]
-    Root --> M5["5. Frontend Web UI/UX"]
+    Root --> M5["5. Frontend Web SPA"]
+    Root --> M6["6. Bảo mật & DevOps"]
 
     M1 --> M1_1["Render 300 DPI & Deskew"]
     M1 --> M1_2["Lọc đường chấm .........."]
@@ -79,24 +80,30 @@ graph TD
 
     M4 --> M4_1["FastAPI 25+ REST Endpoints"]
     M4 --> M4_2["Async Worker ngầm"]
-    M4 --> M4_3["Phân quyền RBAC 3 vai trò"]
+    M4 --> M4_3["CSDL PostgreSQL Supabase"]
 
     M5 --> M5_1["Dashboard KPI thống kê"]
     M5 --> M5_2["Side-by-Side Live Editor"]
-    M5 --> M5_3["Xác thực mã QR & SHA-256"]
+    M5 --> M5_3["Real-time Auto-Polling"]
+
+    M6 --> M6_1["Kiểm tra toàn vẹn SHA-256"]
+    M6 --> M6_2["Xác thực mã QR an toàn"]
+    M6 --> M6_3["Docker Compose 4 Containers"]
 ```
 
 ---
 
-### SLIDE 5: PHÂN CÔNG NHIỆM VỤ THEO TỪNG MODULE (WBS)
+### SLIDE 5: PHÂN CÔNG NHIỆM VỤ THEO 6 MODULE (MỖI THÀNH VIÊN 2 MODULE)
 
 | Module | Tên Phân Hệ Module | Sinh Viên Đảm Nhận | Nhiệm Vụ Phụ Trách Chi Tiết | Công Nghệ Chủ Đạo |
 |:---:|---|:---:|---|---|
 | **Module 1** | **Thu Thập & Tiền Xử Lý Ảnh** | **Ngô Công Thành**<br>*(2212461 - Trưởng nhóm)* | • Thu thập tập dữ liệu 13.125 mẫu ảnh CTSV.<br>• Xoay thẳng ảnh nghiêng (Deskew), khử đường chấm `...........`.<br>• Phóng đại chữ viết tay ($1.5\times - 2.5\times$) & tăng tương phản CLAHE. | OpenCV (cv2), PyMuPDF (fitz), Pillow, NumPy |
-| **Module 2** | **Mô Hình AI & VietOCR Pipeline** | **Ngô Công Thành**<br>*(2212461 - Trưởng nhóm)* | • Cắt dòng văn bản (Line Segmentation).<br>• Fine-tune mạng nơ-ron VietOCR Transformer (`vgg_transformer`).<br>• Thuật toán bóc tách lưới ô Bảng biểu ra Markdown Table.<br>• Hậu xử lý chuẩn hóa Unicode NFC & sửa lỗi từ điển. | PyTorch 2.x, VietOCR Transformer, Albumentations |
+| **Module 2** | **Mô Hình AI & VietOCR Pipeline** | **Ngô Công Thành**<br>*(2212461 - Trưởng nhóm)* | • Cắt dòng văn bản (Line Segmentation).<br>• Fine-tune mạng nơ-ron VietOCR Transformer (`vgg_transformer`).<br>• Bóc tách lưới ô Bảng biểu ra Markdown Table.<br>• Hậu xử lý chuẩn hóa Unicode NFC & sửa lỗi từ điển. | PyTorch 2.x, VietOCR Transformer, Albumentations |
 | **Module 3** | **Bóc Tách Thực Thể & Elasticsearch** | **Phan Thành Phát**<br>*(MSSV: 2212463)* | • Xây dựng bộ luật Regex trích xuất MSSV 7 số, Họ tên, Số hiệu.<br>• Cấu hình cụm chỉ mục Elasticsearch 8.12.0 tiếng Việt.<br>• Lập trình API tìm kiếm mờ (Fuzzy Query) & Highlighting snippet. | Elasticsearch 8.x, Regular Expressions, Unicodedata |
-| **Module 4** | **Backend API & Quản Trị CSDL** | **Phan Thành Phát**<br>*(MSSV: 2212463)* | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên nền FastAPI.<br>• Tác vụ xử lý OCR ngầm bất đồng bộ không gây nghẽn luồng.<br>• Thiết lập JWT Authentication & phân quyền RBAC 3 vai trò. | FastAPI, PostgreSQL (Supabase), Redis 7 Cache, SQLAlchemy Async |
-| **Module 5** | **Frontend Web SPA & Đóng Gói DevOps** | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | • Thiết kế giao diện Web SPA React 18, TypeScript, TailwindCSS.<br>• Xây dựng Dashboard KPI, Upload kéo thả & Chụp ảnh Camera.<br>• **Trình đối soát Side-by-Side Live Editor** nhúng trực tiếp file gốc.<br>• Cơ chế Real-time Live Auto-Polling cập nhật OCR tức thì.<br>• Module Xác thực mã QR & Đóng gói Docker 4 Containers. | React 18, TypeScript, Vite, Zustand, Docker Compose |
+| **Module 4** | **Backend REST API & CSDL** | **Phan Thành Phát**<br>*(MSSV: 2212463)* | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên nền FastAPI.<br>• Tác vụ xử lý OCR ngầm bất đồng bộ không gây nghẽn luồng.<br>• Tích hợp Redis 7 Cache tối ưu phiên làm việc. | FastAPI, PostgreSQL (Supabase), Redis 7 Cache, SQLAlchemy Async |
+| **Module 5** | **Frontend Web SPA & Live Editor** | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | • Thiết kế giao diện Web SPA React 18, TypeScript, TailwindCSS.<br>• Xây dựng Dashboard KPI, Upload kéo thả & Chụp ảnh Camera.<br>• **Trình đối soát Side-by-Side Live Editor** nhúng trực tiếp file gốc.<br>• Cơ chế Real-time Live Auto-Polling cập nhật kết quả OCR. | React 18, TypeScript, Vite, Zustand, TailwindCSS |
+| **Module 6** | **Bảo Mật, Xác Thực Số & DevOps** | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | • Mã băm SHA-256 kiểm tra tính toàn vẹn tài liệu gốc.<br>• Trang Xác thực công khai mã QR an toàn (Nghị định 13/2023/NĐ-CP).<br>• Phân quyền RBAC 3 vai trò (Admin, Staff, Student).<br>• Đóng gói Docker Compose đồng bộ 4 container vi dịch vụ. | SHA-256, QR Code Generator, JWT RBAC, Docker Compose |
+
 
 ---
 

@@ -53,19 +53,21 @@ class OCRService:
         self._predictor = None
 
     def _get_predictor(self):
-        """Khởi tạo VietOCR predictor với trọng số fine-tune nếu có (lazy load)."""
+        """Khởi tạo VietOCR predictor với trọng số fine-tune nếu có (lazy load an toàn)."""
         if self._predictor is None:
+            orig_requests_get = None
             try:
                 import urllib3
                 urllib3.disable_warnings()
                 import requests
                 from vietocr.tool import utils as vocr_utils
-                _orig_get = requests.get
-                def _patched_get(*args, **kwargs):
+                
+                # Tạm thời cấu hình download weights trong phạm vi nạp model
+                orig_requests_get = requests.get
+                def _scoped_get(*args, **kwargs):
                     kwargs['verify'] = False
-                    return _orig_get(*args, **kwargs)
-                requests.get = _patched_get
-                vocr_utils.requests.get = _patched_get
+                    return orig_requests_get(*args, **kwargs)
+                vocr_utils.requests.get = _scoped_get
 
                 from vietocr.tool.config import Cfg
                 from vietocr.tool.predictor import Predictor
@@ -84,6 +86,16 @@ class OCRService:
                 logger.info("Initialized VietOCR vgg_transformer predictor successfully")
             except Exception as exc:
                 logger.warning("VietOCR predictor not loaded: {err}", err=str(exc))
+            finally:
+                # Đảm bảo khôi phục lại requests.get nguyên bản cho toàn bộ ứng dụng
+                if orig_requests_get:
+                    try:
+                        import requests
+                        from vietocr.tool import utils as vocr_utils
+                        requests.get = orig_requests_get
+                        vocr_utils.requests.get = orig_requests_get
+                    except Exception:
+                        pass
         return self._predictor
 
     def preprocess_image(self, pil_image: Image.Image) -> Image.Image:
@@ -349,11 +361,11 @@ class OCRService:
             (r'\bGI[AẤ]Y\s*X[AÁ]C\s*NH[AẬ]N\b', 'GIẤY XÁC NHẬN'),
             (r'\b[ĐD][OƠ]N\s*XIN\b', 'ĐƠN XIN'),
             
-            # Địa danh & Ngày tháng
+            # Địa danh & Ngày tháng tổng quát
             (r'Lâm\s*Đông\b', 'Lâm Đồng'),
             (r'Đà\s*Lat\b', 'Đà Lạt'),
-            (r'ng[d|y|a|y]+ed\s+tháng', 'ngày 29 tháng'),
-            (r'ng[d|y|a|y]+\s+(\d{1,2})\s+tháng', r'ngày \1 tháng'),
+            (r'\bng[àa]y\s+(\d{1,2})\s+th[áa]ng\s+(\d{1,2})\s+n[ăa]m\s+(\d{4})\b', r'ngày \1 tháng \2 năm \3'),
+            (r'\bng[d|y|a|à]+\s+(\d{1,2})\s+th[áa]ng', r'ngày \1 tháng'),
             
             # Chữ số La Mã đầu mục
             (r'\bIH\.\s*', 'III. '),

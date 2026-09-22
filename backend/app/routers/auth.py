@@ -8,7 +8,7 @@ Cung cấp các endpoints:
 - GET /auth/me: Lấy thông tin tài khoản hiện tại kèm vai trò và MSSV
 - POST /auth/login: Đăng nhập trực tiếp (backward-compatible)
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -37,86 +37,12 @@ from app.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-async def _ensure_seed_users(db: AsyncSession) -> None:
-    """Khởi tạo 3 vai trò mẫu (ADMIN, STAFF, STUDENT) và tài khoản mẫu nếu DB chưa có."""
-    roles_data = [
-        ("ADMIN", "Quản trị viên hệ thống"),
-        ("STAFF", "Cán bộ quản lý hồ sơ CTSV"),
-        ("STUDENT", "Sinh viên"),
-    ]
-
-    roles_map: dict[str, Role] = {}
-    for rname, rdesc in roles_data:
-        res = await db.execute(select(Role).where(Role.name == rname))
-        r = res.scalars().first()
-        if not r:
-            r = Role(name=rname, description=rdesc)
-            db.add(r)
-            await db.flush()
-        roles_map[rname] = r
-
-    users_data = [
-        ("admin_hethong", "admin@dlu.edu.vn", "Quản trị viên Hệ thống (DLU)", "admin123", "ADMIN", None),
-        ("admin_hethong_alias", "admin_hethong@dlu.edu.vn", "Quản trị viên Hệ thống (DLU)", "admin123", "ADMIN", None),
-        ("canbo_ctsv", "canbo@dlu.edu.vn", "Cán bộ CTSV (Đại học Đà Lạt)", "password123", "STAFF", None),
-        ("canbo_ctsv_alias", "canbo_ctsv@dlu.edu.vn", "Cán bộ CTSV (Đại học Đà Lạt)", "password123", "STAFF", None),
-        ("2212461@dlu.edu.vn", "2212461@dlu.edu.vn", "Ngô Công Thành", "123456", "STUDENT", "2212461"),
-        ("2212463@dlu.edu.vn", "2212463@dlu.edu.vn", "Phan Thành Phát", "123456", "STUDENT", "2212463"),
-        ("2213934@dlu.edu.vn", "2213934@dlu.edu.vn", "Lý Gia Bảo", "123456", "STUDENT", "2213934"),
-    ]
-
-    for uname, uemail, ufullname, upass, urole, umssv in users_data:
-        res = await db.execute(select(User).where((User.username == uname) | (User.email == uemail)))
-        u = res.scalars().first()
-        if not u:
-            u = User(
-                username=uname,
-                email=uemail,
-                full_name=ufullname,
-                mssv=umssv,
-                hashed_password=get_password_hash(upass),
-                role_id=roles_map[urole].id,
-                is_active=True,
-            )
-            db.add(u)
-        else:
-            # Cập nhật password hash và active status
-            u.hashed_password = get_password_hash(upass)
-            u.is_active = True
-            if not u.role_id:
-                u.role_id = roles_map[urole].id
-            if ufullname and not u.full_name:
-                u.full_name = ufullname
-            if umssv and not u.mssv:
-                u.mssv = umssv
-
-        # Đồng bộ/tạo sẵn tài khoản trên Supabase Auth để đăng nhập bằng Supabase client mượt mà
-        try:
-            supabase_admin.auth.admin.create_user({
-                "email": uemail,
-                "password": upass,
-                "email_confirm": True,
-                "user_metadata": {
-                    "full_name": ufullname,
-                    "mssv": umssv,
-                    "role": urole,
-                    "username": uname,
-                },
-            })
-        except Exception:
-            pass
-
-    await db.commit()
-
-
 @router.post("/signup", response_model=UserResponse, summary="Đăng ký tài khoản với Supabase Auto-confirm")
 async def signup(req: SignupRequest, db: AsyncSession = Depends(get_db)) -> UserResponse:
     """
     Tạo tài khoản sinh viên qua Supabase Admin API với `email_confirm: True`.
     Người dùng có thể đăng nhập ngay mà không bị chặn bởi lỗi 'Email not confirmed'.
     """
-    await _ensure_seed_users(db)
-
     # 1. Kiểm tra đuôi email
     email_clean = req.email.strip().lower()
     if not email_clean.endswith("@dlu.edu.vn"):
@@ -229,8 +155,6 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)) -> 
     """
     Đồng bộ thông tin profile (MSSV, tên, email) vào PostgreSQL.
     """
-    await _ensure_seed_users(db)
-
     if not req.email.lower().endswith("@dlu.edu.vn"):
         raise AppException(
             message="Chỉ email đuôi @dlu.edu.vn mới được phép tạo tài khoản",
@@ -300,17 +224,15 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)) -> 
 @router.post("/login", response_model=TokenResponse, summary="Đăng nhập nhận JWT access token (Direct)")
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     """Xác thực người dùng (bằng username hoặc email) và cấp phát JWT token."""
-    await _ensure_seed_users(db)
-
     login_identifier = req.username.strip().lower()
     prefix = login_identifier.split("@")[0]
 
     # Hỗ trợ tìm kiếm linh hoạt theo email, username, mssv và bí danh
     match_targets = {login_identifier, prefix}
-    if login_identifier in ("canbo@dlu.edu.vn", "canbo_ctsv@dlu.edu.vn", "canbo", "canbo_ctsv", "canbo_ctsv_alias"):
-        match_targets.update({"canbo@dlu.edu.vn", "canbo_ctsv@dlu.edu.vn", "canbo", "canbo_ctsv", "canbo_ctsv_alias"})
-    if login_identifier in ("admin@dlu.edu.vn", "admin_hethong@dlu.edu.vn", "admin", "admin_hethong", "admin_hethong_alias"):
-        match_targets.update({"admin@dlu.edu.vn", "admin_hethong@dlu.edu.vn", "admin", "admin_hethong", "admin_hethong_alias"})
+    if login_identifier in ("canbo@dlu.edu.vn", "canbo_ctsv@dlu.edu.vn", "canbo", "canbo_ctsv"):
+        match_targets.update({"canbo@dlu.edu.vn", "canbo_ctsv@dlu.edu.vn", "canbo", "canbo_ctsv"})
+    if login_identifier in ("admin@dlu.edu.vn", "admin_hethong@dlu.edu.vn", "admin", "admin_hethong"):
+        match_targets.update({"admin@dlu.edu.vn", "admin_hethong@dlu.edu.vn", "admin", "admin_hethong"})
 
     stmt = (
         select(User)
@@ -341,7 +263,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenR
             status_code=status.HTTP_403_FORBIDDEN,
         )
 
-    user.last_login_at = datetime.now()
+    user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
 
     role_name = user.role.name if user.role else "STUDENT"

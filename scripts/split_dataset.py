@@ -42,6 +42,10 @@ from pathlib import Path
 from typing import List, Tuple, NamedTuple
 
 
+from collections import defaultdict
+import re
+
+
 # ── Data types ────────────────────────────────────────────────────────────────
 
 class AnnotationEntry(NamedTuple):
@@ -55,6 +59,7 @@ class AnnotationEntry(NamedTuple):
 class SplitResult(NamedTuple):
     train: List[AnnotationEntry]
     val:   List[AnnotationEntry]
+    test:  List[AnnotationEntry]
     skipped_count: int
     total_input: int
 
@@ -104,24 +109,65 @@ def parse_annotation_file(input_path: Path) -> Tuple[List[AnnotationEntry], int]
     return entries, skipped
 
 
-def split_entries(
+def get_document_group_id(image_path: str) -> str:
+    """
+    Trích xuất mã tài liệu/trang gốc để gom nhóm (Group-level split).
+    Ví dụ: 'dataset/crops/scan_001_line_005.png' -> 'scan_001'
+           'crops/doc_page_2_line_01.png' -> 'doc_page_2'
+    """
+    stem = Path(image_path).stem
+    # Khớp mẫu phổ biến: <doc_name>_line_<index>
+    m = re.match(r"^(.*?)(?:_line_|\bline_|\bl_)\d+", stem, re.IGNORECASE)
+    if m:
+        return m.group(1).rstrip("_-")
+    # Nếu không theo mẫu line, dùng tên file làm group riêng
+    return stem
+
+
+def split_entries_grouped(
     entries: List[AnnotationEntry],
     train_ratio: float,
+    val_ratio: float,
     seed: int,
-) -> Tuple[List[AnnotationEntry], List[AnnotationEntry]]:
-    """Xáo trộn có seed, chia train/val."""
+) -> Tuple[List[AnnotationEntry], List[AnnotationEntry], List[AnnotationEntry]]:
+    """
+    Gom nhóm theo trang/văn bản gốc (Group-level Split) và chia Train / Val / Test độc lập.
+    Đảm bảo tất cả các dòng của cùng 1 trang chỉ nằm trong 1 tập duy nhất.
+    """
     if not entries:
-        return [], []
+        return [], [], []
 
-    shuffled = entries.copy()
+    # Gom nhóm entries theo document id
+    groups: dict[str, List[AnnotationEntry]] = defaultdict(list)
+    for entry in entries:
+        gid = get_document_group_id(entry.image_path)
+        groups[gid].append(entry)
+
+    group_keys = list(groups.keys())
     random.seed(seed)
-    random.shuffle(shuffled)
+    random.shuffle(group_keys)
 
-    if len(shuffled) == 1:
-        return shuffled, []
+    n_groups = len(group_keys)
+    n_train = max(1, int(n_groups * train_ratio))
+    n_val = max(1 if val_ratio > 0 and n_groups > 2 else 0, int(n_groups * val_ratio))
 
-    n_train = max(1, int(len(shuffled) * train_ratio))
-    return shuffled[:n_train], shuffled[n_train:]
+    train_keys = set(group_keys[:n_train])
+    val_keys = set(group_keys[n_train:n_train + n_val])
+    test_keys = set(group_keys[n_train + n_val:])
+
+    train_entries: List[AnnotationEntry] = []
+    val_entries: List[AnnotationEntry] = []
+    test_entries: List[AnnotationEntry] = []
+
+    for k in group_keys:
+        if k in train_keys:
+            train_entries.extend(groups[k])
+        elif k in val_keys:
+            val_entries.extend(groups[k])
+        else:
+            test_entries.extend(groups[k])
+
+    return train_entries, val_entries, test_entries
 
 
 def write_split(out_path: Path, entries: List[AnnotationEntry]) -> None:
@@ -136,30 +182,30 @@ def print_summary(
     result: SplitResult,
     train_path: Path,
     val_path: Path,
+    test_path: Path | None,
     train_ratio: float,
+    val_ratio: float,
     seed: int,
 ) -> None:
-    total_annotated = len(result.train) + len(result.val)
-    val_ratio = 1.0 - train_ratio
+    total_annotated = len(result.train) + len(result.val) + len(result.test)
+    test_ratio = 1.0 - train_ratio - val_ratio
 
     print("=" * 60)
-    print(" Split Dataset — Kết quả")
+    print(" Split Dataset (Group-Level Document Splitting) — Kết quả")
     print("=" * 60)
     print(f"  Tổng dòng đọc:          {result.total_input}")
     print(f"  Đã gán nhãn (hợp lệ):   {total_annotated}")
     print(f"  Bỏ qua (nhãn rỗng/lỗi): {result.skipped_count}")
     print()
-    print(f"  Seed:                    {seed}")
-    print(f"  Train ({train_ratio:.0%}):           {len(result.train)} samples → {train_path.name}")
-    print(f"  Val   ({val_ratio:.0%}):           {len(result.val):3d} samples → {val_path.name}")
+    print(f"  Seed:                   {seed}")
+    print(f"  Train ({train_ratio:.0%}):          {len(result.train)} samples → {train_path.name}")
+    print(f"  Val   ({val_ratio:.0%}):          {len(result.val)} samples → {val_path.name}")
+    if test_path and len(result.test) > 0:
+        print(f"  Test  ({test_ratio:.0%}):          {len(result.test)} samples → {test_path.name}")
     print("=" * 60)
 
     if result.skipped_count > 0:
         print(f"\n  [WARN] {result.skipped_count} dòng bị bỏ qua vì nhãn rỗng hoặc sai định dạng.")
-        print("         Kiểm tra file input: mỗi dòng phải có đúng 1 TAB và nhãn không rỗng.")
-
-    if len(result.val) == 0:
-        print("\n  [WARN] Val set rỗng — input quá ít sample. Thêm dữ liệu trước khi train.")
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
@@ -170,7 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
     anno_dir     = project_root / "dataset" / "annotations"
 
     parser = argparse.ArgumentParser(
-        description="Chia file annotation VietOCR đã gán nhãn thành train/val.",
+        description="Chia file annotation VietOCR thành Train/Val/Test theo Group Document.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -192,16 +238,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="File output cho tập validation",
     )
     parser.add_argument(
+        "--test-output",
+        type=Path,
+        default=anno_dir / "annotation_test.txt",
+        help="File output cho tập test độc lập",
+    )
+    parser.add_argument(
         "--train-ratio",
         type=float,
-        default=0.85,
-        help="Tỉ lệ dữ liệu dành cho train (phần còn lại là val)",
+        default=0.80,
+        help="Tỉ lệ dữ liệu dành cho train",
+    )
+    parser.add_argument(
+        "--val-ratio",
+        type=float,
+        default=0.10,
+        help="Tỉ lệ dữ liệu dành cho validation (phần còn lại là test)",
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=42,
-        help="Random seed — cố định để split có thể tái lập (reproducible)",
+        help="Random seed — cố định để split có thể tái lập",
     )
     return parser
 
@@ -223,21 +281,33 @@ def main() -> None:
 
     if not entries:
         print("[ERROR] Không có entry hợp lệ nào. Kiểm tra định dạng file annotation.")
-        print("        Mỗi dòng phải có: <đường_dẫn_ảnh><TAB><nhãn không rỗng>")
         sys.exit(1)
 
-    train_entries, val_entries = split_entries(entries, args.train_ratio, args.seed)
+    train_entries, val_entries, test_entries = split_entries_grouped(
+        entries, args.train_ratio, args.val_ratio, args.seed
+    )
 
     write_split(args.train_output, train_entries)
     write_split(args.val_output,   val_entries)
+    if args.test_output:
+        write_split(args.test_output, test_entries)
 
     result = SplitResult(
         train=train_entries,
         val=val_entries,
+        test=test_entries,
         skipped_count=skipped,
         total_input=total_input,
     )
-    print_summary(result, args.train_output, args.val_output, args.train_ratio, args.seed)
+    print_summary(
+        result,
+        args.train_output,
+        args.val_output,
+        args.test_output,
+        args.train_ratio,
+        args.val_ratio,
+        args.seed,
+    )
 
 
 if __name__ == "__main__":

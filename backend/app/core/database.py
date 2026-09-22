@@ -88,21 +88,25 @@ async def init_db() -> None:
         )
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            try:
-                if "postgresql" in settings.database_url:
-                    await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_uid VARCHAR(255);"))
-                    await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS mssv VARCHAR(20);"))
-                    await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;"))
-                    await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS verification_code VARCHAR(255);"))
-                    await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS qr_code_url TEXT;"))
-            except Exception as col_exc:
-                logger.debug("Column migration note: {err}", err=str(col_exc))
+            columns_to_add = [
+                ("users", "supabase_uid", "VARCHAR(255)"),
+                ("users", "mssv", "VARCHAR(20)"),
+                ("documents", "is_verified", "BOOLEAN DEFAULT FALSE"),
+                ("documents", "verification_code", "VARCHAR(255)"),
+                ("documents", "qr_code_url", "TEXT"),
+            ]
+            for tbl, col, col_type in columns_to_add:
+                try:
+                    await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type};"))
+                except Exception as col_exc:
+                    logger.debug("Column {col} on {tbl} already exists or error: {err}", col=col, tbl=tbl, err=str(col_exc))
 
         logger.info("Database schema initialized successfully.")
 
-        # Seed roles & admin user
+        # Seed roles & default users
         async with AsyncSessionLocal() as session:
             try:
+                from app.core.security import get_password_hash
                 role_res = await session.execute(select(Role).limit(1))
                 if not role_res.scalars().first():
                     admin_role = Role(name="ADMIN", description="Quản trị viên hệ thống")
@@ -114,7 +118,7 @@ async def init_db() -> None:
                     admin_user = User(
                         username="admin_hethong",
                         email="admin@dlu.edu.vn",
-                        hashed_password="$2b$12$dummyhashedpasswordforinitialsystemdevelopment",
+                        hashed_password=get_password_hash("admin123"),
                         full_name="Quản trị viên Hệ thống (DLU)",
                         role_id=admin_role.id,
                         is_active=True,
@@ -122,14 +126,23 @@ async def init_db() -> None:
                     staff_user = User(
                         username="canbo_ctsv",
                         email="canbo@dlu.edu.vn",
-                        hashed_password="$2b$12$dummyhashedpasswordforinitialsystemdevelopment",
+                        hashed_password=get_password_hash("password123"),
                         full_name="Cán bộ CTSV (STAFF)",
                         role_id=staff_role.id,
                         is_active=True,
                     )
-                    session.add_all([admin_user, staff_user])
+                    student_demo = User(
+                        username="sinhvien_demo",
+                        email="sinhvien@dlu.edu.vn",
+                        mssv="2210001",
+                        hashed_password=get_password_hash("123456"),
+                        full_name="Sinh Viên Mẫu (DLU)",
+                        role_id=student_role.id,
+                        is_active=True,
+                    )
+                    session.add_all([admin_user, staff_user, student_demo])
                     await session.commit()
-                    logger.info("Database seeded with default roles and users.")
+                    logger.info("Database seeded with default roles and validly hashed users.")
             except Exception as seed_exc:
                 await session.rollback()
                 logger.warning("Seed initialization note: {err}", err=str(seed_exc))

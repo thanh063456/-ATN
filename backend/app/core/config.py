@@ -37,13 +37,13 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
 
     # ── Database ──────────────────────────────────────────────────────
-    # asyncpg URL — Supabase Transaction Pooler (port 6543)
+    # asyncpg URL — Supabase / PostgreSQL Connection
     database_url: str = Field(
-        default="postgresql+asyncpg://postgres.zwhoelltbonuzdophhhl:FILL_IN@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
+        default="postgresql+asyncpg://postgres:YOUR_PASSWORD@localhost:5432/postgres"
     )
-    # psycopg2 URL — Alembic migration (Direct connection, port 5432)
+    # psycopg2 URL — Alembic migration (Direct connection)
     alembic_database_url: str = Field(
-        default="postgresql+psycopg2://postgres.zwhoelltbonuzdophhhl:FILL_IN@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+        default="postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/postgres"
     )
 
     # Connection pool
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30
 
     # ── Supabase ──────────────────────────────────────────────────
-    supabase_url: str = Field(default="https://zwhoelltbonuzdophhhl.supabase.co")
+    supabase_url: str = Field(default="https://YOUR_PROJECT_REF.supabase.co")
     supabase_anon_key: str = Field(default="")
     supabase_service_key: str = Field(default="")
     supabase_storage_bucket_documents: str = "documents"

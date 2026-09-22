@@ -45,16 +45,24 @@ async def public_verify_document(
         )
 
     is_approved = doc.ocr_status == "APPROVED"
-    student_name = (
+    raw_name = (
         doc.metadata_.student_name
         if doc.metadata_ and doc.metadata_.student_name
-        else (doc.uploader.full_name if doc.uploader else "Sinh viên")
+        else (doc.uploader.full_name if doc.uploader else "")
     )
-    student_id = (
+    raw_mssv = (
         doc.metadata_.student_id
         if doc.metadata_ and doc.metadata_.student_id
-        else (doc.uploader.mssv if doc.uploader else None)
+        else (doc.uploader.mssv if doc.uploader else "")
     )
+
+    # Bảo vệ dữ liệu cá nhân theo Nghị định 13/2023/NĐ-CP: ẩn danh một phần trên link/QR công khai
+    if raw_name and len(raw_name) > 3:
+        parts = raw_name.split()
+        student_name = " ".join([p[0] + "***" for p in parts])
+    else:
+        student_name = "*** (Đã đối soát)"
+    student_id = f"***{raw_mssv[-3:]}" if raw_mssv and len(raw_mssv) >= 3 else "***"
 
     raw_signature = f"DLU_CTSV_{doc.id}_{doc.title}_{doc.ocr_status}_{doc.created_at.isoformat()}"
     verification_code = hashlib.sha256(raw_signature.encode()).hexdigest()[:16].upper()

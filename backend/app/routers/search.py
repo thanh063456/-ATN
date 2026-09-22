@@ -18,8 +18,10 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.core.elasticsearch import INDEX_NAME, get_es_client
 from app.models.search_history import SearchHistory
+from app.models.users import User
 from app.schemas.search import SearchHit, SearchResponse
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -28,7 +30,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 @router.get(
     "",
     response_model=SearchResponse,
-    summary="Tìm kiếm toàn văn tài liệu trên Elasticsearch",
+    summary="Tìm kiếm toàn văn tài liệu trên Elasticsearch (RBAC)",
 )
 async def search_documents(
     q: str = Query(..., min_length=1, description="Từ khóa tìm kiếm (tiếng Việt có dấu hoặc không dấu)"),
@@ -39,10 +41,12 @@ async def search_documents(
     fuzzy: bool = Query(True, description="Bật tìm kiếm mờ (Fuzzy matching) để bù đắp sai sót OCR / chính tả"),
     page: int = Query(1, ge=1, description="Số trang (bắt đầu từ 1)"),
     page_size: int = Query(10, ge=1, le=100, description="Số kết quả mỗi trang"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
     """
     Tìm kiếm toàn văn tài liệu trên Elasticsearch với:
+    - Phân quyền RBAC: STUDENT chỉ tìm kiếm hồ sơ của mình hoặc hồ sơ đã APPROVED; STAFF/ADMIN tìm kiếm toàn bộ.
     - Tìm kiếm đa trường: tiêu đề, nội dung OCR, tên sinh viên, MSSV, số hiệu.
     - Tìm không dấu / có dấu thông minh.
     - Trích xuất highlight các đoạn khớp.
@@ -55,7 +59,6 @@ async def search_documents(
     from_offset = (page - 1) * page_size
 
     # ── 1. Xây dựng Elasticsearch Query ────────────────────────────────────────
-    # Tìm kiếm trên các trường chính và trường phụ (.ascii)
     search_fields = [
         "title^3",
         "title.ascii^2",
@@ -85,6 +88,20 @@ async def search_documents(
     filter_clause: list[dict[str, Any]] = [
         {"term": {"is_deleted": False}}
     ]
+
+    # RBAC Filter
+    role_name = current_user.role.name if current_user.role else "STUDENT"
+    if role_name == "STUDENT":
+        # Sinh viên chỉ thấy tài liệu do chính mình upload hoặc tài liệu đã được duyệt (APPROVED)
+        filter_clause.append({
+            "bool": {
+                "should": [
+                    {"term": {"uploaded_by": str(current_user.id)}},
+                    {"term": {"ocr_status": "APPROVED"}},
+                ],
+                "minimum_should_match": 1,
+            }
+        })
 
     if category_code:
         filter_clause.append({"term": {"category_code": category_code}})
@@ -182,7 +199,7 @@ async def search_documents(
 
     try:
         history_entry = SearchHistory(
-            user_id=None,  # Sẽ gán current_user.id khi có Auth
+            user_id=current_user.id,
             keyword=query_str,
             filter=active_filters if active_filters else None,
             result_count=total_hits,
