@@ -307,7 +307,7 @@ export const DocumentsPage: React.FC = () => {
           </div>
           <div>
             <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Số hóa hoàn tất</div>
-            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#7c3aed" }}>{documents.filter(d => d.ocr_status === "DONE" || d.ocr_status === "APPROVED").length}</div>
+            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#7c3aed" }}>{docs.filter(d => d.ocr_status === "DONE" || d.ocr_status === "APPROVED").length}</div>
           </div>
         </div>
       </div>
