@@ -382,8 +382,9 @@ async def get_document(
     return detail
 
 
-@router.get(
+@router.api_route(
     "/{document_id}/file",
+    methods=["GET", "HEAD"],
     summary="Xem trực tiếp file gốc của tài liệu (PDF / Hình ảnh - Có kiểm soát RBAC)",
 )
 async def view_document_file(

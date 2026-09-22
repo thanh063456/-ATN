@@ -306,8 +306,8 @@ export const DocumentsPage: React.FC = () => {
             <Sparkles size={22} />
           </div>
           <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Độ tin cậy OCR TB</div>
-            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#7c3aed" }}>{avgConfidence}%</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Số hóa hoàn tất</div>
+            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#7c3aed" }}>{documents.filter(d => d.ocr_status === "DONE" || d.ocr_status === "APPROVED").length}</div>
           </div>
         </div>
       </div>
@@ -410,15 +410,14 @@ export const DocumentsPage: React.FC = () => {
                 <th style={{ padding: "0.85rem 1rem", width: "18%" }}>NGƯỜI NỘP / MSSV</th>
                 <th style={{ padding: "0.85rem 1rem", width: "14%" }}>DANH MỤC</th>
                 <th style={{ padding: "0.85rem 1rem", width: "12%" }}>TIẾN ĐỘ OCR</th>
-                <th style={{ padding: "0.85rem 0.75rem", width: "9%" }}>ĐỘ TIN CẬY</th>
                 <th style={{ padding: "0.85rem 0.75rem", width: "10%" }}>PHÊ DUYỆT</th>
-                <th style={{ padding: "0.85rem 1.25rem", width: "15%", textAlign: "right" }}>THAO TÁC</th>
+                <th style={{ padding: "0.85rem 1.25rem", width: "14%", textAlign: "right" }}>THAO TÁC</th>
               </tr>
             </thead>
             <tbody>
               {filteredDocs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: "3.5rem 1rem", textAlign: "center", color: "var(--gray-400)" }}>
+                  <td colSpan={6} style={{ padding: "3.5rem 1rem", textAlign: "center", color: "var(--gray-400)" }}>
                     <FileText size={40} style={{ margin: "0 auto 0.75rem", opacity: 0.4 }} />
                     <p style={{ fontSize: "0.9375rem", fontWeight: 500 }}>Không tìm thấy hồ sơ nào phù hợp.</p>
                     <p style={{ fontSize: "0.8125rem", color: "var(--gray-400)", marginTop: "0.25rem" }}>Thử thay đổi bộ lọc hoặc tải lên hồ sơ mới.</p>
@@ -518,19 +517,6 @@ export const DocumentsPage: React.FC = () => {
                       {/* Trạng thái OCR */}
                       <td style={{ padding: "1rem 1rem", verticalAlign: "middle" }}>
                         <OCRStatusBadge status={doc.ocr_status as any} />
-                      </td>
-
-                      {/* Độ tin cậy OCR */}
-                      <td style={{ padding: "1rem 0.75rem", verticalAlign: "middle" }}>
-                        <span style={{
-                          fontWeight: 700,
-                          fontSize: "0.8125rem",
-                          color: ((doc.ocr_confidence ?? doc.confidence_score ?? 0.95) >= 0.9) ? "#16a34a" : "#d97706"
-                        }}>
-                          {doc.ocr_confidence != null || doc.confidence_score != null
-                            ? `${Math.round(((doc.ocr_confidence ?? doc.confidence_score) as number) * 100)}%`
-                            : "97%"}
-                        </span>
                       </td>
 
                       {/* Trạng thái Phê duyệt */}

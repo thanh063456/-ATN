@@ -12,7 +12,7 @@ from uuid import UUID
 from loguru import logger
 
 from app.core.config import settings
-from app.core.elasticsearch import INDEX_NAME, get_es_client
+from app.core.elasticsearch import INDEX_NAME, get_es_client, is_es_available
 from app.core.exceptions import SearchIndexException
 
 
@@ -39,11 +39,14 @@ class SearchIndexService:
         is_deleted: bool = False,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
-    ) -> dict:
+    ) -> dict | None:
         """
         Index hoặc update toàn bộ document vào Elasticsearch.
         Được gọi bởi Backend sau khi OCR hoàn tất và lưu vào PostgreSQL.
         """
+        if not is_es_available():
+            logger.debug("Elasticsearch is offline, skipping indexing for doc {id}", id=document_id)
+            return None
         es = get_es_client()
         doc_id_str = str(document_id)
         now_iso = datetime.now().isoformat()
@@ -87,6 +90,8 @@ class SearchIndexService:
         updated_at: datetime | None = None,
     ) -> None:
         """Cập nhật trạng thái duyệt hồ sơ (ocr_status) mà không ghi đè mất nội dung OCR đã index."""
+        if not is_es_available():
+            return
         es = get_es_client()
         doc_id_str = str(document_id)
         now_iso = (updated_at or datetime.now()).isoformat()
@@ -111,6 +116,8 @@ class SearchIndexService:
         corrected_text: str,
     ) -> None:
         """Cập nhật nội dung sau khi người dùng sửa lỗi OCR."""
+        if not is_es_available():
+            return
         es = get_es_client()
         doc_id_str = str(document_id)
 
@@ -131,6 +138,8 @@ class SearchIndexService:
 
     async def soft_delete_document(self, document_id: UUID | str) -> None:
         """Đánh dấu xóa mềm trong Elasticsearch (is_deleted = True)."""
+        if not is_es_available():
+            return
         es = get_es_client()
         doc_id_str = str(document_id)
 

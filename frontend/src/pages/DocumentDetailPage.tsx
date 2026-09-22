@@ -641,7 +641,7 @@ export const DocumentDetailPage: React.FC = () => {
                 <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--gray-900)" }}>
                   Văn bản trích xuất OCR
                 </span>
-                {doc.ocr_result?.is_corrected ? (
+                {doc.ocr_result?.is_corrected && (
                   <span
                     style={{
                       fontSize: "0.7rem",
@@ -655,24 +655,9 @@ export const DocumentDetailPage: React.FC = () => {
                       gap: "4px",
                     }}
                   >
-                    ✓ 100% (Đã hiệu chỉnh & Xác thực)
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                      color: confidenceScore >= 90 ? "#16a34a" : "#d97706",
-                      backgroundColor: confidenceScore >= 90 ? "#dcfce7" : "#fef3c7",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                    }}
-                    title="Độ tin cậy ước tính của mô hình AI, cần đối chiếu với văn bản gốc"
-                  >
-                    {confidenceScore}% Độ tin cậy AI
+                    ✓ Đã hiệu chỉnh & đối chiếu
                   </span>
                 )}
-
               </div>
 
               <div style={{ display: "flex", gap: "0.4rem" }}>
@@ -879,35 +864,24 @@ export const DocumentDetailPage: React.FC = () => {
 
           <Card padding="lg">
             <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "1rem" }}>
-              Độ tin cậy trích xuất AI
+              Thông tin Xử lý & Đồng bộ
             </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "4px" }}>
-                  <span>Họ tên & MSSV</span>
-                  <strong style={{ color: "#16a34a" }}>99%</strong>
-                </div>
-                <div style={progressBarStyle}><div style={{ ...progressFillStyle, width: "99%", backgroundColor: "#22c55e" }} /></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.85rem", padding: "0.5rem 0", borderBottom: "1px solid var(--border-light)" }}>
+                <span style={{ color: "var(--gray-600)" }}>Công nghệ OCR:</span>
+                <strong style={{ color: "var(--primary-700)" }}>VietOCR Transformer (vgg_transformer)</strong>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.85rem", padding: "0.5rem 0", borderBottom: "1px solid var(--border-light)" }}>
+                <span style={{ color: "var(--gray-600)" }}>Độ phân giải xử lý:</span>
+                <strong style={{ color: "var(--gray-900)" }}>300 DPI High Resolution</strong>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.85rem", padding: "0.5rem 0", borderBottom: "1px solid var(--border-light)" }}>
+                <span style={{ color: "var(--gray-600)" }}>Bóc tách cấu trúc:</span>
+                <strong style={{ color: "#16a34a" }}>Tự động nhận diện MSSV & Họ tên</strong>
               </div>
 
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "4px" }}>
-                  <span>Khoa & Lớp học</span>
-                  <strong style={{ color: "#16a34a" }}>95%</strong>
-                </div>
-                <div style={progressBarStyle}><div style={{ ...progressFillStyle, width: "95%", backgroundColor: "#22c55e" }} /></div>
-              </div>
-
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", marginBottom: "4px" }}>
-                  <span>Lý do & Nội dung đơn</span>
-                  <strong style={{ color: "#2563eb" }}>92%</strong>
-                </div>
-                <div style={progressBarStyle}><div style={{ ...progressFillStyle, width: "92%", backgroundColor: "#3b82f6" }} /></div>
-              </div>
-
-              <div style={{ marginTop: "1rem", padding: "0.85rem", borderRadius: "8px", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", fontSize: "0.75rem", color: "#166534" }}>
-                ✓ Dữ liệu trích xuất tự động đã được đồng bộ vào chỉ mục <strong>Elasticsearch</strong> để phục vụ tìm kiếm toàn văn tiếng Việt.
+              <div style={{ marginTop: "0.5rem", padding: "0.85rem", borderRadius: "8px", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", fontSize: "0.75rem", color: "#166534" }}>
+                ✓ Dữ liệu trích xuất đã được đồng bộ vào kho lưu trữ số và sẵn sàng cho tính năng tìm kiếm toàn văn.
               </div>
             </div>
           </Card>
