@@ -475,7 +475,7 @@ async def correct_ocr_text(
     res = await db.execute(stmt)
     ocr_result = res.scalars().first()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     if not ocr_result:
         ocr_result = OCRResult(
             document_id=document_id,
@@ -690,7 +690,7 @@ async def approve_document(
         raise DocumentNotFoundException(str(document_id))
 
     old_status = doc.ocr_status
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     doc.ocr_status = "APPROVED"
     doc.updated_at = now
 
@@ -735,7 +735,7 @@ async def reject_document(
         raise DocumentNotFoundException(str(document_id))
 
     old_status = doc.ocr_status
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     doc.ocr_status = "REJECTED"
     doc.updated_at = now
 
@@ -747,6 +747,7 @@ async def reject_document(
         detail={"old_status": old_status, "new_status": "REJECTED", "title": doc.title},
         created_at=now,
     )
+
     db.add(audit)
     await db.commit()
 

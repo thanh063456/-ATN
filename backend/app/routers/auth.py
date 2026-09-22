@@ -263,7 +263,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenR
             status_code=status.HTTP_403_FORBIDDEN,
         )
 
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now()
     await db.commit()
 
     role_name = user.role.name if user.role else "STUDENT"
