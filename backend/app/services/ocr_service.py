@@ -62,7 +62,7 @@ class OCRService:
                 import requests
                 from vietocr.tool import utils as vocr_utils
                 
-                # Tạm thời cấu hình download weights trong phạm vi nạp model
+                # Tạm thời cấu hình download weights trong phạm vi nạp model nếu cần
                 orig_requests_get = requests.get
                 def _scoped_get(*args, **kwargs):
                     kwargs['verify'] = False
@@ -75,8 +75,19 @@ class OCRService:
                 config["device"] = "cpu"
                 config["predictor"]["beamsearch"] = False
 
-                # Tìm kiếm model fine-tune tốt nhất trong thư mục models/
-                custom_models = sorted(glob.glob("/app/models/*_best.pth") + glob.glob("models/*_best.pth"))
+                # Tìm kiếm model fine-tune tốt nhất trong các thư mục models/
+                candidate_patterns = [
+                    "/app/models/*_best.pth",
+                    "models/*_best.pth",
+                    "../models/*_best.pth",
+                    os.path.join(os.path.dirname(__file__), "../../../models/*_best.pth"),
+                    os.path.join(os.path.dirname(__file__), "../../models/*_best.pth"),
+                ]
+                custom_models = []
+                for pat in candidate_patterns:
+                    custom_models.extend(glob.glob(pat))
+                custom_models = sorted(list(set(custom_models)))
+
                 if custom_models:
                     best_weights = custom_models[-1]
                     logger.info("Loading fine-tuned VietOCR weights: {path}", path=best_weights)
@@ -87,7 +98,6 @@ class OCRService:
             except Exception as exc:
                 logger.warning("VietOCR predictor not loaded: {err}", err=str(exc))
             finally:
-                # Đảm bảo khôi phục lại requests.get nguyên bản cho toàn bộ ứng dụng
                 if orig_requests_get:
                     try:
                         import requests
@@ -371,14 +381,20 @@ class OCRService:
             (r'\bng[d|y|a|à]+\s+(\d{1,2})\s+th[áa]ng', r'ngày \1 tháng'),
             
             # Khắc phục lỗi quang học đầu mục: % Bước 1 -> + Bước 1, & Bước -> + Bước
-            (r'(?m)^[%\&]\s*(Bước\s*\d+)', r'+ \1'),
-            (r'(?m)^[%\&]\s*([0-9]+[\.\)])', r'\1'),
-            (r'(?m)^[%\&]\s*([a-zA-Z][\.\)])', r'- \1'),
+            (r'(?m)^[%\&\*]\s*(Bước\s*\d+)', r'+ \1'),
+            (r'(?m)^[%\&\*]\s*([0-9]+[\.\)])', r'\1'),
+            (r'(?m)^[%\&\*]\s*([a-zA-Z][\.\)])', r'- \1'),
+            (r'(?m)^[%\*]\s*([A-ZÀ-Ỹa-zà-ỹ])', r'+ \1'),
             
+            # Khắc phục lỗi dấu hai chấm kèm slash/ký tự lạ: bịa đặt:// -> bịa đặt:
+            (r':\/{1,2}', r':'),
+            (r':\s*:\s*', r': '),
+
             # Khắc phục lỗi dấu ngoặc vuông lạc / ký tự nhiễu trong từ
             (r'([a-zA-ZÀ-ỹ0-9])\]\s+([a-zA-ZÀ-ỹ])', r'\1 \2'),
             (r'([a-zA-ZÀ-ỹ0-9])\[\s+([a-zA-ZÀ-ỹ])', r'\1 \2'),
-            (r':\/\/', r':'),
+            (r'([a-zA-ZÀ-ỹ0-9])\}(\s+)', r'\1\2'),
+            (r'([a-zA-ZÀ-ỹ0-9])\{(\s+)', r'\1\2'),
             
             # Chữ số La Mã đầu mục
             (r'\bIH\.\s*', 'III. '),
@@ -390,12 +406,17 @@ class OCRService:
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
         # Xóa các dòng rác 1-2 ký tự (nhiễu viền con dấu / khung trang)
+        allowed_short_tokens = {
+            "I", "V", "X", "TP", "UB", "ĐL", "Số", "Kính gửi", "Lớp", "K49", "K48", "K47", "K46", "K45", "K44"
+        }
         lines = text.split("\n")
         cleaned_lines = []
         for line in lines:
             stripped = line.strip()
-            # Bỏ qua các dòng rác như "MA", "|", "---" đứng trơ trọi
-            if len(stripped) <= 2 and stripped.isupper() and stripped not in {"I", "V", "X", "TP", "UB", "ĐL"}:
+            # Bỏ qua các dòng rác như "MA", "|", "---", "//", "\" đứng trơ trọi
+            if len(stripped) <= 2 and stripped.isupper() and stripped not in allowed_short_tokens:
+                continue
+            if stripped in {"|", "||", "---", "--", "...", "//", "\\", "[]", "{}"}:
                 continue
             cleaned_lines.append(line)
         text = "\n".join(cleaned_lines)

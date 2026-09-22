@@ -556,17 +556,33 @@ export const DocumentDetailPage: React.FC = () => {
                 position: "relative",
               }}
             >
-              {doc.ocr_status === "PROCESSING" ? (
-                <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#94a3b8" }}>
-                  <RotateCw size={32} className="animate-spin" style={{ color: "#38bdf8", margin: "0 auto 1rem" }} />
-                  <div style={{ fontWeight: 600, fontSize: "14px", color: "#f8fafc" }}>
-                    Đang giải mã và phân tích file gốc...
-                  </div>
-                  <div style={{ fontSize: "12px", marginTop: "4px", color: "#94a3b8" }}>
-                    Tài liệu: {doc.original_filename} ({doc.file_type})
-                  </div>
+              {(doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "10px",
+                    right: "10px",
+                    zIndex: 10,
+                    backgroundColor: "rgba(15, 23, 42, 0.85)",
+                    backdropFilter: "blur(4px)",
+                    color: "#38bdf8",
+                    padding: "4px 10px",
+                    borderRadius: "20px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  }}
+                >
+                  <RotateCw size={12} className="animate-spin" />
+                  <span>Đang xử lý OCR ngầm...</span>
                 </div>
-              ) : doc.file_type?.toUpperCase() === "PDF" ? (
+              )}
+
+              {doc.file_type?.toUpperCase() === "PDF" ? (
                 <iframe
                   src={`${API_BASE_URL}/documents/${doc.id}/file${token ? `?token=${encodeURIComponent(token)}` : ""}`}
                   title={doc.original_filename}
@@ -710,7 +726,7 @@ export const DocumentDetailPage: React.FC = () => {
                   }}
                   placeholder="Nhập nội dung chỉnh sửa..."
                 />
-              ) : doc.ocr_status === "PROCESSING" ? (
+              ) : (!doc.ocr_result?.raw_text && !doc.ocr_result?.corrected_text && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING")) ? (
                 <div
                   style={{
                     flex: 1,
