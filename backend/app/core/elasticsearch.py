@@ -150,6 +150,14 @@ async def init_elasticsearch_index() -> None:
     Kiểm tra và khởi tạo Elasticsearch index với mapping và custom analyzer.
     Được gọi khi ứng dụng FastAPI startup.
     """
+    if not is_es_available():
+        logger.info(
+            "Elasticsearch is offline ({host}:{port}). Search service will operate seamlessly via PostgreSQL fallback mode.",
+            host=settings.es_host,
+            port=settings.es_port,
+        )
+        return
+
     es = get_es_client()
     try:
         exists = await es.indices.exists(index=INDEX_NAME)
@@ -164,4 +172,8 @@ async def init_elasticsearch_index() -> None:
         else:
             logger.info("Elasticsearch index '{idx}' already exists.", idx=INDEX_NAME)
     except Exception as exc:
-        logger.error("Failed to initialize Elasticsearch index '{idx}': {err}", idx=INDEX_NAME, err=str(exc))
+        logger.warning(
+            "Could not connect to Elasticsearch index '{idx}': {err}. Full-text search will use PostgreSQL fallback.",
+            idx=INDEX_NAME,
+            err=str(exc),
+        )
