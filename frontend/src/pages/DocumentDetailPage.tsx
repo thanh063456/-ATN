@@ -60,6 +60,7 @@ export const DocumentDetailPage: React.FC = () => {
   const [isAIRefining, setIsAIRefining] = useState(false);
   const [isAIExtracting, setIsAIExtracting] = useState(false);
   const [isAutoTagging, setIsAutoTagging] = useState(false);
+  const [isHighlightTagsEnabled, setIsHighlightTagsEnabled] = useState(true);
   const [newTagInput, setNewTagInput] = useState("");
   const [aiExtractData, setAiExtractData] = useState<AIExtractResponse | null>(null);
   const [benchmarkData, setBenchmarkData] = useState<ModelComparisonResponse | null>(null);
@@ -376,6 +377,131 @@ export const DocumentDetailPage: React.FC = () => {
       return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
     }
     return { bg: "#f3f4f6", text: "#4b5563", border: "#e5e7eb" };
+  };
+
+  const renderHighlightedOCRText = (text: string) => {
+    if (!text) {
+      return <span style={{ color: "var(--gray-400)", fontStyle: "italic" }}>Chưa có nội dung nhận diện.</span>;
+    }
+    if (!isHighlightTagsEnabled) {
+      return text;
+    }
+
+    // 5 Nhóm Nhãn Cốt Lõi: 1.Số hiệu (Đỏ) | 2.Loại đơn/VB (Cam) | 3.Ngành (Xanh lá) | 4.Khoa (Xanh dương) | 5.Khóa (Tím)
+    const patterns = [
+      {
+        regex: /(?:Số|So)[\s:\.\-]+[0-9]{1,6}\s*\/\s*[A-ZĐa-z0-9\-/]+|\b[0-9]{1,6}\/(?:KH|QĐ|TB|HD|TTr|BC|CV|QD)-[A-ZĐa-z0-9\-]+\b/gi,
+        category: "Số hiệu",
+        color: { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" },
+        tagPrefix: "1. Số hiệu",
+      },
+      {
+        regex: /\b(KẾ HOẠCH|QUYẾT ĐỊNH|THÔNG BÁO|HƯỚNG DẪN|TỜ TRÌNH|BÁO CÁO|ĐƠN XIN MIỄN GIẢM HỌC PHÍ|ĐƠN XIN HỌC BỔNG|ĐƠN XIN BẢO LƯU|ĐƠN XIN NGHỈ HỌC TẠM THỜI|ĐƠN XIN XÁC NHẬN SINH VIÊN|ĐƠN XIN CẤP LẠI THẺ|ĐƠN XIN|ĐƠN ĐỀ NGHỊ)\b/gi,
+        category: "Loại văn bản",
+        color: { bg: "#fef3c7", text: "#b45309", border: "#fde68a" },
+        tagPrefix: "2. Loại đơn/VB",
+      },
+      {
+        regex: /\b(?:ngành\s+)?(Giáo dục mầm non|Giáo dục tiểu học|Công nghệ thông tin|Kỹ thuật phần mềm|Khoa học máy tính|Quản trị kinh doanh|Kế toán|Tài chính ngân hàng|Luật học|Luật kinh tế|Ngôn ngữ Anh|Du lịch|Toán ứng dụng|Sư phạm Toán|Sư phạm Văn|Sư phạm Tiếng Anh)\b/gi,
+        category: "Ngành đào tạo",
+        color: { bg: "#dcfce7", text: "#15803d", border: "#86efac" },
+        tagPrefix: "3. Ngành",
+      },
+      {
+        regex: /\b(Khoa\s+[A-ZÀ-Ỹa-zà-ỹ\s]+?)(?=\s+ngành|\s+khóa|\s+lớp|,|\.|\n|$)/gi,
+        category: "Khoa quản lý",
+        color: { bg: "#e0e7ff", text: "#4338ca", border: "#c7d2fe" },
+        tagPrefix: "4. Khoa",
+      },
+      {
+        regex: /\b(khóa\s+[0-9]{2}|khóa\s+k[0-9]{2}|k[0-9]{2}|ctk[0-9]{2}|qtk[0-9]{2}|dhk[0-9]{2})\b/gi,
+        category: "Khóa học",
+        color: { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" },
+        tagPrefix: "5. Khóa",
+      },
+    ];
+
+    const matches: { start: number; end: number; matchText: string; category: string; color: any; tagPrefix: string }[] = [];
+    for (const p of patterns) {
+      p.regex.lastIndex = 0;
+      let m;
+      while ((m = p.regex.exec(text)) !== null) {
+        if (m[0] && m[0].trim().length > 1) {
+          matches.push({
+            start: m.index,
+            end: m.index + m[0].length,
+            matchText: m[0],
+            category: p.category,
+            color: p.color,
+            tagPrefix: p.tagPrefix,
+          });
+        }
+      }
+    }
+
+    if (matches.length === 0) return text;
+
+    matches.sort((a, b) => a.start - b.start || b.end - a.end);
+
+    const nonOverlapping: typeof matches = [];
+    let lastEnd = -1;
+    for (const item of matches) {
+      if (item.start >= lastEnd) {
+        nonOverlapping.push(item);
+        lastEnd = item.end;
+      }
+    }
+
+    const elements: React.ReactNode[] = [];
+    let cursor = 0;
+    nonOverlapping.forEach((item, idx) => {
+      if (item.start > cursor) {
+        elements.push(text.substring(cursor, item.start));
+      }
+      elements.push(
+        <mark
+          key={`highlight-${idx}`}
+          style={{
+            backgroundColor: item.color.bg,
+            color: item.color.text,
+            border: `1px solid ${item.color.border}`,
+            padding: "2px 6px",
+            borderRadius: "4px",
+            fontWeight: 700,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "5px",
+            margin: "0 2px",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+          }}
+          title={`[${item.category}] Được AI nhận diện và tự động gắn nhãn`}
+        >
+          <span>{item.matchText}</span>
+          <span
+            style={{
+              fontSize: "0.625rem",
+              fontWeight: 800,
+              padding: "1px 4px",
+              borderRadius: "3px",
+              backgroundColor: "rgba(255,255,255,0.9)",
+              color: item.color.text,
+              border: `0.5px solid ${item.color.border}`,
+              letterSpacing: "0.02em",
+              lineHeight: 1.2,
+            }}
+          >
+            {item.tagPrefix}
+          </span>
+        </mark>
+      );
+      cursor = item.end;
+    });
+
+    if (cursor < text.length) {
+      elements.push(text.substring(cursor));
+    }
+
+    return elements;
   };
 
   const handleApprove = async () => {
@@ -1032,7 +1158,31 @@ export const DocumentDetailPage: React.FC = () => {
                 )}
               </div>
 
-              <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+                {!isEditingOCR && (
+                  <button
+                    onClick={() => setIsHighlightTagsEnabled((prev) => !prev)}
+                    style={{
+                      padding: "0.3rem 0.65rem",
+                      borderRadius: "0.375rem",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      cursor: "pointer",
+                      border: "1px solid",
+                      borderColor: isHighlightTagsEnabled ? "#818cf8" : "var(--border-color)",
+                      backgroundColor: isHighlightTagsEnabled ? "#e0e7ff" : "#fff",
+                      color: isHighlightTagsEnabled ? "#3730a3" : "var(--gray-600)",
+                      transition: "all 0.15s ease",
+                    }}
+                    title="Bật/Tắt tô màu trực quan các từ tương ứng với nhãn trong văn bản OCR"
+                  >
+                    <Sparkles size={13} color={isHighlightTagsEnabled ? "#4338ca" : "var(--gray-400)"} />
+                    {isHighlightTagsEnabled ? "🏷️ Đang tô nhãn (Bật)" : "📄 Văn bản thuần"}
+                  </button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1147,13 +1297,13 @@ export const DocumentDetailPage: React.FC = () => {
                     border: "1px solid var(--border-color)",
                     fontFamily: "inherit",
                     fontSize: "0.85rem",
-                    lineHeight: "1.65",
+                    lineHeight: "1.8",
                     color: "var(--gray-900)",
                     whiteSpace: "pre-wrap",
                     overflowY: "auto",
                   }}
                 >
-                  {correctedText || doc.ocr_result?.raw_text || "Chưa có nội dung nhận diện."}
+                  {renderHighlightedOCRText(correctedText || doc.ocr_result?.raw_text || "")}
                 </div>
               )}
 
@@ -1414,8 +1564,8 @@ export const DocumentDetailPage: React.FC = () => {
                   <div>Trạng thái: <strong style={{ color: "#16a34a" }}>Hoàn thành</strong></div>
                 </div>
 
-                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #dbeafe", fontSize: "0.8rem", lineHeight: "1.5", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
-                  {benchmarkData?.comparison?.vietocr?.text || doc.ocr_result?.corrected_text || doc.ocr_result?.raw_text || "Đang tải kết quả..."}
+                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #dbeafe", fontSize: "0.8rem", lineHeight: "1.6", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
+                  {renderHighlightedOCRText(benchmarkData?.comparison?.vietocr?.text || doc.ocr_result?.corrected_text || doc.ocr_result?.raw_text || "Đang tải kết quả...")}
                 </div>
               </div>
 
@@ -1449,9 +1599,10 @@ export const DocumentDetailPage: React.FC = () => {
                   <div>Trạng thái: <strong style={{ color: "#16a34a" }}>{benchmarkData?.comparison?.trocr?.status || "Sẵn sàng"}</strong></div>
                 </div>
 
-                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #ede9fe", fontSize: "0.8rem", lineHeight: "1.5", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
-                  {benchmarkData?.comparison?.trocr?.text ||
-                    (benchmarkData ? "Chưa có kết quả từ TrOCR" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để kích hoạt mô hình Vision Transformer của Microsoft trên tài liệu này.")}
+                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #ede9fe", fontSize: "0.8rem", lineHeight: "1.6", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
+                  {benchmarkData?.comparison?.trocr?.text
+                    ? renderHighlightedOCRText(benchmarkData.comparison.trocr.text)
+                    : (benchmarkData ? "Chưa có kết quả từ TrOCR" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để kích hoạt mô hình Vision Transformer của Microsoft trên tài liệu này.")}
                 </div>
               </div>
 
@@ -1484,9 +1635,10 @@ export const DocumentDetailPage: React.FC = () => {
                   <div>Trạng thái: <strong style={{ color: "#16a34a" }}>{benchmarkData?.comparison?.tesseract?.status || "Sẵn sàng"}</strong></div>
                 </div>
 
-                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.8rem", lineHeight: "1.5", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
-                  {benchmarkData?.comparison?.tesseract?.text ||
-                    (benchmarkData ? "Chưa có kết quả từ Tesseract" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để so sánh với mô hình Tesseract cơ sở.")}
+                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.8rem", lineHeight: "1.6", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
+                  {benchmarkData?.comparison?.tesseract?.text
+                    ? renderHighlightedOCRText(benchmarkData.comparison.tesseract.text)
+                    : (benchmarkData ? "Chưa có kết quả từ Tesseract" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để so sánh với mô hình Tesseract cơ sở.")}
                 </div>
               </div>
             </div>
