@@ -1,142 +1,89 @@
 """
 backend/app/services/tag_service.py — AI Smart Tagging & Priority Taxonomy Service
 
-Hệ thống AI Tự động Gán Nhãn và Phân loại Hồ sơ Sinh viên (Phòng CTSV):
-- Phân cấp 5 tầng ưu tiên từ Cao đến Thấp (Priority Score: 100 -> 10).
-- Tự động bóc tách và gán nhãn dựa trên ngữ nghĩa OCR và thực thể thực tế.
-- TUYỆT ĐỐI KHÔNG tự sinh số hiệu văn bản (số hiệu chỉ bóc tách thực tế trên giấy).
+Quy chuẩn phân loại và gán nhãn tinh gọn đúng 5 nhóm cốt lõi theo thứ tự ưu tiên:
+1. Số hiệu (nếu có) — vd: #1353_KH_DHDL, #245_QD_DHDL
+2. Loại đơn / Loại văn bản — vd: #KeHoach, #QuyetDinh, #ThongBao, #MienGiamHocPhi, #HocBong, #BaoLuu
+3. Ngành (nếu có) — vd: #NganhGDMN, #NganhCNTT, #NganhLuat, #NganhQTKD, #NganhKeToan
+4. Khoa (nếu có) — vd: #KhoaCNTT, #KhoaSuPham, #KhoaKinhTe, #KhoaLuat, #KhoaNgoaiNgu
+5. Khóa (nếu có) — vd: #K49, #K48, #K47, #K46, #K45, #K44
 """
 import re
+import unicodedata
 from typing import Any
 
-# Bảng trọng số điểm ưu tiên (Priority Score 100 -> 10)
-TAG_PRIORITY_WEIGHTS: dict[str, int] = {
-    # Mức 1: Khẩn cấp & Đối tượng chính sách đặc biệt (Điểm 90 - 100)
-    "#CanXuLyGap": 100,
-    "#ThieuMinhChung": 95,
-    "#CanXacMinh": 92,
-    "#HoNgheo": 90,
-    "#KhuyetTat": 89,
-    "#ConThuongBinh": 88,
-    "#MoCoi": 87,
-    "#CanNgheo": 85,
 
-    # Mức 2: Thể loại văn bản & Chính sách trọng điểm (Điểm 70 - 84)
-    "#QuyetDinh": 84,
-    "#KeHoach": 82,
-    "#MienGiamHocPhi": 80,
-    "#HocBongKhuyenKhich": 79,
-    "#HocBong": 78,
-    "#ThongBao": 76,
-    "#HuongDan": 74,
-    "#ToTrinh": 72,
-    "#VungSauVungXa": 71,
-    "#DanTocThieuSo": 70,
+def _strip_accents(text: str) -> str:
+    """Chuyển đổi chuỗi tiếng Việt sang không dấu để so khớp regex chuẩn xác."""
+    if not text:
+        return ""
+    text = text.replace("đ", "d").replace("Đ", "D")
+    normalized = unicodedata.normalize("NFD", text)
+    return "".join(c for c in normalized if unicodedata.category(c) != "Mn").lower().strip()
 
-    # Mức 3: Trạng thái duyệt & Xác thực (Điểm 50 - 69)
-    "#ChoDuyet": 65,
-    "#DaDuyetQR": 60,
-    "#DaChinhSuaOCR": 55,
-    "#TuChoi": 50,
 
-    # Mức 4: Khóa & Khoa / Ngành (Điểm 30 - 49)
-    # Tags dynamic: #K44, #K45, #K46, #K47, #K48, #KhoaCNTT, #KhoaKinhTe,... default 40
-
-    # Mức 5: Thủ tục hành chính thường xuyên & Lưu trữ (Điểm 10 - 29)
-    "#BaoLuu": 28,
-    "#NghiHocTamThoi": 27,
-    "#XacNhanSinhVien": 25,
-    "#CapLaiTheSV": 22,
-    "#ChuyenNganh": 20,
-    "#ThoiHoc": 20,
-    "#DaLuuTru": 10,
-}
-
-TAG_COLOR_MAP: dict[str, str] = {
-    # Red: Critical / Urgent
-    "#CanXuLyGap": "red",
-    "#ThieuMinhChung": "red",
-    "#CanXacMinh": "red",
-    "#HoNgheo": "red",
-    "#KhuyetTat": "red",
-    "#ConThuongBinh": "red",
-    "#MoCoi": "red",
-
-    # Amber / Orange: Policies & Special Procedures
-    "#CanNgheo": "amber",
-    "#QuyetDinh": "amber",
-    "#KeHoach": "amber",
-    "#MienGiamHocPhi": "amber",
-    "#HocBongKhuyenKhich": "amber",
-    "#HocBong": "amber",
-    "#VungSauVungXa": "amber",
-    "#DanTocThieuSo": "amber",
-
-    # Blue: Official Notices & Status
-    "#ThongBao": "blue",
-    "#HuongDan": "blue",
-    "#ToTrinh": "blue",
-    "#ChoDuyet": "blue",
-    "#DaChinhSuaOCR": "blue",
-
-    # Green: Approved
-    "#DaDuyetQR": "green",
-
-    # Purple: Cohort & Faculty
-    "#KhoaCNTT": "purple",
-    "#KhoaKinhTe": "purple",
-    "#KhoaLuat": "purple",
-    "#KhoaNgoaiNgu": "purple",
-    "#KhoaSuPham": "purple",
-    "#KhoaDuLich": "purple",
-    "#KhoaToanTin": "purple",
-    "#KhoaSinhHoc": "purple",
-
-    # Gray: Administrative & Routine
-    "#BaoLuu": "gray",
-    "#NghiHocTamThoi": "gray",
-    "#XacNhanSinhVien": "gray",
-    "#CapLaiTheSV": "gray",
-    "#ChuyenNganh": "gray",
-    "#ThoiHoc": "gray",
-    "#TuChoi": "gray",
-    "#DaLuuTru": "gray",
+# Bảng trọng số nhóm nhãn ưu tiên (Từ Cao đến Thấp)
+TAG_GROUP_PRIORITY = {
+    "SO_HIEU": 100,      # 1. Số hiệu văn bản
+    "LOAI_DON": 80,      # 2. Loại đơn / loại văn bản
+    "NGANH": 60,         # 3. Ngành đào tạo
+    "KHOA": 40,          # 4. Khoa / Viện
+    "KHOA_HOC": 20,      # 5. Khóa học (K49, K48...)
 }
 
 
 class TagService:
-    """Service xử lý tự động gán nhãn, xếp hạng ưu tiên và phân loại hồ sơ."""
+    """Service xử lý tự động gán nhãn tinh gọn 5 nhóm theo yêu cầu."""
 
     @staticmethod
-    def get_tag_priority(tag: str) -> int:
-        """Lấy điểm ưu tiên của tag. Nếu là tag Khóa/Khoa dynamic thì gán 40, còn lại mặc định 30."""
-        if tag in TAG_PRIORITY_WEIGHTS:
-            return TAG_PRIORITY_WEIGHTS[tag]
-        if tag.startswith("#K") and len(tag) <= 5:
-            return 45  # Ví dụ #K44, #K48
-        if tag.startswith("#Khoa") or tag.startswith("#Lop"):
-            return 40
-        return 30
+    def get_tag_category(tag: str) -> str:
+        """Phân nhóm cho thẻ nhãn."""
+        t = tag.upper()
+        if t.startswith("#SO_") or re.search(r"^#[0-9]+", t):
+            return "SO_HIEU"
+        if t.startswith("#NGANH"):
+            return "NGANH"
+        if t.startswith("#KHOA") and not re.match(r"^#K[0-9]{2}", t):
+            return "KHOA"
+        if re.match(r"^#K[0-9]{2}", t) or "KHOA" in t:
+            return "KHOA_HOC"
+        return "LOAI_DON"
 
-    @staticmethod
-    def get_tag_color(tag: str) -> str:
-        """Lấy màu hiển thị cho badge của nhãn."""
-        if tag in TAG_COLOR_MAP:
-            return TAG_COLOR_MAP[tag]
-        if tag.startswith("#K") or tag.startswith("#Khoa"):
+    @classmethod
+    def get_tag_priority(cls, tag: str) -> int:
+        cat = cls.get_tag_category(tag)
+        return TAG_GROUP_PRIORITY.get(cat, 50)
+
+    @classmethod
+    def get_tag_color(cls, tag: str) -> str:
+        cat = cls.get_tag_category(tag)
+        if cat == "SO_HIEU":
+            return "red"
+        if cat == "LOAI_DON":
+            return "amber"
+        if cat == "NGANH":
+            return "green"
+        if cat == "KHOA":
+            return "blue"
+        if cat == "KHOA_HOC":
             return "purple"
         return "gray"
 
     @classmethod
     def calculate_priority_score(cls, tags: list[str]) -> int:
-        """Tính tổng điểm ưu tiên của tài liệu dựa trên các nhãn hiện có."""
+        """
+        Tính điểm ưu tiên cao nhất của tài liệu.
+        Nếu có số hiệu -> 100đ (Mức 1).
+        Nếu có Loại đơn/VB -> 80đ (Mức 2).
+        Nếu có Ngành/Khoa -> 60đ (Mức 3).
+        """
         if not tags:
             return 0
-        return sum(cls.get_tag_priority(t) for t in set(tags))
+        return max(cls.get_tag_priority(t) for t in tags)
 
     @classmethod
     def sort_tags_by_priority(cls, tags: list[str]) -> list[str]:
-        """Sắp xếp danh sách nhãn theo thứ tự ưu tiên TỪ CAO ĐẾN THẤP."""
+        """Sắp xếp đúng thứ tự: 1.Số hiệu -> 2.Loại đơn -> 3.Ngành -> 4.Khoa -> 5.Khóa."""
         unique_tags = list(dict.fromkeys(tags))
         return sorted(unique_tags, key=lambda t: cls.get_tag_priority(t), reverse=True)
 
@@ -150,136 +97,136 @@ class TagService:
         confidence_score: float | None = None,
     ) -> list[str]:
         """
-        AI Tự động phân tích ngữ nghĩa nội dung và metadata để sinh bộ nhãn chuẩn hóa.
-        Tuyệt đối không sinh số hiệu ngẫu nhiên.
+        AI Tự động trích xuất đúng 5 nhóm nhãn theo thứ tự ưu tiên:
+        1. Số hiệu (nếu có)
+        2. Loại đơn / Loại văn bản
+        3. Ngành (nếu có)
+        4. Khoa (nếu có)
+        5. Khóa (nếu có)
         """
         tags: list[str] = []
-        clean_text = (text or "").lower()
+        raw_text = text or ""
+        clean_text = raw_text.lower()
+        ascii_text = _strip_accents(raw_text)
         meta = metadata or {}
         extra = meta.get("extra", {}) or {}
 
-        # ── 1. NHÓM KHẨN CẤP & ĐỐI TƯỢNG CHÍNH SÁCH ĐẶC BIỆT ───────────
-        if any(k in clean_text for k in ["khẩn", "gấp", "hạn chót", "hạn cuối", "ưu tiên giải quyết", "xử lý ngay"]):
-            tags.append("#CanXuLyGap")
+        # ── 1. SỐ HIỆU (NẾU CÓ) ──────────────────────────────────────
+        doc_num = meta.get("document_number") or extra.get("document_number")
+        if not doc_num:
+            # Tìm số hiệu thực tế trong text (vd: Số: 1353/KH-ĐHĐL, Số: 245/QĐ-ĐHĐL)
+            m_num = re.search(r"(?:Số|So)[\s:\.\-]+([0-9]{1,6}\s*/\s*[A-ZĐa-z0-9\-/]+)", raw_text, re.IGNORECASE)
+            if m_num:
+                doc_num = re.sub(r"\s+", "", m_num.group(1))
 
-        if any(k in clean_text for k in ["bổ sung minh chứng", "thiếu sổ", "thiếu giấy xác nhận", "chưa đủ hồ sơ", "bổ sung hồ sơ"]):
-            tags.append("#ThieuMinhChung")
+        if doc_num:
+            ascii_num = _strip_accents(doc_num).upper()
+            clean_num_tag = "#" + re.sub(r"[^A-Za-z0-9]+", "_", ascii_num).strip("_")
+            tags.append(clean_num_tag)
 
-        if (confidence_score is not None and confidence_score < 0.75) or "nghi vấn" in clean_text:
-            tags.append("#CanXacMinh")
-
-        if any(k in clean_text for k in ["hộ nghèo", "mã hộ nghèo", "sổ hộ nghèo", "hộ gia đình nghèo"]):
-            tags.append("#HoNgheo")
-        elif any(k in clean_text for k in ["hộ cận nghèo", "sổ cận nghèo", "cận nghèo"]):
-            tags.append("#CanNgheo")
-
-        if any(k in clean_text for k in ["thương binh", "liệt sĩ", "bệnh binh", "người có công", "con thương binh"]):
-            tags.append("#ConThuongBinh")
-
-        if any(k in clean_text for k in ["khuyết tật", "tàn tật"]):
-            tags.append("#KhuyetTat")
-
-        if any(k in clean_text for k in ["mồ côi", "mất cả cha lẫn mẹ", "không nơi nương tựa"]):
-            tags.append("#MoCoi")
-
-        if any(k in clean_text for k in ["vùng sâu", "vùng xa", "khu vực iii", "khu vực 3", "đặc biệt khó khăn", "vùng cao"]):
-            tags.append("#VungSauVungXa")
-
-        if any(k in clean_text for k in ["dân tộc thiểu số", "dân tộc: k'ho", "dân tộc k'ho", "ê đê", "tày", "nùng", "h'mông", "chăm", "khmer", "mạ", "chu ru", "ba na"]):
-            tags.append("#DanTocThieuSo")
-
-        # ── 2. NHÓM THỂ LOẠI VĂN BẢN HÀNH CHÍNH & THỦ TỤC ───────────────
-        if "kế hoạch" in clean_text or "/kh-" in clean_text:
+        # ── 2. LOẠI ĐƠN / LOẠI VĂN BẢN ──────────────────────────────
+        # Kiểm tra tiêu đề văn bản hành chính
+        if re.search(r"\b(ke\s*hoach|kế\s*hoạch)\b", clean_text) or "/kh-" in clean_text or "/kh-" in ascii_text:
             tags.append("#KeHoach")
-        elif "quyết định" in clean_text or "/qđ-" in clean_text or "/qd-" in clean_text:
+        elif re.search(r"\b(quyet\s*dinh|quyết\s*định)\b", clean_text) or "/qđ-" in clean_text or "/qd-" in ascii_text:
             tags.append("#QuyetDinh")
-        elif "thông báo" in clean_text or "/tb-" in clean_text:
+        elif re.search(r"\b(thong\s*bao|thông\s*báo)\b", clean_text) or "/tb-" in clean_text or "/tb-" in ascii_text:
             tags.append("#ThongBao")
-        elif "hướng dẫn" in clean_text or "/hd-" in clean_text:
+        elif re.search(r"\b(huong\s*dan|hướng\s*dẫn)\b", clean_text) or "/hd-" in clean_text:
             tags.append("#HuongDan")
-        elif "tờ trình" in clean_text or "/ttr-" in clean_text:
+        elif re.search(r"\b(to\s*trinh|tờ\s*trình)\b", clean_text) or "/ttr-" in clean_text:
             tags.append("#ToTrinh")
-        elif "báo cáo" in clean_text or "/bc-" in clean_text:
+        elif re.search(r"\b(bao\s*cao|báo\s*cáo)\b", clean_text) or "/bc-" in clean_text:
             tags.append("#BaoCao")
-
         # Đơn từ sinh viên
-        if any(k in clean_text for k in ["miễn giảm học phí", "trợ cấp xã hội", "giảm học phí", "nghị định 81"]):
+        elif re.search(r"mi[eễ]n\s*gi[aả]m\s*h[oọ]c\s*ph[ií]", clean_text):
             tags.append("#MienGiamHocPhi")
-
-        if any(k in clean_text for k in ["học bổng khuyến khích", "học bổng kkht"]):
+        elif re.search(r"h[oọ]c\s*b[oổ]ng\s*khuy[eế]n\s*kh[ií]ch", clean_text):
             tags.append("#HocBongKhuyenKhich")
-        elif any(k in clean_text for k in ["học bổng", "xét học bổng"]):
+        elif re.search(r"h[oọ]c\s*b[oổ]ng", clean_text):
             tags.append("#HocBong")
-
-        if any(k in clean_text for k in ["bảo lưu", "tạm hoãn học tập"]):
+        elif re.search(r"b[aả]o\s*l[uư]u", clean_text):
             tags.append("#BaoLuu")
-        elif any(k in clean_text for k in ["nghỉ học tạm thời", "tạm dừng học"]):
+        elif re.search(r"ngh[iỉ]\s*h[oọ]c\s*t[aạ]m\s*th[oờ]i", clean_text):
             tags.append("#NghiHocTamThoi")
-
-        if any(k in clean_text for k in ["giấy xác nhận sinh viên", "xác nhận sinh viên", "vay vốn ngân hàng", "hoãn nghĩa vụ"]):
+        elif re.search(r"x[aá]c\s*nh[aậ]n\s*sinh\s*vi[eê]n", clean_text):
             tags.append("#XacNhanSinhVien")
-
-        if any(k in clean_text for k in ["cấp lại thẻ", "thẻ sinh viên", "làm lại thẻ"]):
+        elif re.search(r"c[aấ]p\s*l[aạ]i\s*th[eẻ]\s*sinh\s*vi[eê]n", clean_text):
             tags.append("#CapLaiTheSV")
 
-        if any(k in clean_text for k in ["chuyển ngành", "chuyển ngành học"]):
-            tags.append("#ChuyenNganh")
-        elif any(k in clean_text for k in ["thôi học", "xin thôi học"]):
-            tags.append("#ThoiHoc")
+        # ── 3. NGÀNH (NẾU CÓ) ────────────────────────────────────────
+        if re.search(r"(giao\s*duc\s*mam\s*non|mầm\s*non|su\s*pham\s*mam\s*non)", ascii_text):
+            tags.append("#NganhGDMN")
+        elif re.search(r"(giao\s*duc\s*tieu\s*hoc|tiểu\s*học)", ascii_text):
+            tags.append("#NganhGDTH")
+        elif re.search(r"(ky\s*thuat\s*phan\s*mem|ktpm)", ascii_text):
+            tags.append("#NganhKTPM")
+        elif re.search(r"(khoa\s*hoc\s*may\s*tinh|khmt)", ascii_text):
+            tags.append("#NganhKHMT")
+        elif re.search(r"(cong\s*nghe\s*thong\s*tin|nganh\s*cntt)", ascii_text):
+            tags.append("#NganhCNTT")
+        elif re.search(r"(quan\s*tri\s*kinh\s*doanh|qtkd)", ascii_text):
+            tags.append("#NganhQTKD")
+        elif re.search(r"\b(ke\s*toan|kế\s*toán)\b", ascii_text):
+            tags.append("#NganhKeToan")
+        elif re.search(r"(tai\s*chinh\s*ngan\s*hang|ngan\s*hang)", ascii_text):
+            tags.append("#NganhTCNH")
+        elif re.search(r"\b(luat\s*hoc|luat\s*kinh\s*te|nganh\s*luat)\b", ascii_text):
+            tags.append("#NganhLuat")
+        elif re.search(r"(ngon\s*ngu\s*anh|tieng\s*anh)", ascii_text):
+            tags.append("#NganhNgonNguAnh")
+        elif re.search(r"(quan\s*tri\s*du\s*lich|du\s*lich|khach\s*san)", ascii_text):
+            tags.append("#NganhDuLich")
+        elif re.search(r"(toan\s*ung\s*dung|toan\s*tin)", ascii_text):
+            tags.append("#NganhToanTin")
+        elif re.search(r"(nong\s*nghiep|nong\s*lam|sinh\s*hoc)", ascii_text):
+            tags.append("#NganhSinhHoc")
 
-        # ── 3. NHÓM ĐỊNH DANH KHÓA HỌC & KHOA/NGÀNH ──────────────────
-        # Bóc tách Khóa từ MSSV hoặc Lớp
-        student_id = str(meta.get("student_id") or "").strip()
-        class_name = str(meta.get("class_name") or extra.get("class_name") or "").upper().strip()
-        faculty_name = str(meta.get("faculty") or extra.get("faculty") or "").lower().strip()
+        # ── 4. KHOA (NẾU CÓ) ─────────────────────────────────────────
+        # Chỉ bóc tách khi có từ "Khoa ..." rõ ràng hoặc từ ngành suy luận chính xác
+        faculty_meta = str(meta.get("faculty") or extra.get("faculty") or "").lower()
+        full_fac_text = f"{faculty_meta} {ascii_text}"
 
-        # Suy luận Khóa từ MSSV (vd: 2412461 -> K48, 23... -> K47, 22... -> K46, 21... -> K45, 20... -> K44)
-        if len(student_id) >= 2 and student_id[:2].isdigit():
-            prefix = int(student_id[:2])
-            # Mapping niên khóa ĐH Đà Lạt: Khóa 44 = năm 2020 (prefix 20), K48 = 2024 (prefix 24)
-            if 15 <= prefix <= 35:
-                cohort_num = prefix + 24
-                tags.append(f"#K{cohort_num}")
-
-        # Hoặc bóc tách từ tên lớp: CTK44, QTK45, DHKTPM18
-        if class_name:
-            match_k = re.search(r"K(\d{2})", class_name)
-            if match_k:
-                tags.append(f"#K{match_k.group(1)}")
-
-        # Bóc tách Khoa / Ngành
-        fac_text = f"{faculty_name} {class_name} {clean_text}"
-        if any(k in fac_text for k in ["công nghệ thông tin", "cntt", "khoa học máy tính", "kỹ thuật phần mềm", "ktpm", "ctk"]):
+        if re.search(r"(khoa\s*cong\s*nghe\s*thong\s*tin|khoa\s*cntt)", full_fac_text):
             tags.append("#KhoaCNTT")
-        elif any(k in fac_text for k in ["kinh tế", "quản trị kinh doanh", "qtkd", "kế toán", "tài chính", "ngân hàng"]):
-            tags.append("#KhoaKinhTe")
-        elif any(k in fac_text for k in ["luật", "luật học", "luat"]):
-            tags.append("#KhoaLuat")
-        elif any(k in fac_text for k in ["ngoại ngữ", "tiếng anh", "ngôn ngữ anh", "anh văn"]):
-            tags.append("#KhoaNgoaiNgu")
-        elif any(k in fac_text for k in ["sư phạm", "giáo dục tiểu học", "su pham"]):
+        elif re.search(r"(khoa\s*su\s*pham|su\s*pham\s*mam\s*non|giao\s*duc\s*mam\s*non|giao\s*duc\s*tieu\s*hoc)", full_fac_text):
             tags.append("#KhoaSuPham")
-        elif any(k in fac_text for k in ["du lịch", "khách sạn", "nhà hàng", "lữ hành"]):
+        elif re.search(r"(khoa\s*kinh\s*te|khoa\s*qtkd|khoa\s*tai\s*chinh)", full_fac_text):
+            tags.append("#KhoaKinhTe")
+        elif re.search(r"(khoa\s*luat)", full_fac_text):
+            tags.append("#KhoaLuat")
+        elif re.search(r"(khoa\s*ngoai\s*ngu)", full_fac_text):
+            tags.append("#KhoaNgoaiNgu")
+        elif re.search(r"(khoa\s*du\s*lich)", full_fac_text):
             tags.append("#KhoaDuLich")
-        elif any(k in fac_text for k in ["toán", "toán tin", "thống kê"]):
+        elif re.search(r"(khoa\s*toan|khoa\s*toan\s*tin)", full_fac_text):
             tags.append("#KhoaToanTin")
-        elif any(k in fac_text for k in ["sinh học", "nông lâm", "công nghệ sinh học"]):
+        elif re.search(r"(khoa\s*sinh|khoa\s*nong\s*lam)", full_fac_text):
             tags.append("#KhoaSinhHoc")
 
-        # ── 4. NHÓM TRẠNG THÁI XỬ LÝ ─────────────────────────────────
-        if is_corrected:
-            tags.append("#DaChinhSuaOCR")
+        # ── 5. KHÓA (NẾU CÓ) ─────────────────────────────────────────
+        # Bóc tách trực tiếp từ cụm từ: "khóa 49", "khoa 49", "k49", "khóa 48", ...
+        match_khoa_text = re.search(r"(?:khoa|khóa|k)\s*([0-9]{2})\b", ascii_text)
+        if match_khoa_text:
+            num = int(match_khoa_text.group(1))
+            if 30 <= num <= 55:  # Niên khóa hợp lệ của ĐH Đà Lạt
+                tags.append(f"#K{num}")
 
-        if ocr_status:
-            status_up = ocr_status.upper()
-            if status_up == "APPROVED":
-                tags.append("#DaDuyetQR")
-            elif status_up == "REJECTED":
-                tags.append("#TuChoi")
-            elif status_up in ("DONE", "PROCESSING", "PENDING"):
-                tags.append("#ChoDuyet")
+        # Hoặc từ tên lớp: CTK44, QTK45, DHKTPM18
+        class_name = str(meta.get("class_name") or extra.get("class_name") or "").upper()
+        if class_name and not any(t.startswith("#K") for t in tags):
+            match_k_class = re.search(r"K(\d{2})", class_name)
+            if match_k_class:
+                tags.append(f"#K{match_k_class.group(1)}")
 
-        # Sắp xếp nhãn theo thứ tự ưu tiên từ cao đến thấp
+        # Hoặc từ MSSV: 2412461 -> K48, 2011425 -> K44
+        student_id = str(meta.get("student_id") or "").strip()
+        if student_id and len(student_id) >= 2 and student_id[:2].isdigit() and not any(t.startswith("#K") for t in tags):
+            prefix = int(student_id[:2])
+            if 15 <= prefix <= 35:
+                tags.append(f"#K{prefix + 24}")
+
+        # Sắp xếp đúng theo thứ tự ưu tiên: Số hiệu -> Loại đơn -> Ngành -> Khoa -> Khóa
         return cls.sort_tags_by_priority(tags)
 
 

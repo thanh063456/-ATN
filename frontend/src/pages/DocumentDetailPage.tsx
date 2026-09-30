@@ -354,18 +354,26 @@ export const DocumentDetailPage: React.FC = () => {
   };
 
   const getTagBadgeStyle = (tag: string) => {
-    const t = tag.toLowerCase();
-    if (t.includes("gap") || t.includes("thieu") || t.includes("ngheo") || t.includes("thuongbinh") || t.includes("khuyettat") || t.includes("mocoi")) {
+    const t = tag.toUpperCase();
+    // 1. Số hiệu văn bản (#1353_..., #SO_...) -> Red
+    if (t.startsWith("#SO_") || /^#[0-9]/.test(t)) {
       return { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" };
     }
-    if (t.includes("hocbong") || t.includes("miengiam") || t.includes("kehoach") || t.includes("quyetdinh") || t.includes("vung")) {
+    // 2. Loại đơn / Loại văn bản (#KeHoach, #QuyetDinh, #MienGiamHocPhi...) -> Amber / Orange
+    if (t.includes("KEHOACH") || t.includes("QUYETDINH") || t.includes("THONGBAO") || t.includes("MIENGIAM") || t.includes("HOCBONG") || t.includes("BAOLUU") || t.includes("XACNHAN")) {
       return { bg: "#fef3c7", text: "#b45309", border: "#fde68a" };
     }
-    if (t.startsWith("#k") || t.includes("khoa") || t.includes("lop")) {
-      return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
+    // 3. Ngành (#Nganh...) -> Green
+    if (t.startsWith("#NGANH")) {
+      return { bg: "#dcfce7", text: "#15803d", border: "#86efac" };
     }
-    if (t.includes("duyet") || t.includes("thongbao") || t.includes("chinhsua")) {
+    // 4. Khoa (#Khoa...) -> Blue
+    if (t.startsWith("#KHOA") && !/^#K[0-9]{2}/.test(t)) {
       return { bg: "#e0e7ff", text: "#4338ca", border: "#c7d2fe" };
+    }
+    // 5. Khóa (#K49, #K48...) -> Purple
+    if (/^#K[0-9]{2}/.test(t)) {
+      return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
     }
     return { bg: "#f3f4f6", text: "#4b5563", border: "#e5e7eb" };
   };
@@ -605,15 +613,16 @@ export const DocumentDetailPage: React.FC = () => {
                   </span>
                   {(() => {
                     const score = doc.priority_score || 0;
-                    if (score >= 90) return <Badge variant="danger" dot>Mức 1: Khẩn cấp ({score}đ)</Badge>;
-                    if (score >= 70) return <Badge variant="warning" dot>Mức 2: Chính sách trọng điểm ({score}đ)</Badge>;
-                    if (score >= 50) return <Badge variant="info" dot>Mức 3: Đang xét duyệt ({score}đ)</Badge>;
-                    if (score >= 30) return <Badge variant="primary" dot>Mức 4: Định danh ({score}đ)</Badge>;
-                    return <Badge variant="default">Mức 5: Thường quy ({score}đ)</Badge>;
+                    if (score >= 100) return <Badge variant="danger" dot>Mức 1: Có Số hiệu (100đ)</Badge>;
+                    if (score >= 80) return <Badge variant="warning" dot>Mức 2: Thể loại văn bản (80đ)</Badge>;
+                    if (score >= 60) return <Badge variant="success" dot>Mức 3: Ngành đào tạo (60đ)</Badge>;
+                    if (score >= 40) return <Badge variant="info" dot>Mức 4: Khoa quản lý (40đ)</Badge>;
+                    if (score >= 20) return <Badge variant="primary" dot>Mức 5: Khóa học (20đ)</Badge>;
+                    return <Badge variant="default">Chưa phân loại</Badge>;
                   })()}
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.15rem" }}>
-                  AI tự động bóc tách từ ngữ cảnh OCR và phân loại thứ tự ưu tiên. Cán bộ có thể thêm/bớt nhãn trực tiếp.
+                  AI tự động phân loại theo 5 nhóm ưu tiên: 1.Số hiệu ➔ 2.Loại đơn/VB ➔ 3.Ngành ➔ 4.Khoa ➔ 5.Khóa.
                 </div>
               </div>
             </div>
@@ -699,7 +708,7 @@ export const DocumentDetailPage: React.FC = () => {
                       handleAddTag();
                     }
                   }}
-                  placeholder="Nhập nhãn mới (vd: #K48, #HoNgheo)..."
+                  placeholder="Nhập nhãn mới (vd: #K49, #NganhCNTT)..."
                   style={{
                     padding: "0.35rem 0.65rem",
                     borderRadius: "0.375rem",
@@ -716,7 +725,7 @@ export const DocumentDetailPage: React.FC = () => {
               {/* Quick Suggestion Chips */}
               <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>Gợi ý nhanh:</span>
-                {["#CanXuLyGap", "#HoNgheo", "#MienGiamHocPhi", "#HocBong", "#KhoaCNTT", "#K48", "#ThieuMinhChung"].map((suggest) => {
+                {["#KeHoach", "#QuyetDinh", "#ThongBao", "#MienGiamHocPhi", "#NganhGDMN", "#NganhCNTT", "#KhoaSuPham", "#KhoaCNTT", "#K49", "#K48"].map((suggest) => {
                   const alreadyHas = doc.tags?.includes(suggest);
                   if (alreadyHas) return null;
                   return (
