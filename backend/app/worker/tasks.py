@@ -26,9 +26,11 @@ from app.models.document_metadata import DocumentMetadata
 from app.models.documents import Document
 from app.models.ocr_results import OCRResult
 from app.models.processing_jobs import ProcessingJob
+from app.services.ai_service import ai_service
 from app.services.ocr_service import ocr_service
 from app.services.search_index_service import search_index_service
 from app.services.storage_service import storage_service
+from app.services.tag_service import tag_service
 from app.worker.celery_app import celery_app
 
 
@@ -90,9 +92,22 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
             )
             await _set_progress(session, 85)
 
-            # ── 5. Trích xuất Metadata (progress: 90%) ─────────────────────────
+            # ── 5. Trích xuất Metadata & AI Smart Fields đồng thời (progress: 90%) ────
             await _set_progress(session, 90)
             meta_dict = await asyncio.to_thread(ocr_service.extract_metadata, raw_text)
+            
+            try:
+                ai_fields = await ai_service.extract_smart_fields(raw_text)
+            except Exception as ai_err:
+                logger.warning("AI smart fields extraction error: {err}", err=str(ai_err))
+                ai_fields = {}
+
+            # Hợp nhất thông tin AI bóc tách và Metadata chuẩn
+            final_student_id = ai_fields.get("student_id") or meta_dict.get("student_id")
+            final_student_name = ai_fields.get("student_name") or meta_dict.get("student_name")
+            final_doc_no = ai_fields.get("document_number") or meta_dict.get("document_number")
+            auto_tags = ai_fields.get("tags") or tag_service.generate_auto_tags(raw_text, metadata=meta_dict)
+            priority_score = ai_fields.get("priority_score") or tag_service.calculate_priority_score(auto_tags)
 
             # ── 6. Lưu OCRResult vào PostgreSQL (is_latest=True, reset cũ) ─────
             await session.execute(
@@ -112,25 +127,37 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
 
             # ── 7. Lưu / Cập nhật DocumentMetadata ────────────────────────────
             doc_date = None
-            if meta_dict.get("document_date"):
+            date_str = ai_fields.get("document_date") or meta_dict.get("document_date")
+            if date_str:
                 try:
-                    doc_date = datetime.strptime(meta_dict["document_date"], "%Y-%m-%d").date()
+                    doc_date = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").date()
                 except Exception:
                     pass
 
+            extra_data = {
+                "tags": auto_tags,
+                "priority_score": priority_score,
+                "faculty": ai_fields.get("faculty"),
+                "class_name": ai_fields.get("class_name"),
+                "document_type": ai_fields.get("document_type"),
+                "ai_summary": ai_fields.get("summary"),
+            }
+
             if doc.metadata_:
-                doc.metadata_.student_id = meta_dict.get("student_id") or doc.metadata_.student_id
-                doc.metadata_.student_name = meta_dict.get("student_name") or doc.metadata_.student_name
+                doc.metadata_.student_id = final_student_id or doc.metadata_.student_id
+                doc.metadata_.student_name = final_student_name or doc.metadata_.student_name
                 doc.metadata_.document_date = doc_date or doc.metadata_.document_date
-                doc.metadata_.document_number = meta_dict.get("document_number") or doc.metadata_.document_number
+                doc.metadata_.document_number = final_doc_no or doc.metadata_.document_number
+                doc.metadata_.extra = {**(doc.metadata_.extra or {}), **extra_data}
                 doc.metadata_.updated_at = now
             else:
                 new_meta = DocumentMetadata(
                     document_id=doc_uuid,
-                    student_id=meta_dict.get("student_id"),
-                    student_name=meta_dict.get("student_name"),
+                    student_id=final_student_id,
+                    student_name=final_student_name,
                     document_date=doc_date,
-                    document_number=meta_dict.get("document_number"),
+                    document_number=final_doc_no,
+                    extra=extra_data,
                     created_at=now,
                     updated_at=now,
                 )

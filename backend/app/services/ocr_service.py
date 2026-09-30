@@ -187,7 +187,7 @@ class OCRService:
             pixel_values = proc(images=rgb_images, return_tensors="pt").pixel_values.to(device)
 
             with torch.no_grad():
-                generated_ids = model.generate(pixel_values, max_new_tokens=64)
+                generated_ids = model.generate(pixel_values, max_new_tokens=256)
 
             generated_texts = proc.batch_decode(generated_ids, skip_special_tokens=True)
             return [str(t).strip() for t in generated_texts]
@@ -390,15 +390,11 @@ class OCRService:
             predictor = self._get_predictor()
             table_markdown_rows = []
 
-            # Gom tất cả cell crops từ tất cả rows trước (giới hạn tối đa 50 ô/trang)
+            # Gom tất cả cell crops từ tất cả rows để nhận diện toàn vẹn 100%
             all_rows_flat: list[tuple[int, int, int, int, int, int]] = []
-            for r_idx, row in enumerate(rows[:25]):
+            for r_idx, row in enumerate(rows):
                 for x, y, w, h in row:
                     all_rows_flat.append((r_idx, x, y, w, h, len(row)))
-                    if len(all_rows_flat) >= 50:
-                        break
-                if len(all_rows_flat) >= 50:
-                    break
 
             # Tạo crops và preprocess
             all_cell_crops = [
@@ -579,10 +575,11 @@ class OCRService:
 
             # Đọc giới hạn từ settings
             _s = self._get_settings()
-            _max_lines  = getattr(_s, 'ocr_max_lines_per_page', 60) if _s else 60
+            _max_lines  = getattr(_s, 'ocr_max_lines_per_page', 500) if _s else 500
             _batch_size = getattr(_s, 'ocr_batch_size', 16)         if _s else 16
 
-            line_images = line_images[:_max_lines]
+            if _max_lines and _max_lines > 0 and len(line_images) > _max_lines:
+                line_images = line_images[:_max_lines]
             cleaned_lines = [self.preprocess_handwriting(li) for li in line_images]
             line_results: list[tuple[str, float]] = []
 
@@ -615,10 +612,11 @@ class OCRService:
                 return []
 
             _s = self._get_settings()
-            _max_lines  = getattr(_s, 'ocr_max_lines_per_page', 60) if _s else 60
+            _max_lines  = getattr(_s, 'ocr_max_lines_per_page', 500) if _s else 500
             _batch_size = getattr(_s, 'trocr_batch_size', 8)        if _s else 8
 
-            line_images = line_images[:_max_lines]
+            if _max_lines and _max_lines > 0 and len(line_images) > _max_lines:
+                line_images = line_images[:_max_lines]
             cleaned_lines = [self.preprocess_handwriting(li) for li in line_images]
             line_results: list[tuple[str, float]] = []
 
@@ -691,17 +689,24 @@ class OCRService:
             right_lines = self._ocr_lines_with_engine(right_processed, engine=engine)
             right_text = "\n".join(t for t, _ in right_lines)
 
-            # Trích xuất số hiệu & ngày tháng
+            # Trích xuất số hiệu & ngày tháng để log
             _, doc_no = _normalize_doc_number(left_text)
             _, date_str = _normalize_date(right_text or left_text)
 
             # OCR Vùng Thân văn bản (Body Zone)
             body_processed = self.preprocess_image(body_crop)
             body_lines = self._ocr_lines_with_engine(body_processed, engine=engine)
-            body_text = "\n".join(t for t, _ in body_lines)
+            body_text = "\n".join(t for t, _ in body_lines if t.strip())
 
-            header_block = _rebuild_header_block(doc_no, date_str)
-            full_zonal_text = header_block + body_text
+            # Ghép nguyên vẹn 100% không cắt bỏ hay thay thế chữ
+            header_parts = []
+            if left_text.strip():
+                header_parts.append(left_text.strip())
+            if right_text.strip():
+                header_parts.append(right_text.strip())
+            header_block = "\n".join(header_parts)
+
+            full_zonal_text = f"{header_block}\n{body_text}".strip() if header_block else body_text
             logger.info("Zonal OCR applied successfully: doc_no='{dn}', date='{dt}'", dn=doc_no, dt=date_str)
             return full_zonal_text, True
         except Exception as exc:
