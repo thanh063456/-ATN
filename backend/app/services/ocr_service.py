@@ -442,10 +442,31 @@ class OCRService:
 
         return []
 
+    def _is_noise_line(self, text: str) -> bool:
+        """Kiểm tra và loại bỏ các dòng rác từ con dấu đỏ, chữ ký hoặc artifact quét."""
+        if not text or not text.strip():
+            return True
+        t = text.strip()
+        if len(t) <= 1 and t not in ("I", "1", "-"):
+            return True
+        # Toàn bộ là ký tự đặc biệt hoặc dấu câu
+        if re.fullmatch(r'[\s\-_\.,:;\|\/\*\+=~`!@#\$%\^&\(\)\[\]\{\}\"\'\?]+', t):
+            return True
+        # Tỷ lệ ký tự rác scan/con dấu cao (dấu hỏi, ngoặc kép, gạch chéo lặp, v.v.)
+        trash_chars = len(re.findall(r'[\?\"\^~|\\\/=\<\>_]', t))
+        if trash_chars >= 2 and (trash_chars / max(len(t), 1)) > 0.20:
+            return True
+        # Chuỗi chữ cái vô nghĩa không dấu cách (vd: VVV, IIIII, KILGUIII)
+        if re.search(r'[A-Za-z]{8,}', t) and not any(kw in t.lower() for kw in ("thong", "chinh", "nguyen", "truong", "phong", "quoc", "khanh")):
+            upper_run = len(re.findall(r'[A-Z]', t))
+            if upper_run > 7 and " " not in t:
+                return True
+        return False
+
     def segment_lines(self, pil_image: Image.Image) -> list[Image.Image]:
         """
-        Tách ảnh toàn trang thành danh sách các ảnh dòng đơn lẻ (Line Segmentation)
-        bằng phép biến đổi hình thái học ngang (Morphological Horizontal Dilation) và Bounding Box.
+        Tách ảnh thành danh sách các ảnh dòng đơn lẻ (Line Segmentation)
+        với padding chống cắt chữ và sắp xếp đúng thứ tự đọc.
         """
         if cv2 is None:
             return [pil_image]
@@ -461,7 +482,7 @@ class OCRService:
             _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
             # Dùng Kernel ngang nối các từ thành dòng liên tục
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 1))
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 1))
             dilated = cv2.dilate(binary, kernel, iterations=2)
 
             # Tìm contours
@@ -469,17 +490,17 @@ class OCRService:
 
             boxes = [cv2.boundingRect(c) for c in contours]
             # Sắp xếp các dòng từ trên xuống dưới theo tọa độ Y
-            boxes = sorted(boxes, key=lambda b: b[1])
+            boxes = sorted(boxes, key=lambda b: (b[1] // 16, b[0]))
 
             line_images = []
             h_img, w_img = img_np.shape[:2]
             for x, y, w, h in boxes:
                 # Lọc bỏ các khối quá nhỏ (nhiễu) hoặc quá lớn (khung toàn trang)
-                if w > 40 and 10 < h < (h_img * 0.4):
+                if w > 30 and 10 < h < (h_img * 0.4):
                     pad_y1 = max(0, y - 4)
                     pad_y2 = min(h_img, y + h + 4)
-                    pad_x1 = max(0, x - 2)
-                    pad_x2 = min(w_img, x + w + 2)
+                    pad_x1 = max(0, x - 4)
+                    pad_x2 = min(w_img, x + w + 4)
                     crop = img_np[pad_y1:pad_y2, pad_x1:pad_x2]
 
                     line_images.append(Image.fromarray(crop))
@@ -648,70 +669,62 @@ class OCRService:
 
     def _ocr_image_zonal(self, image: Image.Image, engine: str | None = None) -> tuple[str, bool]:
         """
-        Khoanh vùng nhận dạng (Zonal OCR) chuyên biệt cho Trang đầu văn bản hành chính:
-        - Vùng Trái (X in [0, 52%W], Y in [0, 24%H]): Bóc tách Cơ quan ban hành & Số hiệu văn bản
-        - Vùng Phải (X in [42%W, W], Y in [10%H, 24%H]): Bóc tách Ngày tháng ban hành
-        - Quốc hiệu và Tiêu ngữ được định chuẩn tự động theo Nghị định 30/2020/NĐ-CP (tiết kiệm thời gian decode)
-        - Vùng Thân (X in [0, W], Y in [18%H, H]): Nhận diện toàn bộ phần thân từ Tiêu đề trở xuống
-
-        Returns:
-            (full_text, is_zonal_applied)
+        Khoanh vùng nhận dạng (Zonal OCR) chuẩn xác cho Trang đầu văn bản hành chính Việt Nam:
+        - Vùng Trái (X in [0, 49%W], Y in [0, 20%H]): Cơ quan ban hành & Số hiệu văn bản
+        - Vùng Phải (X in [49%W, W], Y in [0, 20%H]): Quốc hiệu & Địa danh, Ngày tháng
+        - Vùng Thân (X in [0, W], Y in [20%H, H]): Tiêu đề văn bản & toàn bộ nội dung thân
         """
         try:
             w, h = image.size
-            if h < 500 or w < 400:
+            if h < 400 or w < 300:
                 return "", False
 
-            header_h = int(h * 0.24)
-            left_header_crop = image.crop((0, 0, int(w * 0.52), header_h))
-            right_date_crop = image.crop((int(w * 0.42), int(header_h * 0.35), w, header_h))
-            body_crop = image.crop((0, int(h * 0.18), w, h))
+            header_h = int(h * 0.20)
+            left_header_crop = image.crop((0, 0, int(w * 0.49), header_h))
+            right_date_crop = image.crop((int(w * 0.49), 0, w, header_h))
+            body_crop = image.crop((0, header_h, w, h))
 
-            # OCR Vùng Trái Header
+            # 1. OCR Vùng Trái Header (Cơ quan & Số hiệu)
             left_processed = self.preprocess_image(left_header_crop)
             left_lines = self._ocr_lines_with_engine(left_processed, engine=engine)
-            left_text = "\n".join(t for t, _ in left_lines)
+            left_valid = [t for t, _ in left_lines if not self._is_noise_line(t)]
 
-            # Kiểm tra xem có cấu trúc Header hành chính không
-            from app.services.text_postprocessing.document_header_normalizer import (
-                _DOC_NO_PATTERN, _normalize_doc_number, _normalize_date, _rebuild_header_block
-            )
-            has_admin_header = (
-                _DOC_NO_PATTERN.search(left_text) is not None
-                or any(kw in left_text for kw in ["BỘ GIÁO DỤC", "TRƯỜNG ĐẠI HỌC", "PHÒNG CÔNG TÁC", "Số:"])
-            )
-
-            if not has_admin_header:
-                return "", False
-
-            # OCR Vùng Phải Ngày tháng
+            # 2. OCR Vùng Phải Header (Quốc hiệu & Ngày tháng)
             right_processed = self.preprocess_image(right_date_crop)
             right_lines = self._ocr_lines_with_engine(right_processed, engine=engine)
-            right_text = "\n".join(t for t, _ in right_lines)
+            right_valid = [t for t, _ in right_lines if not self._is_noise_line(t)]
 
-            # Trích xuất số hiệu & ngày tháng để log
-            _, doc_no = _normalize_doc_number(left_text)
-            _, date_str = _normalize_date(right_text or left_text)
-
-            # OCR Vùng Thân văn bản (Body Zone)
+            # 3. OCR Vùng Thân văn bản (Body Zone)
             body_processed = self.preprocess_image(body_crop)
             body_lines = self._ocr_lines_with_engine(body_processed, engine=engine)
-            body_text = "\n".join(t for t, _ in body_lines if t.strip())
+            body_valid = [t for t, _ in body_lines if not self._is_noise_line(t)]
 
-            # Ghép nguyên vẹn 100% không cắt bỏ hay thay thế chữ
-            header_parts = []
-            if left_text.strip():
-                header_parts.append(left_text.strip())
-            if right_text.strip():
-                header_parts.append(right_text.strip())
-            header_block = "\n".join(header_parts)
+            # Lắp ráp bố cục chuẩn hành chính
+            collected_lines: list[str] = []
+            if left_valid:
+                collected_lines.extend(left_valid)
+            if right_valid:
+                collected_lines.extend(right_valid)
+            if body_valid:
+                collected_lines.extend(body_valid)
 
-            full_zonal_text = f"{header_block}\n{body_text}".strip() if header_block else body_text
-            logger.info("Zonal OCR applied successfully: doc_no='{dn}', date='{dt}'", dn=doc_no, dt=date_str)
-            return full_zonal_text, True
+            # Loại bỏ dòng lặp liên tiếp nếu có
+            final_lines: list[str] = []
+            for line in collected_lines:
+                s = line.strip()
+                if not s:
+                    continue
+                if not final_lines or final_lines[-1] != s:
+                    final_lines.append(s)
+
+            full_zonal_text = "\n".join(final_lines)
+            if full_zonal_text.strip():
+                full_zonal_text = self.post_process_vietnamese(full_zonal_text)
+                return full_zonal_text, True
         except Exception as exc:
             logger.debug("Zonal OCR fallback to full page: {err}", err=str(exc))
-            return "", False
+
+        return "", False
 
     def _ocr_image(
         self,
@@ -722,12 +735,6 @@ class OCRService:
     ) -> str:
         """
         Thực hiện OCR (Zonal OCR cho Trang đầu + Line-by-Line + Fallback).
-
-        Args:
-            image: PIL Image cần OCR
-            extract_tables: Bật tính năng tách bảng biểu
-            is_first_page: Là trang đầu tiên của tài liệu (áp dụng Zonal OCR)
-            engine: Chỉ định engine ('vietocr' | 'trocr' | 'tesseract')
         """
         _s = self._get_settings()
         selected_engine = engine or (getattr(_s, 'ocr_engine', 'vietocr') if _s else 'vietocr')
@@ -753,7 +760,8 @@ class OCRService:
         if selected_engine in ("vietocr", "trocr"):
             line_results = self._ocr_lines_with_engine(processed_img, engine=selected_engine)
             if line_results:
-                joined = "\n".join(txt for txt, _conf in line_results)
+                valid_lines = [txt for txt, _conf in line_results if not self._is_noise_line(txt)]
+                joined = "\n".join(valid_lines)
                 if len(joined.strip()) > 5:
                     full_text = unicodedata.normalize("NFC", joined.strip())
 
@@ -772,6 +780,9 @@ class OCRService:
         if table_markdowns:
             tables_str = "\n\n### [BẢNG BIỂU DỮ LIỆU BÓC TÁCH]:\n" + "\n\n".join(table_markdowns)
             full_text = f"{full_text}\n\n{tables_str}" if full_text else tables_str
+
+        if full_text:
+            full_text = self.post_process_vietnamese(full_text)
 
         return full_text
 

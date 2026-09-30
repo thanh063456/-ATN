@@ -205,6 +205,30 @@ OCR_CHAR_RULES: list[tuple[str, str, int, str]] = [
         0,
         'code_TB_DHDL: TB-DHDL → TB-ĐHĐL',
     ),
+    (
+        r'\bBGDDT-HSSV\b',
+        'BGDĐT-HSSV',
+        0,
+        'code_BGDDT_HSSV: BGDDT-HSSV → BGDĐT-HSSV',
+    ),
+    (
+        r'\bBGDDT\b',
+        'BGDĐT',
+        0,
+        'code_BGDDT: BGDDT → BGDĐT',
+    ),
+    (
+        r'BỘ\s+GIÁO\s+DỤC\s+VÀ\s+ĐÀO\s+TẠO[\?:]',
+        'BỘ GIÁO DỤC VÀ ĐÀO TẠO',
+        re.IGNORECASE,
+        'fix_bogiaoduc_question_mark: BỘ GIÁO DỤC VÀ ĐÀO TẠO? → BỘ GIÁO DỤC VÀ ĐÀO TẠO',
+    ),
+    (
+        r'^\s*CỘNC\s*$',
+        'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
+        re.MULTILINE,
+        'fix_conc_to_quoc_hieu: CỘNC → CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
+    ),
     # Lọc bỏ các từ/dòng hallucination tiếng Anh cô lập do Transformer sinh ra khi gặp vệt kẻ/dấu mờ
     (
         r'^\s*(?:Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\s*$\n?',

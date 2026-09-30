@@ -390,13 +390,13 @@ export const DocumentDetailPage: React.FC = () => {
     // 5 Nhóm Nhãn Cốt Lõi: 1.Số hiệu (Đỏ) | 2.Loại đơn/VB (Cam) | 3.Ngành (Xanh lá) | 4.Khoa (Xanh dương) | 5.Khóa (Tím)
     const patterns = [
       {
-        regex: /(?:Số|So)[\s:\.\-]+[0-9]{1,6}\s*\/\s*[A-ZĐa-z0-9\-/]+|\b[0-9]{1,6}\/(?:KH|QĐ|TB|HD|TTr|BC|CV|QD)-[A-ZĐa-z0-9\-]+\b/gi,
+        regex: /(?:Số|So|số|so)[\s:\.\-]+[0-9]{1,6}\s*\/\s*[A-ZĐa-z0-9\-/]+|\b[0-9]{1,6}\/(?:KH|QĐ|TB|HD|TTr|BC|CV|QD|BGDĐT|BGDDT)-[A-ZĐa-z0-9\-]+\b|\b[0-9]{1,6}\/[A-ZĐa-z0-9\-]+(?:-[A-ZĐa-z0-9\-]+)+\b/gi,
         category: "Số hiệu",
         color: { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" },
         tagPrefix: "1. Số hiệu",
       },
       {
-        regex: /\b(KẾ HOẠCH|QUYẾT ĐỊNH|THÔNG BÁO|HƯỚNG DẪN|TỜ TRÌNH|BÁO CÁO|ĐƠN XIN MIỄN GIẢM HỌC PHÍ|ĐƠN XIN HỌC BỔNG|ĐƠN XIN BẢO LƯU|ĐƠN XIN NGHỈ HỌC TẠM THỜI|ĐƠN XIN XÁC NHẬN SINH VIÊN|ĐƠN XIN CẤP LẠI THẺ|ĐƠN XIN|ĐƠN ĐỀ NGHỊ)\b/gi,
+        regex: /\b(KẾ HOẠCH|QUYẾT ĐỊNH|THÔNG BÁO|HƯỚNG DẪN|TỜ TRÌNH|BÁO CÁO|CÔNG VĂN|GIẤY XÁC NHẬN|ĐƠN XIN MIỄN GIẢM HỌC PHÍ|ĐƠN XIN HỌC BỔNG|ĐƠN XIN BẢO LƯU|ĐƠN XIN NGHỈ HỌC TẠM THỜI|ĐƠN XIN XÁC NHẬN SINH VIÊN|ĐƠN XIN CẤP LẠI THẺ|ĐƠN XIN|ĐƠN ĐỀ NGHỊ|Thông báo|Kế hoạch|Quyết định|Hướng dẫn|Tờ trình|Báo cáo|Công văn)\b/gi,
         category: "Loại văn bản",
         color: { bg: "#fef3c7", text: "#b45309", border: "#fde68a" },
         tagPrefix: "2. Loại đơn/VB",
