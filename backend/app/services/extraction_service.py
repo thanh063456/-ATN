@@ -132,6 +132,24 @@ class ExtractionService:
                     pass
                 break
 
+        # 8. Trích xuất Số hiệu văn bản thực tế (vd: Số: 1353 /KH-ĐHĐL, Số: 245/QĐ-ĐHĐL, Số: 12/TB-CTSV)
+        # Chỉ bóc tách đúng số hiệu có trên giấy, KHÔNG tự sinh số hiệu ngẫu nhiên
+        doc_num_patterns = [
+            r"(?:Số|S[oố])[\s:\.\-]+([0-9A-Za-z]+[\s]*/[\s]*[A-ZĐa-z0-9\-]+(?:-[A-ZĐa-z0-9]+)*)",
+            r"(?:Số|S[oố])[\s:\.\-]+([0-9]{1,6}\s*/\s*[A-ZĐa-z0-9\-/]+)",
+            r"\b(\d{1,5}/(?:QĐ|KH|TB|HD|TTr|BC|CV|QD)-[A-ZĐa-z0-9\-]+)\b",
+        ]
+        for pat in doc_num_patterns:
+            m = re.search(pat, clean_text, re.IGNORECASE)
+            if m:
+                raw_num = m.group(1).strip()
+                # Chuẩn hóa khoảng trắng quanh dấu gạch chéo
+                clean_doc_num = re.sub(r"\s*/\s*", "/", raw_num)
+                clean_doc_num = re.sub(r"\s*-\s*", "-", clean_doc_num)
+                extracted["document_number"] = clean_doc_num
+                extracted["extra"]["document_number"] = clean_doc_num
+                break
+
         return extracted
 
 

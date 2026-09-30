@@ -52,13 +52,18 @@ from app.schemas.documents import (
     FieldExtractionUpdateRequest,
     OCRCorrectionRequest,
     OCRResultResponse,
+    TagSummaryItem,
+    TagSummaryResponse,
+    UpdateTagsRequest,
     VerificationResponse,
 )
 from app.services.ai_service import ai_service
 from app.services.document_service import DocumentService
 from app.services.extraction_service import extraction_service
+from app.services.ocr_service import ocr_service
 from app.services.search_index_service import search_index_service
 from app.services.storage_service import storage_service
+from app.services.tag_service import tag_service
 from app.worker.tasks import async_process_ocr, process_ocr_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -77,14 +82,15 @@ def _is_redis_available() -> bool:
 @router.get(
     "",
     response_model=DocumentListResponse,
-    summary="Lấy danh sách tài liệu (Phân quyền theo vai trò)",
+    summary="Lấy danh sách tài liệu (Phân quyền theo vai trò & Lọc đa chiều theo Tag)",
 )
 async def list_documents(
     page: int = Query(1, ge=1, description="Trang hiện tại"),
     page_size: int = Query(10, ge=1, le=100, description="Số mục trên mỗi trang"),
     ocr_status: str | None = Query(None, description="Lọc theo trạng thái OCR"),
     category_id: UUID | None = Query(None, description="Lọc theo danh mục"),
-    search: str | None = Query(None, description="Tìm kiếm theo tiêu đề hoặc tên file"),
+    tag: str | None = Query(None, description="Lọc theo thẻ nhãn phân loại (vd: #K44, #MienGiamHocPhi, #HoNgheo)"),
+    search: str | None = Query(None, description="Tìm kiếm theo tiêu đề, tên file, MSSV, số hiệu"),
     token: str | None = Query(None, description="JWT Access Token"),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
@@ -128,6 +134,7 @@ async def list_documents(
             Document.original_filename.ilike(search_pattern) |
             DocumentMetadata.student_id.ilike(search_pattern) |
             DocumentMetadata.student_name.ilike(search_pattern) |
+            DocumentMetadata.document_number.ilike(search_pattern) |
             User.mssv.ilike(search_pattern) |
             User.full_name.ilike(search_pattern) |
             OCRResult.raw_text.ilike(search_pattern) |
@@ -144,21 +151,63 @@ async def list_documents(
     docs = res.scalars().all()
 
     items: list[DocumentListItem] = []
+    target_tag = tag.strip().lower() if tag else None
+
     for doc in docs:
         confidence = None
+        raw_or_corr_text = ""
+        is_corrected = False
         for ocr in doc.ocr_results:
-            if ocr.is_latest and ocr.confidence_score is not None:
-                confidence = float(ocr.confidence_score)
+            if ocr.is_latest:
+                if ocr.confidence_score is not None:
+                    confidence = float(ocr.confidence_score)
+                raw_or_corr_text = ocr.corrected_text or ocr.raw_text or ""
+                is_corrected = ocr.is_corrected
                 break
 
         # Ưu tiên lấy student_name & mssv từ metadata bóc tách
         uploader_name = doc.uploader.full_name if doc.uploader else None
         uploader_mssv = doc.uploader.mssv if doc.uploader else None
+        doc_num = None
+        doc_tags: list[str] = []
+
         if doc.metadata_:
             if doc.metadata_.student_name:
                 uploader_name = doc.metadata_.student_name
             if doc.metadata_.student_id:
                 uploader_mssv = doc.metadata_.student_id
+            doc_num = doc.metadata_.document_number
+            extra_dict = doc.metadata_.extra or {}
+            saved_tags = extra_dict.get("tags")
+            if saved_tags and isinstance(saved_tags, list):
+                doc_tags = tag_service.sort_tags_by_priority(saved_tags)
+            elif raw_or_corr_text:
+                doc_tags = tag_service.generate_auto_tags(
+                    text=raw_or_corr_text,
+                    metadata={
+                        "student_id": uploader_mssv,
+                        "student_name": uploader_name,
+                        "extra": extra_dict,
+                    },
+                    ocr_status=doc.ocr_status,
+                    is_corrected=is_corrected,
+                    confidence_score=confidence,
+                )
+        elif raw_or_corr_text:
+            doc_tags = tag_service.generate_auto_tags(
+                text=raw_or_corr_text,
+                metadata={},
+                ocr_status=doc.ocr_status,
+            )
+
+        # Lọc theo tag nếu được yêu cầu
+        if target_tag:
+            tag_matches = any(
+                target_tag == t.lower() or target_tag == t.lstrip("#").lower()
+                for t in doc_tags
+            )
+            if not tag_matches:
+                continue
 
         # Lấy ocr_progress từ ProcessingJob gần nhất
         ocr_progress = 0
@@ -170,6 +219,8 @@ async def list_documents(
             latest_job = max(doc.processing_jobs, key=lambda j: j.created_at, default=None)
             if latest_job:
                 ocr_progress = getattr(latest_job, "ocr_progress", 0) or 0
+
+        priority_score = tag_service.calculate_priority_score(doc_tags)
 
         items.append(
             DocumentListItem(
@@ -192,6 +243,9 @@ async def list_documents(
                 student_name=uploader_name,
                 uploader_mssv=uploader_mssv,
                 uploader_name=uploader_name,
+                document_number=doc_num,
+                tags=doc_tags,
+                priority_score=priority_score,
                 ocr_progress=ocr_progress,
                 created_at=doc.created_at,
                 updated_at=doc.updated_at,
@@ -200,7 +254,7 @@ async def list_documents(
 
     total_pages = math.ceil(total / page_size) if total > 0 else 0
     return DocumentListResponse(
-        total=total,
+        total=len(items) if target_tag else total,
         page=page,
         page_size=page_size,
         total_pages=total_pages,
@@ -586,22 +640,247 @@ async def reprocess_document_ocr(
 
 
 @router.post(
+    "/{document_id}/compare-models",
+    summary="Thực nghiệm so sánh đa mô hình (VietOCR vs Microsoft TrOCR vs Tesseract) trên cùng tài liệu",
+)
+async def compare_document_ocr_models(
+    document_id: UUID,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Thực hiện so sánh đối chứng song song 3 mô hình OCR:
+    - VietOCR (Seq2Seq Transformer - Fine-tuned)
+    - Microsoft TrOCR (Vision Transformer)
+    - Tesseract 5 (LSTM Baseline)
+    """
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    file_bytes = await asyncio.to_thread(storage_service.get_file, doc.minio_object_key)
+    if not file_bytes:
+        raise AppException(message="Không tìm thấy file trên hệ thống lưu trữ", status_code=404)
+
+    results = await asyncio.to_thread(ocr_service.compare_ocr_engines, file_bytes, doc.file_type)
+    return {
+        "document_id": document_id,
+        "filename": doc.original_filename,
+        "comparison": results,
+    }
+
+
+@router.get(
+    "/tags/summary",
+    response_model=TagSummaryResponse,
+    summary="Lấy danh sách thống kê toàn bộ thẻ nhãn (Tags) phục vụ thanh lọc 1-Click",
+)
+async def get_tags_summary(
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+) -> TagSummaryResponse:
+    """
+    Thống kê tần suất xuất hiện của tất cả các nhãn trong hệ thống,
+    kèm phân cấp mức độ ưu tiên và màu sắc trực quan (Red, Amber, Blue, Purple, Gray).
+    """
+    stmt = (
+        select(Document)
+        .where(Document.is_deleted == False)
+        .options(
+            selectinload(Document.metadata_),
+            selectinload(Document.ocr_results),
+        )
+    )
+    res = await db.execute(stmt)
+    docs = res.scalars().all()
+
+    tag_counts: dict[str, int] = {}
+    for doc in docs:
+        doc_tags: list[str] = []
+        raw_text = ""
+        for ocr in doc.ocr_results:
+            if ocr.is_latest:
+                raw_text = ocr.corrected_text or ocr.raw_text or ""
+                break
+
+        if doc.metadata_ and doc.metadata_.extra and "tags" in doc.metadata_.extra:
+            saved = doc.metadata_.extra.get("tags")
+            if isinstance(saved, list):
+                doc_tags = saved
+        elif raw_text:
+            doc_tags = tag_service.generate_auto_tags(
+                text=raw_text,
+                metadata={
+                    "student_id": doc.metadata_.student_id if doc.metadata_ else None,
+                    "student_name": doc.metadata_.student_name if doc.metadata_ else None,
+                },
+                ocr_status=doc.ocr_status,
+            )
+
+        for t in set(doc_tags):
+            if t:
+                tag_counts[t] = tag_counts.get(t, 0) + 1
+
+    items: list[TagSummaryItem] = []
+    for tag, count in tag_counts.items():
+        prio = tag_service.get_tag_priority(tag)
+        color = tag_service.get_tag_color(tag)
+        category = "Ưu tiên" if prio >= 90 else ("Chính sách" if prio >= 70 else ("Định danh" if prio >= 30 else "Thủ tục"))
+        items.append(
+            TagSummaryItem(
+                tag=tag,
+                count=count,
+                priority=prio,
+                color=color,
+                category=category,
+            )
+        )
+
+    # Sắp xếp theo thứ tự ưu tiên từ cao đến thấp, sau đó theo số lượng
+    items.sort(key=lambda x: (x.priority, x.count), reverse=True)
+
+    return TagSummaryResponse(
+        items=items,
+        total_tags=len(items),
+    )
+
+
+@router.put(
+    "/{document_id}/tags",
+    response_model=DocumentDetailResponse,
+    summary="Cập nhật danh sách thẻ nhãn (Tags) cho tài liệu (ADMIN, STAFF)",
+)
+async def update_document_tags(
+    document_id: UUID,
+    req: UpdateTagsRequest,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentDetailResponse:
+    """Cán bộ CTSV tùy chỉnh, thêm bớt nhãn gán cho tài liệu."""
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    stmt_meta = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
+    meta_res = await db.execute(stmt_meta)
+    meta_obj = meta_res.scalars().first()
+
+    clean_tags = [t.strip() if t.strip().startswith("#") else f"#{t.strip()}" for t in req.tags if t and t.strip()]
+    sorted_tags = tag_service.sort_tags_by_priority(clean_tags)
+
+    if not meta_obj:
+        meta_obj = DocumentMetadata(
+            document_id=document_id,
+            extra={"tags": sorted_tags},
+        )
+        db.add(meta_obj)
+    else:
+        extra_dict = dict(meta_obj.extra or {})
+        extra_dict["tags"] = sorted_tags
+        meta_obj.extra = extra_dict
+
+    # Ghi Audit Log
+    now = datetime.now()
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="UPDATE_TAGS",
+        resource_type="document",
+        resource_id=document_id,
+        detail={"tags": sorted_tags, "user_role": current_user.role.name if current_user.role else "USER"},
+        created_at=now,
+    )
+    db.add(audit)
+    await db.commit()
+
+    logger.info("Updated tags for doc {id}: {tags}", id=document_id, tags=sorted_tags)
+    doc_service = DocumentService(db)
+    return await doc_service.get_document_by_id(document_id)
+
+
+@router.post(
+    "/{document_id}/auto-tag",
+    response_model=DocumentDetailResponse,
+    summary="Kích hoạt AI tự động gán nhãn lại theo thứ tự ưu tiên (ADMIN, STAFF)",
+)
+async def auto_tag_document(
+    document_id: UUID,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentDetailResponse:
+    """
+    AI phân tích lại toàn bộ nội dung văn bản OCR và metadata hiện tại để tự động sinh bộ nhãn chuẩn hóa.
+    Tuyệt đối không tự sinh số hiệu.
+    """
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    stmt = select(OCRResult).where(OCRResult.document_id == document_id, OCRResult.is_latest == True)
+    res = await db.execute(stmt)
+    ocr = res.scalars().first()
+    text = (ocr.corrected_text or ocr.raw_text or "") if ocr else ""
+
+    stmt_meta = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
+    meta_res = await db.execute(stmt_meta)
+    meta_obj = meta_res.scalars().first()
+
+    metadata_dict = {
+        "student_id": meta_obj.student_id if meta_obj else None,
+        "student_name": meta_obj.student_name if meta_obj else None,
+        "extra": meta_obj.extra if meta_obj else {},
+    }
+
+    auto_tags = tag_service.generate_auto_tags(
+        text=text,
+        metadata=metadata_dict,
+        ocr_status=doc.ocr_status,
+        is_corrected=ocr.is_corrected if ocr else False,
+        confidence_score=ocr.confidence_score if ocr else None,
+    )
+
+    if not meta_obj:
+        meta_obj = DocumentMetadata(
+            document_id=document_id,
+            extra={"tags": auto_tags},
+        )
+        db.add(meta_obj)
+    else:
+        extra_dict = dict(meta_obj.extra or {})
+        extra_dict["tags"] = auto_tags
+        meta_obj.extra = extra_dict
+
+    await db.commit()
+    logger.info("Auto-tagged doc {id} with {count} tags", id=document_id, count=len(auto_tags))
+    doc_service = DocumentService(db)
+    return await doc_service.get_document_by_id(document_id)
+
+
+@router.post(
     "/{document_id}/extract-fields",
     response_model=DocumentMetadataResponse,
-    summary="Tự động bóc tách MSSV, Họ tên, Lý do từ OCR text (ADMIN, STAFF)",
+    summary="Tự động bóc tách MSSV, Họ tên, Lý do, Số hiệu từ OCR text (ADMIN, STAFF)",
 )
 async def trigger_extract_fields(
     document_id: UUID,
     current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentMetadataResponse:
-    """Chạy module Smart Form Field Extraction trích xuất thông tin sinh viên."""
+    """Chạy module Smart Form Field Extraction trích xuất thông tin sinh viên và số hiệu thực tế."""
     stmt = select(OCRResult).where(OCRResult.document_id == document_id, OCRResult.is_latest == True)
     res = await db.execute(stmt)
     ocr = res.scalars().first()
     text = (ocr.corrected_text or ocr.raw_text or "") if ocr else ""
 
     extracted = extraction_service.extract_metadata(text)
+
+    # Tự động gán nhãn
+    auto_tags = tag_service.generate_auto_tags(
+        text=text,
+        metadata=extracted,
+        confidence_score=0.85,
+    )
+    extra_payload = dict(extracted.get("extra") or {})
+    extra_payload["tags"] = auto_tags
 
     stmt_meta = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
     meta_res = await db.execute(stmt_meta)
@@ -613,18 +892,32 @@ async def trigger_extract_fields(
             student_id=extracted.get("student_id"),
             student_name=extracted.get("student_name"),
             document_date=extracted.get("document_date"),
-            extra=extracted.get("extra"),
+            document_number=extracted.get("document_number"),
+            extra=extra_payload,
         )
         db.add(meta_obj)
     else:
         if extracted.get("student_id"): meta_obj.student_id = extracted["student_id"]
         if extracted.get("student_name"): meta_obj.student_name = extracted["student_name"]
         if extracted.get("document_date"): meta_obj.document_date = extracted["document_date"]
-        meta_obj.extra = extracted.get("extra")
+        if extracted.get("document_number"): meta_obj.document_number = extracted["document_number"]
+        current_extra = dict(meta_obj.extra or {})
+        current_extra.update(extra_payload)
+        meta_obj.extra = current_extra
 
     await db.commit()
     await db.refresh(meta_obj)
-    return DocumentMetadataResponse.model_validate(meta_obj)
+    return DocumentMetadataResponse(
+        id=meta_obj.id,
+        document_id=meta_obj.document_id,
+        student_id=meta_obj.student_id,
+        student_name=meta_obj.student_name,
+        document_date=meta_obj.document_date,
+        document_number=meta_obj.document_number,
+        tags=auto_tags,
+        priority_score=tag_service.calculate_priority_score(auto_tags),
+        extra=meta_obj.extra,
+    )
 
 
 @router.post(
@@ -666,7 +959,7 @@ async def ai_refine_document_text(
 @router.post(
     "/{document_id}/ai-extract",
     response_model=AIExtractResponse,
-    summary="Dùng AI trích xuất thực thể thông minh (MSSV, Họ tên, Lớp, Khoa, Lý do, Số tiền, Tóm tắt)",
+    summary="Dùng AI trích xuất thực thể thông minh (MSSV, Họ tên, Lớp, Khoa, Lý do, Số tiền, Tóm tắt, Nhãn)",
 )
 async def ai_extract_document_fields(
     document_id: UUID,
@@ -674,7 +967,7 @@ async def ai_extract_document_fields(
     db: AsyncSession = Depends(get_db),
 ) -> AIExtractResponse:
     """
-    Sử dụng AI phân tích ngữ cảnh, bóc tách thực thể sinh viên vào metadata và gợi ý xử lý.
+    Sử dụng AI phân tích ngữ cảnh, bóc tách thực thể sinh viên vào metadata và tự động gán nhãn ưu tiên.
     """
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
@@ -686,6 +979,7 @@ async def ai_extract_document_fields(
     text = (ocr.corrected_text or ocr.raw_text or "") if ocr else ""
 
     extracted = await ai_service.extract_smart_fields(text)
+    auto_tags = extracted.get("tags") or []
 
     # Cập nhật vào DB metadata
     stmt_meta = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
@@ -702,6 +996,7 @@ async def ai_extract_document_fields(
         "suggested_action": extracted.get("suggested_action"),
         "ai_provider": extracted.get("provider"),
         "ai_model": extracted.get("model"),
+        "tags": auto_tags,
     }
 
     parsed_date = None
@@ -720,6 +1015,7 @@ async def ai_extract_document_fields(
             student_id=extracted.get("student_id"),
             student_name=extracted.get("student_name"),
             document_date=parsed_date,
+            document_number=extracted.get("document_number"),
             extra=extra_data,
         )
         db.add(meta_obj)
@@ -728,9 +1024,11 @@ async def ai_extract_document_fields(
             meta_obj.student_id = extracted["student_id"]
         if extracted.get("student_name"):
             meta_obj.student_name = extracted["student_name"]
+        if extracted.get("document_number"):
+            meta_obj.document_number = extracted["document_number"]
         if parsed_date:
             meta_obj.document_date = parsed_date
-        current_extra = meta_obj.extra or {}
+        current_extra = dict(meta_obj.extra or {})
         current_extra.update(extra_data)
         meta_obj.extra = current_extra
 
@@ -743,9 +1041,12 @@ async def ai_extract_document_fields(
         class_name=extracted.get("class_name"),
         faculty=extracted.get("faculty"),
         document_type=extracted.get("document_type"),
+        document_number=extracted.get("document_number"),
         reason=extracted.get("reason"),
         amount=extracted.get("amount"),
         document_date=extracted.get("document_date"),
+        tags=auto_tags,
+        priority_score=tag_service.calculate_priority_score(auto_tags),
         summary=extracted.get("summary"),
         suggested_action=extracted.get("suggested_action"),
         provider=extracted.get("provider", "rule_based"),

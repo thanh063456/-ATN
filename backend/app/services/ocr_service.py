@@ -50,10 +50,12 @@ except ImportError:
 
 
 class OCRService:
-    """Service xử lý OCR chất lượng cao, nhận dạng Bảng biểu và Chữ viết tay."""
+    """Service xử lý OCR chất lượng cao, nhận dạng Bảng biểu, Chữ viết tay và Đa mô hình (VietOCR / TrOCR / Tesseract)."""
 
     def __init__(self) -> None:
         self._predictor = None
+        self._trocr_processor = None
+        self._trocr_model = None
         # Lazy import settings để tránh circular import khi module load
         self._settings = None
 
@@ -140,6 +142,59 @@ class OCRService:
                     except Exception:
                         pass
         return self._predictor
+
+    def _get_trocr_model(self):
+        """Khởi tạo Microsoft TrOCR Vision Transformer model & processor (lazy load)."""
+        if self._trocr_model is None or self._trocr_processor is None:
+            try:
+                import torch
+                from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+                _s = self._get_settings()
+                model_name = getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
+                device = getattr(_s, "trocr_device", "cpu") if _s else "cpu"
+
+                logger.info("Initializing Microsoft TrOCR ({model}) on {device}...", model=model_name, device=device)
+                self._trocr_processor = TrOCRProcessor.from_pretrained(model_name)
+                self._trocr_model = VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
+                self._trocr_model.eval()
+                logger.info("Initialized Microsoft TrOCR Vision Transformer successfully")
+            except Exception as exc:
+                logger.warning("TrOCR model initialization failed: {err}", err=str(exc))
+                self._trocr_model = None
+                self._trocr_processor = None
+        return self._trocr_processor, self._trocr_model
+
+    def _predict_batch_trocr(self, images: list[Image.Image]) -> list[str]:
+        """
+        Nhận diện chuỗi ảnh dòng bằng mô hình Microsoft TrOCR (Vision Transformer).
+        """
+        if not images:
+            return []
+
+        proc, model = self._get_trocr_model()
+        if proc is None or model is None:
+            logger.warning("TrOCR not available, fallback to VietOCR")
+            v_pred = self._get_predictor()
+            return self._predict_batch_padded(v_pred, images)
+
+        try:
+            import torch
+            _s = self._get_settings()
+            device = getattr(_s, "trocr_device", "cpu") if _s else "cpu"
+
+            rgb_images = [img.convert("RGB") if img.mode != "RGB" else img for img in images]
+            pixel_values = proc(images=rgb_images, return_tensors="pt").pixel_values.to(device)
+
+            with torch.no_grad():
+                generated_ids = model.generate(pixel_values, max_new_tokens=64)
+
+            generated_texts = proc.batch_decode(generated_ids, skip_special_tokens=True)
+            return [str(t).strip() for t in generated_texts]
+        except Exception as exc:
+            logger.warning("TrOCR batch prediction error: {err}", err=str(exc))
+            v_pred = self._get_predictor()
+            return self._predict_batch_padded(v_pred, images)
 
     def preprocess_image(self, pil_image: Image.Image) -> Image.Image:
         """
@@ -548,7 +603,52 @@ class OCRService:
 
         return []
 
-    def _ocr_image_zonal(self, image: Image.Image) -> tuple[str, bool]:
+    def _ocr_with_trocr_lines(
+        self, image: Image.Image
+    ) -> list[tuple[str, float]]:
+        """
+        Tách dòng và đưa từng dòng vào Microsoft TrOCR Vision Transformer.
+        """
+        try:
+            line_images = self.segment_lines(image)
+            if not line_images:
+                return []
+
+            _s = self._get_settings()
+            _max_lines  = getattr(_s, 'ocr_max_lines_per_page', 60) if _s else 60
+            _batch_size = getattr(_s, 'trocr_batch_size', 8)        if _s else 8
+
+            line_images = line_images[:_max_lines]
+            cleaned_lines = [self.preprocess_handwriting(li) for li in line_images]
+            line_results: list[tuple[str, float]] = []
+
+            for i in range(0, len(cleaned_lines), _batch_size):
+                batch = cleaned_lines[i: i + _batch_size]
+                texts = self._predict_batch_trocr(batch)
+                for txt in texts:
+                    txt = str(txt).strip() if txt else ""
+                    if txt:
+                        bad = len(re.findall(r'[%~^|<>{}\[\]\\]', txt))
+                        conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
+                        line_results.append((txt, round(conf, 2)))
+
+            return line_results
+        except Exception as e:
+            logger.debug("TrOCR line prediction failed: {err}", err=str(e))
+
+        return []
+
+    def _ocr_lines_with_engine(
+        self, image: Image.Image, engine: str | None = None
+    ) -> list[tuple[str, float]]:
+        """Điều hướng nhận dạng dòng theo engine được chỉ định (VietOCR hoặc TrOCR)."""
+        _s = self._get_settings()
+        selected_engine = engine or (getattr(_s, 'ocr_engine', 'vietocr') if _s else 'vietocr')
+        if selected_engine == "trocr":
+            return self._ocr_with_trocr_lines(image)
+        return self._ocr_with_vietocr_lines(image)
+
+    def _ocr_image_zonal(self, image: Image.Image, engine: str | None = None) -> tuple[str, bool]:
         """
         Khoanh vùng nhận dạng (Zonal OCR) chuyên biệt cho Trang đầu văn bản hành chính:
         - Vùng Trái (X in [0, 52%W], Y in [0, 24%H]): Bóc tách Cơ quan ban hành & Số hiệu văn bản
@@ -571,7 +671,7 @@ class OCRService:
 
             # OCR Vùng Trái Header
             left_processed = self.preprocess_image(left_header_crop)
-            left_lines = self._ocr_with_vietocr_lines(left_processed)
+            left_lines = self._ocr_lines_with_engine(left_processed, engine=engine)
             left_text = "\n".join(t for t, _ in left_lines)
 
             # Kiểm tra xem có cấu trúc Header hành chính không
@@ -588,7 +688,7 @@ class OCRService:
 
             # OCR Vùng Phải Ngày tháng
             right_processed = self.preprocess_image(right_date_crop)
-            right_lines = self._ocr_with_vietocr_lines(right_processed)
+            right_lines = self._ocr_lines_with_engine(right_processed, engine=engine)
             right_text = "\n".join(t for t, _ in right_lines)
 
             # Trích xuất số hiệu & ngày tháng
@@ -597,7 +697,7 @@ class OCRService:
 
             # OCR Vùng Thân văn bản (Body Zone)
             body_processed = self.preprocess_image(body_crop)
-            body_lines = self._ocr_with_vietocr_lines(body_processed)
+            body_lines = self._ocr_lines_with_engine(body_processed, engine=engine)
             body_text = "\n".join(t for t, _ in body_lines)
 
             header_block = _rebuild_header_block(doc_no, date_str)
@@ -608,18 +708,28 @@ class OCRService:
             logger.debug("Zonal OCR fallback to full page: {err}", err=str(exc))
             return "", False
 
-    def _ocr_image(self, image: Image.Image, extract_tables: bool = False, is_first_page: bool = True) -> str:
+    def _ocr_image(
+        self,
+        image: Image.Image,
+        extract_tables: bool = False,
+        is_first_page: bool = True,
+        engine: str | None = None,
+    ) -> str:
         """
-        Thực hiện OCR (Zonal OCR cho Trang đầu + VietOCR Transformer Padded Batch Line-by-Line + Tesseract fallback).
+        Thực hiện OCR (Zonal OCR cho Trang đầu + Line-by-Line + Fallback).
 
         Args:
             image: PIL Image cần OCR
             extract_tables: Bật tính năng tách bảng biểu
             is_first_page: Là trang đầu tiên của tài liệu (áp dụng Zonal OCR)
+            engine: Chỉ định engine ('vietocr' | 'trocr' | 'tesseract')
         """
+        _s = self._get_settings()
+        selected_engine = engine or (getattr(_s, 'ocr_engine', 'vietocr') if _s else 'vietocr')
+
         # 1. Thử Khoanh vùng nhận dạng Zonal OCR nếu là trang đầu (Trang 1 / Ảnh đơn)
-        if is_first_page:
-            zonal_text, ok = self._ocr_image_zonal(image)
+        if is_first_page and selected_engine != "tesseract":
+            zonal_text, ok = self._ocr_image_zonal(image, engine=selected_engine)
             if ok and len(zonal_text.strip()) > 20:
                 if extract_tables:
                     table_markdowns = self.detect_and_extract_tables(self.preprocess_image(image))
@@ -633,16 +743,17 @@ class OCRService:
         # 2. Bóc tách Bảng biểu (tùy chọn)
         table_markdowns = self.detect_and_extract_tables(processed_img) if extract_tables else []
 
-        # 3. VietOCR Transformer theo lô dòng (trả về list[tuple[str, float]])
+        # 3. Chạy OCR theo engine chỉ định
         full_text = ""
-        line_results = self._ocr_with_vietocr_lines(processed_img)
-        if line_results:
-            joined = "\n".join(txt for txt, _conf in line_results)
-            if len(joined.strip()) > 5:
-                full_text = unicodedata.normalize("NFC", joined.strip())
+        if selected_engine in ("vietocr", "trocr"):
+            line_results = self._ocr_lines_with_engine(processed_img, engine=selected_engine)
+            if line_results:
+                joined = "\n".join(txt for txt, _conf in line_results)
+                if len(joined.strip()) > 5:
+                    full_text = unicodedata.normalize("NFC", joined.strip())
 
-        # 4. Fallback Tesseract
-        if not full_text and pytesseract is not None:
+        # 4. Fallback hoặc Engine Tesseract
+        if (not full_text or selected_engine == "tesseract") and pytesseract is not None:
             try:
                 text = pytesseract.image_to_string(
                     processed_img, lang="vie+eng", config="--oem 1 --psm 3"
@@ -650,7 +761,7 @@ class OCRService:
                 if text and len(text.strip()) > 5:
                     full_text = unicodedata.normalize("NFC", text.strip())
             except Exception as tess_err:
-                logger.debug("Tesseract fallback failed: {err}", err=str(tess_err))
+                logger.debug("Tesseract OCR failed: {err}", err=str(tess_err))
 
         # 5. Ghép bảng biểu
         if table_markdowns:
@@ -659,12 +770,19 @@ class OCRService:
 
         return full_text
 
-    def extract_text_from_file(self, file_bytes: bytes, file_type: str) -> tuple[str, float]:
+    def extract_text_from_file(
+        self, file_bytes: bytes, file_type: str, engine: str | None = None
+    ) -> tuple[str, float]:
         """
         Trích xuất toàn văn từ file PDF hoặc Ảnh (JPG, PNG, TIFF).
 
         DPI render PDF scan đọc từ settings (mặc định 200).
         Bóc tách bảng biểu tối ưu và tăng tốc xử lý theo lô.
+
+        Args:
+            file_bytes: Dữ liệu nhị phân file
+            file_type: Định dạng file ('pdf', 'jpg', 'png', 'tiff'...)
+            engine: Chỉ định engine ('vietocr' | 'trocr' | 'tesseract'). Nếu None, dùng config settings.
 
         Returns:
             (text, heuristic_quality_score)
@@ -678,10 +796,11 @@ class OCRService:
         _fast_mode      = getattr(_s, 'ocr_fast_mode', False)          if _s else False
         _render_dpi     = _dpi_fast if _fast_mode else _dpi_default
         _extract_tables = getattr(_s, 'ocr_extract_tables', True)      if _s else True
+        selected_engine = engine or (getattr(_s, 'ocr_engine', 'vietocr') if _s else 'vietocr')
 
         logger.info(
-            "OCR settings: dpi={dpi}, fast_mode={fm}, beamsearch={bs}, extract_tables={et}",
-            dpi=_render_dpi, fm=_fast_mode,
+            "OCR settings: engine={eng}, dpi={dpi}, fast_mode={fm}, beamsearch={bs}, extract_tables={et}",
+            eng=selected_engine, dpi=_render_dpi, fm=_fast_mode,
             bs=getattr(_s, 'ocr_beamsearch_enabled', False) if _s else False,
             et=_extract_tables,
         )
@@ -695,19 +814,20 @@ class OCRService:
                     extracted_pages = []
 
                     # 1.1.1 Trích xuất direct text siêu tốc nếu PDF có text layer
-                    for page in doc:
-                        t = page.get_text().strip()
-                        if t:
-                            extracted_pages.append(t)
+                    if selected_engine == "vietocr":
+                        for page in doc:
+                            t = page.get_text().strip()
+                            if t:
+                                extracted_pages.append(t)
 
-                    if extracted_pages and len("\n".join(extracted_pages)) > 20:
-                        full_text = "\n\n".join(extracted_pages)
-                        full_text = self.post_process_vietnamese(full_text)
-                        logger.info(
-                            "Direct text PDF: {pages} pages, {chars} chars",
-                            pages=len(doc), chars=len(full_text),
-                        )
-                        return full_text, self.calculate_confidence_score(full_text, engine="direct_pdf")
+                        if extracted_pages and len("\n".join(extracted_pages)) > 20:
+                            full_text = "\n\n".join(extracted_pages)
+                            full_text = self.post_process_vietnamese(full_text)
+                            logger.info(
+                                "Direct text PDF: {pages} pages, {chars} chars",
+                                pages=len(doc), chars=len(full_text),
+                            )
+                            return full_text, self.calculate_confidence_score(full_text, engine="direct_pdf")
 
                     # 1.1.2 PDF scan ảnh: render trực tiếp mỗi trang ở DPI tối ưu
                     ocr_pages = []
@@ -721,13 +841,14 @@ class OCRService:
                         page_text = self._ocr_image(
                             page_img,
                             extract_tables=_extract_tables,
-                            is_first_page=(page_idx == 0)
+                            is_first_page=(page_idx == 0),
+                            engine=selected_engine,
                         )
 
                         _elapsed = time.time() - _t0
                         logger.info(
-                            "OCR page {cur}/{total} | dpi={dpi} | {ms:.1f}s",
-                            cur=page_idx + 1, total=total_pages,
+                            "OCR page {cur}/{total} [{eng}] | dpi={dpi} | {ms:.1f}s",
+                            cur=page_idx + 1, total=total_pages, eng=selected_engine,
                             dpi=_render_dpi, ms=_elapsed,
                         )
 
@@ -738,15 +859,15 @@ class OCRService:
                         full_text = "\n\n".join(ocr_pages)
                         full_text = self.post_process_vietnamese(full_text)
                         logger.info(
-                            "Scanned PDF OCR done: {pages} pages, {chars} chars",
-                            pages=len(doc), chars=len(full_text),
+                            "Scanned PDF OCR done [{eng}]: {pages} pages, {chars} chars",
+                            eng=selected_engine, pages=len(doc), chars=len(full_text),
                         )
-                        return full_text, self.calculate_confidence_score(full_text, engine="vietocr")
+                        return full_text, self.calculate_confidence_score(full_text, engine=selected_engine)
                 except Exception as exc:
                     logger.warning("PyMuPDF OCR failed: {err}", err=str(exc))
 
             # 1.2 Fallback pypdf
-            if pypdf is not None:
+            if pypdf is not None and selected_engine == "vietocr":
                 try:
                     reader = pypdf.PdfReader(io.BytesIO(file_bytes))
                     pypdf_texts = [p.extract_text() or "" for p in reader.pages if p.extract_text()]
@@ -759,12 +880,57 @@ class OCRService:
         # ── 2. Xử lý file Ảnh (JPG / PNG / TIFF) ──────────────────────────────
         try:
             image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
-            img_text = self._ocr_image(image)
+            img_text = self._ocr_image(image, engine=selected_engine)
             if img_text:
                 img_text = self.post_process_vietnamese(img_text)
-                return img_text, self.calculate_confidence_score(img_text, engine="vietocr")
+                return img_text, self.calculate_confidence_score(img_text, engine=selected_engine)
         except Exception as exc:
             logger.warning("Image OCR failed: {err}", err=str(exc))
+
+        return "", 0.0
+
+    def compare_ocr_engines(self, file_bytes: bytes, file_type: str) -> dict[str, Any]:
+        """
+        Thực nghiệm đối sánh hiệu năng và độ chính xác giữa các mô hình OCR:
+        1. VietOCR (Mô hình chính Seq2Seq Transformer)
+        2. Microsoft TrOCR (Mô hình Vision Transformer SOTA)
+        3. Tesseract OCR (Mô hình đối chứng cơ sở LSTM Baseline)
+
+        Returns:
+            dict chứa kết quả trích xuất, thời gian inference và điểm tin cậy của từng mô hình.
+        """
+        results: dict[str, Any] = {}
+        engines = [
+            ("vietocr", "VietOCR (vgg_transformer)"),
+            ("trocr", "Microsoft TrOCR (Vision Transformer)"),
+            ("tesseract", "Tesseract 5 (LSTM Baseline)"),
+        ]
+
+        for eng_key, eng_name in engines:
+            t0 = time.time()
+            try:
+                text, conf = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                elapsed = round(time.time() - t0, 3)
+                results[eng_key] = {
+                    "engine_name": eng_name,
+                    "text": text,
+                    "confidence": conf,
+                    "inference_time_seconds": elapsed,
+                    "char_count": len(text),
+                    "word_count": len(text.split()),
+                    "status": "SUCCESS" if text else "EMPTY",
+                }
+            except Exception as exc:
+                elapsed = round(time.time() - t0, 3)
+                results[eng_key] = {
+                    "engine_name": eng_name,
+                    "text": "",
+                    "confidence": 0.0,
+                    "inference_time_seconds": elapsed,
+                    "status": f"FAILED: {str(exc)}",
+                }
+
+        return results
 
 
         # ── 3. Fallback thông báo nếu không thể trích xuất

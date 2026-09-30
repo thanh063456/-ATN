@@ -57,6 +57,8 @@ class DocumentMetadataResponse(BaseModel):
     student_name: str | None = None
     document_date: datetime | None = None
     document_number: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    priority_score: int = 0
     extra: dict | None = None
 
 
@@ -71,7 +73,28 @@ class FieldExtractionUpdateRequest(BaseModel):
     student_name: str | None = None
     document_number: str | None = None
     document_date: datetime | None = None
+    tags: list[str] | None = None
     extra: dict | None = None
+
+
+class UpdateTagsRequest(BaseModel):
+    """Payload cập nhật danh sách nhãn (tags) của tài liệu."""
+    tags: list[str] = Field(default_factory=list, description="Danh sách các nhãn gán cho tài liệu")
+
+
+class TagSummaryItem(BaseModel):
+    """Thống kê từng nhãn trong hệ thống."""
+    tag: str
+    count: int
+    priority: int
+    color: str
+    category: str
+
+
+class TagSummaryResponse(BaseModel):
+    """Danh sách thống kê toàn bộ nhãn phục vụ thanh lọc 1-Click."""
+    items: list[TagSummaryItem]
+    total_tags: int
 
 
 class AIRefineRequest(BaseModel):
@@ -96,9 +119,12 @@ class AIExtractResponse(BaseModel):
     class_name: str | None = None
     faculty: str | None = None
     document_type: str | None = None
+    document_number: str | None = None
     reason: str | None = None
     amount: str | None = None
     document_date: datetime | str | None = None
+    tags: list[str] = Field(default_factory=list)
+    priority_score: int = 0
     summary: str | None = None
     suggested_action: str | None = None
     provider: str = "rule_based"
@@ -169,6 +195,9 @@ class DocumentListItem(DocumentResponse):
     ocr_confidence: float | None = None
     student_id: str | None = None
     student_name: str | None = None
+    document_number: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    priority_score: int = 0
     ocr_progress: int = 0  # 0-100% tiến độ OCR thực tế
 
 
@@ -186,3 +215,5 @@ class DocumentDetailResponse(DocumentResponse):
     ocr_result: OCRResultResponse | None = None
     processing_job: ProcessingJobResponse | None = None
     metadata_: DocumentMetadataResponse | None = Field(default=None, alias="metadata")
+    tags: list[str] = Field(default_factory=list)
+    priority_score: int = 0

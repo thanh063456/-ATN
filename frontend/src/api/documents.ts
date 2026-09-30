@@ -25,6 +25,9 @@ export interface DocumentListItem extends DocumentSummary {
   ocr_confidence?: number;
   student_id?: string;
   student_name?: string;
+  document_number?: string;
+  tags?: string[];
+  priority_score?: number;
   ocr_progress?: number;  // 0-100 tiến độ OCR thực tế
 }
 
@@ -66,11 +69,14 @@ export interface DocumentMetadata {
   student_name?: string;
   document_date?: string;
   document_number?: string;
+  tags?: string[];
+  priority_score?: number;
   extra?: {
     class_name?: string;
     faculty?: string;
     document_type?: string;
     reason?: string;
+    tags?: string[];
     [key: string]: any;
   };
 }
@@ -84,6 +90,21 @@ export interface DocumentDetail extends DocumentSummary {
   ocr_result?: OCRResult;
   processing_job?: ProcessingJob;
   metadata?: DocumentMetadata;
+  tags?: string[];
+  priority_score?: number;
+}
+
+export interface TagSummaryItem {
+  tag: string;
+  count: number;
+  priority: number;
+  color: string;
+  category: string;
+}
+
+export interface TagSummaryResponse {
+  items: TagSummaryItem[];
+  total_tags: number;
 }
 
 export interface VerificationData {
@@ -120,6 +141,7 @@ export interface ListDocumentsParams {
   pageSize?: number;
   ocrStatus?: string;
   categoryId?: string;
+  tag?: string;
   search?: string;
 }
 
@@ -138,14 +160,38 @@ export interface AIExtractResponse {
   class_name?: string;
   faculty?: string;
   document_type?: string;
+  document_number?: string;
   reason?: string;
   amount?: string;
   document_date?: string;
+  tags?: string[];
+  priority_score?: number;
   summary?: string;
   suggested_action?: string;
-  provider: string;
-  model: string;
+  provider?: string;
+  model?: string;
   confidence_score: number;
+}
+
+export interface ModelBenchmarkItem {
+  engine_name: string;
+  text: string;
+  confidence: number;
+  inference_time_seconds: number;
+  char_count: number;
+  word_count: number;
+  status: string;
+}
+
+export interface ModelComparisonResponse {
+  document_id: string;
+  filename: string;
+  comparison: {
+    vietocr?: ModelBenchmarkItem;
+    trocr?: ModelBenchmarkItem;
+    tesseract?: ModelBenchmarkItem;
+    [key: string]: any;
+  };
 }
 
 export const documentsApi = {
@@ -156,6 +202,7 @@ export const documentsApi = {
         page_size: params?.pageSize || 20,
         ocr_status: params?.ocrStatus,
         category_id: params?.categoryId,
+        tag: params?.tag,
         search: params?.search,
       },
     });
@@ -208,6 +255,11 @@ export const documentsApi = {
     return res.data;
   },
 
+  compareModels: async (id: string): Promise<ModelComparisonResponse> => {
+    const res = await apiClient.post<ModelComparisonResponse>(`/documents/${id}/compare-models`);
+    return res.data;
+  },
+
   getVerification: async (id: string): Promise<VerificationData> => {
     const res = await apiClient.get<VerificationData>(`/documents/${id}/verification`);
     return res.data;
@@ -225,6 +277,21 @@ export const documentsApi = {
 
   reject: async (id: string): Promise<DocumentDetail> => {
     const res = await apiClient.patch<DocumentDetail>(`/documents/${id}/reject`);
+    return res.data;
+  },
+
+  getTagsSummary: async (): Promise<TagSummaryResponse> => {
+    const res = await apiClient.get<TagSummaryResponse>("/documents/tags/summary");
+    return res.data;
+  },
+
+  updateTags: async (id: string, tags: string[]): Promise<DocumentDetail> => {
+    const res = await apiClient.put<DocumentDetail>(`/documents/${id}/tags`, { tags });
+    return res.data;
+  },
+
+  autoTag: async (id: string): Promise<DocumentDetail> => {
+    const res = await apiClient.post<DocumentDetail>(`/documents/${id}/auto-tag`);
     return res.data;
   },
 

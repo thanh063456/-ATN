@@ -22,6 +22,8 @@ class SearchHit(BaseModel):
     student_name: str | None = None
     document_date: str | None = None
     document_number: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    priority_score: int = 0
     ocr_status: str
     ocr_confidence: float | None = None
     score: float = Field(description="Điểm liên quan BM25 từ Elasticsearch")

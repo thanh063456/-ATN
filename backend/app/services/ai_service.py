@@ -187,6 +187,18 @@ class AIService:
                 except Exception:
                     pass
 
+            # Bóc tách số hiệu thực tế từ văn bản gốc (nếu có)
+            regex_meta = extraction_service.extract_metadata(text)
+            ai_res["document_number"] = regex_meta.get("document_number")
+
+            from app.services.tag_service import tag_service
+            auto_tags = tag_service.generate_auto_tags(
+                text=text,
+                metadata=ai_res,
+                confidence_score=0.95,
+            )
+            ai_res["tags"] = auto_tags
+            ai_res["priority_score"] = tag_service.calculate_priority_score(auto_tags)
             ai_res["provider"] = used_provider
             ai_res["model"] = used_model
             ai_res["confidence_score"] = 0.95
@@ -203,15 +215,25 @@ class AIService:
         else:
             doc_date_str = None
 
+        from app.services.tag_service import tag_service
+        auto_tags = tag_service.generate_auto_tags(
+            text=text,
+            metadata=fallback_data,
+            confidence_score=0.82,
+        )
+
         return {
             "student_name": fallback_data.get("student_name"),
             "student_id": fallback_data.get("student_id"),
             "class_name": fallback_data.get("class_name") or extra.get("class_name"),
             "faculty": fallback_data.get("faculty") or extra.get("faculty"),
             "document_type": fallback_data.get("document_type") or extra.get("document_type"),
+            "document_number": fallback_data.get("document_number"),
             "reason": fallback_data.get("reason") or extra.get("reason"),
             "amount": None,
             "document_date": doc_date_str,
+            "tags": auto_tags,
+            "priority_score": tag_service.calculate_priority_score(auto_tags),
             "summary": f"Đơn của sinh viên {fallback_data.get('student_name') or 'chưa rõ'} (MSSV: {fallback_data.get('student_id') or 'chưa rõ'})",
             "suggested_action": "Cán bộ kiểm tra đối chiếu thông tin với hồ sơ sinh viên gốc.",
             "provider": "rule_based",

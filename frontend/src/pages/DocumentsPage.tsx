@@ -62,6 +62,8 @@ export const DocumentsPage: React.FC = () => {
   const [searchFilter, setSearchFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [approvalFilter, setApprovalFilter] = useState("ALL");
+  const [selectedTag, setSelectedTag] = useState("ALL");
+  const [tagSummary, setTagSummary] = useState<{ tag: string; count: number; priority: number; color: string; category: string }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
@@ -88,14 +90,25 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
+  const fetchTags = async () => {
+    try {
+      const res = await documentsApi.getTagsSummary();
+      setTagSummary(res.items || []);
+    } catch (err) {
+      console.warn("Could not fetch tags summary:", err);
+    }
+  };
+
   const fetchDocuments = async () => {
     setIsLoading(true);
     try {
       const res = await documentsApi.list({
         search: searchFilter || undefined,
         ocrStatus: statusFilter !== "ALL" ? statusFilter : undefined,
+        tag: selectedTag !== "ALL" ? selectedTag : undefined,
       });
       setDocs(res.items || []);
+      fetchTags();
     } catch (err: any) {
       console.warn("Could not fetch from backend:", err);
     } finally {
@@ -105,7 +118,7 @@ export const DocumentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchDocuments();
-  }, [statusFilter]);
+  }, [statusFilter, selectedTag]);
 
   // Real-time polling nếu có tài liệu đang xử lý OCR (PROCESSING hoặc PENDING)
   useEffect(() => {
@@ -117,7 +130,7 @@ export const DocumentsPage: React.FC = () => {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [docs, statusFilter]);
+  }, [docs, statusFilter, selectedTag]);
 
   const handleApprove = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -160,9 +173,11 @@ export const DocumentsPage: React.FC = () => {
   const filteredDocs = docs.filter((doc) => {
     const uploaderName = doc.uploader_name || doc.student_name || "";
     const uploaderMssv = doc.uploader_mssv || doc.student_id || "";
+    const docNumber = doc.document_number || "";
     const matchSearch =
       !searchFilter ||
       doc.title.toLowerCase().includes(searchFilter.toLowerCase()) ||
+      docNumber.toLowerCase().includes(searchFilter.toLowerCase()) ||
       (uploaderName && uploaderName.toLowerCase().includes(searchFilter.toLowerCase())) ||
       (uploaderMssv && uploaderMssv.includes(searchFilter));
 
@@ -172,16 +187,35 @@ export const DocumentsPage: React.FC = () => {
       (approvalFilter === "APPROVED" && isApproved) ||
       (approvalFilter === "PENDING" && !isApproved);
 
-    return matchSearch && matchApproval;
+    const matchTag =
+      selectedTag === "ALL" ||
+      (doc.tags && doc.tags.some((t) => t.toLowerCase() === selectedTag.toLowerCase() || t.replace(/^#/, "").toLowerCase() === selectedTag.toLowerCase()));
+
+    return matchSearch && matchApproval && matchTag;
   });
 
   // KPI tóm tắt số liệu
   const totalCount = docs.length;
   const pendingCount = docs.filter((d) => d.ocr_status !== "APPROVED" && d.ocr_status !== "REJECTED").length;
   const approvedCount = docs.filter((d) => d.ocr_status === "APPROVED").length;
-  const avgConfidence = docs.length > 0
-    ? Math.round(docs.reduce((acc, cur) => acc + (cur.ocr_confidence ?? cur.confidence_score ?? 0.95), 0) / docs.length * 100)
-    : 98;
+
+  // Helper color map cho badge
+  const getTagBadgeStyle = (tag: string) => {
+    const t = tag.toLowerCase();
+    if (t.includes("gap") || t.includes("thieu") || t.includes("ngheo") || t.includes("thuongbinh") || t.includes("khuyettat") || t.includes("mocoi")) {
+      return { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" };
+    }
+    if (t.includes("hocbong") || t.includes("miengiam") || t.includes("kehoach") || t.includes("quyetdinh") || t.includes("vung")) {
+      return { bg: "#fef3c7", text: "#b45309", border: "#fde68a" };
+    }
+    if (t.startsWith("#k") || t.includes("khoa") || t.includes("lop")) {
+      return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
+    }
+    if (t.includes("duyet") || t.includes("thongbao") || t.includes("chinhsua")) {
+      return { bg: "#e0e7ff", text: "#4338ca", border: "#c7d2fe" };
+    }
+    return { bg: "#f3f4f6", text: "#4b5563", border: "#e5e7eb" };
+  };
 
   return (
     <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem", width: "100%" }}>
@@ -198,7 +232,7 @@ export const DocumentsPage: React.FC = () => {
           </div>
           <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>
             {isStaffOrAdmin
-              ? "Trợ lý CTSV kiểm tra kết quả nhận dạng OCR, chỉnh sửa thông tin metadata và phê duyệt văn bản số."
+              ? "Trợ lý CTSV kiểm tra kết quả nhận dạng OCR, phân loại nhãn thông minh và phê duyệt văn bản số."
               : "Theo dõi tiến độ nhận diện OCR và kết quả phê duyệt các hồ sơ, đơn từ của bạn."}
           </p>
         </div>
@@ -312,82 +346,158 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
+      {/* Filter & Search Bar + 1-Click Smart Tag Cloud */}
       <Card padding="sm">
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ flex: "1 1 320px", position: "relative" }}>
-            <Search size={16} color="var(--gray-400)" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)" }} />
-            <input
-              type="text"
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              placeholder="Tìm theo tên hồ sơ, số hiệu công văn, họ tên hoặc MSSV..."
-              style={{
-                width: "100%",
-                padding: "0.55rem 0.85rem 0.55rem 2.4rem",
-                borderRadius: "0.5rem",
-                border: "1px solid var(--border-color)",
-                fontSize: "0.875rem",
-                backgroundColor: "var(--gray-50)",
-                transition: "all 0.2s ease",
-              }}
-            />
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ flex: "1 1 320px", position: "relative" }}>
+              <Search size={16} color="var(--gray-400)" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)" }} />
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Tìm theo tên hồ sơ, số hiệu văn bản (1353/KH...), họ tên hoặc MSSV..."
+                style={{
+                  width: "100%",
+                  padding: "0.55rem 0.85rem 0.55rem 2.4rem",
+                  borderRadius: "0.5rem",
+                  border: "1px solid var(--border-color)",
+                  fontSize: "0.875rem",
+                  backgroundColor: "var(--gray-50)",
+                  transition: "all 0.2s ease",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Trạng thái OCR:</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{
+                    padding: "0.45rem 0.75rem",
+                    borderRadius: "0.5rem",
+                    border: "1px solid var(--border-color)",
+                    fontSize: "0.8125rem",
+                    backgroundColor: "#fff",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="ALL">Tất cả trạng thái</option>
+                  <option value="APPROVED">Đã duyệt (APPROVED)</option>
+                  <option value="DONE">OCR Xong (DONE)</option>
+                  <option value="PROCESSING">Đang xử lý</option>
+                  <option value="PENDING">Chờ xử lý</option>
+                  <option value="REJECTED">Từ chối (REJECTED)</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Phê duyệt:</span>
+                <select
+                  value={approvalFilter}
+                  onChange={(e) => setApprovalFilter(e.target.value)}
+                  style={{
+                    padding: "0.45rem 0.75rem",
+                    borderRadius: "0.5rem",
+                    border: "1px solid var(--border-color)",
+                    fontSize: "0.8125rem",
+                    backgroundColor: "#fff",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="ALL">Tất cả</option>
+                  <option value="APPROVED">Đã phê duyệt</option>
+                  <option value="PENDING">Chưa phê duyệt</option>
+                </select>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchDocuments}
+                leftIcon={<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />}
+              >
+                Làm mới
+              </Button>
+            </div>
           </div>
 
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Trạng thái OCR:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{
-                  padding: "0.45rem 0.75rem",
-                  borderRadius: "0.5rem",
-                  border: "1px solid var(--border-color)",
-                  fontSize: "0.8125rem",
-                  backgroundColor: "#fff",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                <option value="ALL">Tất cả trạng thái</option>
-                <option value="APPROVED">Đã duyệt (APPROVED)</option>
-                <option value="DONE">OCR Xong (DONE)</option>
-                <option value="PROCESSING">Đang xử lý</option>
-                <option value="PENDING">Chờ xử lý</option>
-                <option value="REJECTED">Từ chối (REJECTED)</option>
-              </select>
-            </div>
+          {/* 🏷️ 1-Click Smart Tag Cloud Filter (Phân loại theo Mức ưu tiên) */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+            paddingTop: "0.625rem",
+            borderTop: "1px solid var(--border-light)",
+          }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", display: "flex", alignItems: "center", gap: "0.25rem", marginRight: "0.25rem" }}>
+              <Filter size={13} color="var(--primary-600)" />
+              Lọc nhanh 1-Click theo Nhãn AI:
+            </span>
 
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Phê duyệt:</span>
-              <select
-                value={approvalFilter}
-                onChange={(e) => setApprovalFilter(e.target.value)}
-                style={{
-                  padding: "0.45rem 0.75rem",
-                  borderRadius: "0.5rem",
-                  border: "1px solid var(--border-color)",
-                  fontSize: "0.8125rem",
-                  backgroundColor: "#fff",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                <option value="ALL">Tất cả</option>
-                <option value="APPROVED">Đã phê duyệt</option>
-                <option value="PENDING">Chưa phê duyệt</option>
-              </select>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchDocuments}
-              leftIcon={<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />}
+            {/* Nút Tất cả */}
+            <button
+              onClick={() => setSelectedTag("ALL")}
+              style={{
+                padding: "0.25rem 0.625rem",
+                borderRadius: "9999px",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                border: "1px solid",
+                borderColor: selectedTag === "ALL" ? "var(--primary-600)" : "var(--border-color)",
+                backgroundColor: selectedTag === "ALL" ? "var(--primary-600)" : "#fff",
+                color: selectedTag === "ALL" ? "#fff" : "var(--gray-700)",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
             >
-              Làm mới
-            </Button>
+              Tất cả nhãn
+            </button>
+
+            {/* Render Top Tag Items theo Priority */}
+            {tagSummary.slice(0, 10).map((tItem) => {
+              const isSelected = selectedTag.toLowerCase() === tItem.tag.toLowerCase();
+              const style = getTagBadgeStyle(tItem.tag);
+
+              return (
+                <button
+                  key={tItem.tag}
+                  onClick={() => setSelectedTag(isSelected ? "ALL" : tItem.tag)}
+                  style={{
+                    padding: "0.25rem 0.625rem",
+                    borderRadius: "9999px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    border: "1px solid",
+                    borderColor: isSelected ? style.text : style.border,
+                    backgroundColor: isSelected ? style.text : style.bg,
+                    color: isSelected ? "#fff" : style.text,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    transition: "all 0.15s ease",
+                  }}
+                  title={`Ưu tiên: ${tItem.priority} điểm - Danh mục: ${tItem.category}`}
+                >
+                  <span>{tItem.tag}</span>
+                  <span style={{
+                    fontSize: "0.6875rem",
+                    padding: "0.05rem 0.35rem",
+                    borderRadius: "9999px",
+                    backgroundColor: isSelected ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.06)",
+                    color: isSelected ? "#fff" : style.text,
+                  }}>
+                    {tItem.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </Card>
@@ -472,13 +582,63 @@ export const DocumentsPage: React.FC = () => {
                             >
                               {mainTitle}
                             </Link>
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--gray-400)", marginTop: "0.25rem" }}>
-                              {code && <span style={{ color: "var(--primary-600)", fontWeight: 600 }}>{code}</span>}
-                              {code && <span>•</span>}
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--gray-400)", marginTop: "0.25rem", flexWrap: "wrap" }}>
+                              {doc.document_number ? (
+                                <span style={{
+                                  backgroundColor: "#eff6ff",
+                                  color: "#1d4ed8",
+                                  fontWeight: 700,
+                                  padding: "0.1rem 0.4rem",
+                                  borderRadius: "0.25rem",
+                                  border: "1px solid #bfdbfe",
+                                  fontSize: "0.7rem",
+                                }}>
+                                  Số: {doc.document_number}
+                                </span>
+                              ) : code ? (
+                                <span style={{ color: "var(--primary-600)", fontWeight: 600 }}>{code}</span>
+                              ) : null}
                               <span>{(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
                               <span>•</span>
                               <span>{new Date(doc.created_at).toLocaleDateString("vi-VN")}</span>
                             </div>
+
+                            {/* Badges danh sách nhãn AI */}
+                            {doc.tags && doc.tags.length > 0 && (
+                              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginTop: "0.35rem" }}>
+                                {doc.tags.slice(0, 3).map((t) => {
+                                  const tStyle = getTagBadgeStyle(t);
+                                  return (
+                                    <span
+                                      key={t}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setSelectedTag(t);
+                                      }}
+                                      style={{
+                                        fontSize: "0.6875rem",
+                                        fontWeight: 600,
+                                        padding: "0.1rem 0.4rem",
+                                        borderRadius: "0.25rem",
+                                        backgroundColor: tStyle.bg,
+                                        color: tStyle.text,
+                                        border: `1px solid ${tStyle.border}`,
+                                        cursor: "pointer",
+                                      }}
+                                      title={`Nhấp để lọc tài liệu theo nhãn ${t}`}
+                                    >
+                                      {t}
+                                    </span>
+                                  );
+                                })}
+                                {doc.tags.length > 3 && (
+                                  <span style={{ fontSize: "0.6875rem", color: "var(--gray-400)", alignSelf: "center" }}>
+                                    +{doc.tags.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>

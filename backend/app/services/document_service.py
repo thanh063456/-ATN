@@ -168,10 +168,52 @@ class DocumentService:
             sorted_jobs = sorted(document.processing_jobs, key=lambda j: j.created_at, reverse=True)
             latest_job = ProcessingJobResponse.model_validate(sorted_jobs[0])
 
-        # Metadata
+        # Metadata & Tags
         meta_response = None
+        doc_tags: list[str] = []
+        doc_priority: int = 0
+        from app.services.tag_service import tag_service
+
+        raw_or_corr_text = ""
+        if latest_ocr:
+            raw_or_corr_text = latest_ocr.corrected_text or latest_ocr.raw_text or ""
+
         if document.metadata_:
-            meta_response = DocumentMetadataResponse.model_validate(document.metadata_)
+            extra_dict = document.metadata_.extra or {}
+            saved_tags = extra_dict.get("tags")
+            if saved_tags and isinstance(saved_tags, list):
+                doc_tags = tag_service.sort_tags_by_priority(saved_tags)
+            elif raw_or_corr_text:
+                doc_tags = tag_service.generate_auto_tags(
+                    text=raw_or_corr_text,
+                    metadata={
+                        "student_id": document.metadata_.student_id,
+                        "student_name": document.metadata_.student_name,
+                        "extra": extra_dict,
+                    },
+                    ocr_status=document.ocr_status,
+                    is_corrected=latest_ocr.is_corrected if latest_ocr else False,
+                    confidence_score=latest_ocr.confidence_score if latest_ocr else None,
+                )
+            doc_priority = tag_service.calculate_priority_score(doc_tags)
+            meta_response = DocumentMetadataResponse(
+                id=document.metadata_.id,
+                document_id=document.metadata_.document_id,
+                student_id=document.metadata_.student_id,
+                student_name=document.metadata_.student_name,
+                document_date=document.metadata_.document_date,
+                document_number=document.metadata_.document_number,
+                tags=doc_tags,
+                priority_score=doc_priority,
+                extra=document.metadata_.extra,
+            )
+        elif raw_or_corr_text:
+            doc_tags = tag_service.generate_auto_tags(
+                text=raw_or_corr_text,
+                metadata={},
+                ocr_status=document.ocr_status,
+            )
+            doc_priority = tag_service.calculate_priority_score(doc_tags)
 
         return DocumentDetailResponse(
             id=document.id,
@@ -190,4 +232,6 @@ class DocumentService:
             ocr_result=latest_ocr,
             processing_job=latest_job,
             metadata=meta_response,
+            tags=doc_tags,
+            priority_score=doc_priority,
         )

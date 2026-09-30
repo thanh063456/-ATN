@@ -95,9 +95,14 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/1"
 
     # ── OCR Engine ────────────────────────────────────────────────────────────
-    ocr_engine: Literal["vietocr", "paddleocr"] = "vietocr"
+    ocr_engine: Literal["vietocr", "trocr", "paddleocr"] = "vietocr"
     ocr_model_path: str = "./models/vietocr_transformer.pth"
     ocr_device: str = "cpu"
+
+    # TrOCR (Microsoft Vision Transformer) settings
+    trocr_model_name: str = "microsoft/trocr-base-printed"
+    trocr_device: str = "cpu"
+    trocr_batch_size: int = 8
 
     # DPI render PDF scan (200 DPI: cân bằng tối ưu giữa độ nét và tốc độ xử lý)
     ocr_pdf_dpi_default: int = 200
