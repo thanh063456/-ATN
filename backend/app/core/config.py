@@ -94,12 +94,50 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
 
-    # ── OCR ───────────────────────────────────────────────────────────────────
+    # ── OCR Engine ────────────────────────────────────────────────────────────
     ocr_engine: Literal["vietocr", "paddleocr"] = "vietocr"
     ocr_model_path: str = "./models/vietocr_transformer.pth"
     ocr_device: str = "cpu"
-    ocr_beam_width: int = 5
-    ocr_batch_size: int = 8
+
+    # DPI render PDF scan (200 DPI: cân bằng tối ưu giữa độ nét và tốc độ xử lý)
+    ocr_pdf_dpi_default: int = 200
+    ocr_pdf_dpi_table_region: int = 300     # Render cao hơn cho vùng phát hiện bảng
+    ocr_pdf_dpi_fast: int = 150             # DPI nhanh dùng khi ocr_fast_mode=True
+    ocr_fast_mode: bool = False
+
+    # VietOCR Transformer decoder settings
+    # Mặc định False (Greedy search) khi chạy CPU để tăng tốc độ gấp 4-6 lần (từ ~70s xuống ~12s/trang)
+    ocr_beamsearch_enabled: bool = False
+    ocr_beam_size: int = 4                  # Beam size khi beamsearch=True
+    ocr_beam_width: int = 4                 # Backward compat alias
+    ocr_batch_size: int = 16                # Batch size predict_batch() với Padded Batching
+    ocr_max_lines_per_page: int = 60       # Giới hạn dòng/trang để tránh quá tải
+    ocr_extract_tables: bool = True         # Bóc tách cấu trúc bảng biểu nếu có lưới bảng rõ ràng
+
+    # Morphology kernel sizes cho phát hiện đường kẻ bảng
+    ocr_morph_kernel_horiz: int = 25       # Kernel ngang phát hiện đường kẻ ngang
+    ocr_morph_kernel_vert: int = 25        # Kernel dọc phát hiện đường kẻ dọc
+
+    # MSSV pattern — cấu hình được, không hardcode "2[0-3]" trong service
+    # Ví dụ: "2[0-3]" = chấp nhận MSSV bắt đầu bằng 20, 21, 22, 23
+    mssv_year_prefix_pattern: str = r"2[0-3]"
+    mssv_length_min: int = 7
+    mssv_length_max: int = 8
+
+    # Admin dictionary path (cho text_postprocessing module)
+    ocr_admin_dict_path: str = "./data/admin_dictionary_vi.json"
+
+    # ── AI Enhancement & Smart Entity Extraction ─────────────────────────────
+    # Hỗ trợ Gemini, OpenAI, Ollama (Local) hoặc auto fallback
+    ai_provider: Literal["auto", "gemini", "openai", "ollama", "none"] = "auto"
+    gemini_api_key: str = Field(default="")
+    gemini_model: str = "gemini-1.5-flash"
+    openai_api_key: str = Field(default="")
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: str = "https://api.openai.com/v1"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5:7b"
+    ai_timeout_seconds: float = 20.0
 
     # ── JWT ───────────────────────────────────────────────────────────────────
     jwt_secret_key: str = Field(default="CHANGE_ME_TO_A_JWT_SECRET")

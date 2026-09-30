@@ -25,6 +25,7 @@ export interface DocumentListItem extends DocumentSummary {
   ocr_confidence?: number;
   student_id?: string;
   student_name?: string;
+  ocr_progress?: number;  // 0-100 tiến độ OCR thực tế
 }
 
 export interface DocumentListResponse {
@@ -55,6 +56,7 @@ export interface ProcessingJob {
   status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
   error_message?: string;
   retry_count: number;
+  ocr_progress: number;  // 0-100
   started_at?: string;
   completed_at?: string;
 }
@@ -121,6 +123,31 @@ export interface ListDocumentsParams {
   search?: string;
 }
 
+export interface AIRefineResponse {
+  original_text: string;
+  refined_text: string;
+  provider: string;
+  model: string;
+  success: boolean;
+  message?: string;
+}
+
+export interface AIExtractResponse {
+  student_name?: string;
+  student_id?: string;
+  class_name?: string;
+  faculty?: string;
+  document_type?: string;
+  reason?: string;
+  amount?: string;
+  document_date?: string;
+  summary?: string;
+  suggested_action?: string;
+  provider: string;
+  model: string;
+  confidence_score: number;
+}
+
 export const documentsApi = {
   list: async (params?: ListDocumentsParams): Promise<DocumentListResponse> => {
     const res = await apiClient.get<DocumentListResponse>("/documents", {
@@ -166,6 +193,18 @@ export const documentsApi = {
 
   triggerExtractFields: async (id: string): Promise<DocumentMetadata> => {
     const res = await apiClient.post<DocumentMetadata>(`/documents/${id}/extract-fields`);
+    return res.data;
+  },
+
+  aiRefine: async (id: string, text?: string): Promise<AIRefineResponse> => {
+    const res = await apiClient.post<AIRefineResponse>(`/documents/${id}/ai-refine`, {
+      text: text || null,
+    });
+    return res.data;
+  },
+
+  aiExtract: async (id: string): Promise<AIExtractResponse> => {
+    const res = await apiClient.post<AIExtractResponse>(`/documents/${id}/ai-extract`);
     return res.data;
   },
 

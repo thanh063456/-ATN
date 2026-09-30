@@ -115,16 +115,18 @@ class ExtractionService:
                 extracted["extra"]["reason"] = extracted["reason"]
                 break
 
-        # 7. Trích xuất Ngày làm đơn (vd: Đà Lạt, ngày 20 tháng 08 năm 2026 hoặc 20/08/2026)
+        # 7. Trích xuất Ngày làm đơn (vd: Đà Lạt, ngày 20 tháng 08 năm 2026, ngày22/8/2025)
         date_patterns = [
-            r"(?:ngày\s*(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4}))",
+            r"(?:ng[àaá]y\s*(\d{1,2})\s*th[áa]ng\s*(\d{1,2})\s*(?:n[ăa]m|\/)?\s*(\d{4}|\d{2}))",
             r"(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})",
         ]
         for pat in date_patterns:
             m = re.search(pat, clean_text, re.IGNORECASE)
             if m:
                 try:
-                    d, month, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                    d, month = int(m.group(1)), int(m.group(2))
+                    raw_y = m.group(3)
+                    y = int(raw_y) if len(raw_y) == 4 else int("20" + raw_y)
                     extracted["document_date"] = datetime(y, month, d)
                 except ValueError:
                     pass

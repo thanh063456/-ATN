@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy import SmallInteger
 
 from app.core.database import Base
 
@@ -34,6 +35,7 @@ class ProcessingJob(Base):
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ocr_progress: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)  # 0-100 %
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(

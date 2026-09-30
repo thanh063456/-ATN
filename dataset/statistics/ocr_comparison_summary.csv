@@ -1,0 +1,4 @@
+﻿Model,Avg CER (%),Avg WER (%),Exact Match (%),Grade (CER),n_samples
+VietOCR Pretrained,940.62,548.60,0.0,Không đạt,100
+VietOCR Fine-tuned (CTSV),944.20,551.19,0.0,Không đạt,100
+Improvement (↓ better),-3.58,-2.59,+0.0,,

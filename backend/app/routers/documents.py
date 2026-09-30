@@ -41,6 +41,9 @@ from app.models.documents import Document
 from app.models.ocr_results import OCRResult
 from app.models.users import User
 from app.schemas.documents import (
+    AIExtractResponse,
+    AIRefineRequest,
+    AIRefineResponse,
     DocumentDetailResponse,
     DocumentListItem,
     DocumentListResponse,
@@ -51,6 +54,7 @@ from app.schemas.documents import (
     OCRResultResponse,
     VerificationResponse,
 )
+from app.services.ai_service import ai_service
 from app.services.document_service import DocumentService
 from app.services.extraction_service import extraction_service
 from app.services.search_index_service import search_index_service
@@ -96,6 +100,7 @@ async def list_documents(
             selectinload(Document.category),
             selectinload(Document.ocr_results),
             selectinload(Document.metadata_),
+            selectinload(Document.processing_jobs),
         )
     )
 
@@ -155,6 +160,17 @@ async def list_documents(
             if doc.metadata_.student_id:
                 uploader_mssv = doc.metadata_.student_id
 
+        # Lấy ocr_progress từ ProcessingJob gần nhất
+        ocr_progress = 0
+        if doc.ocr_status in ("DONE", "APPROVED"):
+            ocr_progress = 100
+        elif doc.ocr_status == "FAILED":
+            ocr_progress = 0
+        elif doc.processing_jobs:
+            latest_job = max(doc.processing_jobs, key=lambda j: j.created_at, default=None)
+            if latest_job:
+                ocr_progress = getattr(latest_job, "ocr_progress", 0) or 0
+
         items.append(
             DocumentListItem(
                 id=doc.id,
@@ -176,6 +192,7 @@ async def list_documents(
                 student_name=uploader_name,
                 uploader_mssv=uploader_mssv,
                 uploader_name=uploader_name,
+                ocr_progress=ocr_progress,
                 created_at=doc.created_at,
                 updated_at=doc.updated_at,
             )
@@ -608,6 +625,133 @@ async def trigger_extract_fields(
     await db.commit()
     await db.refresh(meta_obj)
     return DocumentMetadataResponse.model_validate(meta_obj)
+
+
+@router.post(
+    "/{document_id}/ai-refine",
+    response_model=AIRefineResponse,
+    summary="Dùng AI (Gemini / OpenAI / Ollama) sửa lỗi chính tả và chuẩn hóa văn bản OCR",
+)
+async def ai_refine_document_text(
+    document_id: UUID,
+    req: AIRefineRequest | None = None,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+) -> AIRefineResponse:
+    """
+    Sử dụng mô hình ngôn ngữ lớn để sửa lỗi chính tả OCR, giữ nguyên bố cục hành chính.
+    """
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    input_text = req.text if (req and req.text) else None
+    if not input_text:
+        stmt = select(OCRResult).where(OCRResult.document_id == document_id, OCRResult.is_latest == True)
+        res = await db.execute(stmt)
+        ocr = res.scalars().first()
+        input_text = (ocr.corrected_text or ocr.raw_text or "") if ocr else ""
+
+    result = await ai_service.refine_ocr_text(input_text)
+    return AIRefineResponse(
+        original_text=result.get("original_text", input_text),
+        refined_text=result.get("refined_text", input_text),
+        provider=result.get("provider", "none"),
+        model=result.get("model", "none"),
+        success=result.get("success", False),
+        message=result.get("message"),
+    )
+
+
+@router.post(
+    "/{document_id}/ai-extract",
+    response_model=AIExtractResponse,
+    summary="Dùng AI trích xuất thực thể thông minh (MSSV, Họ tên, Lớp, Khoa, Lý do, Số tiền, Tóm tắt)",
+)
+async def ai_extract_document_fields(
+    document_id: UUID,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+) -> AIExtractResponse:
+    """
+    Sử dụng AI phân tích ngữ cảnh, bóc tách thực thể sinh viên vào metadata và gợi ý xử lý.
+    """
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    stmt = select(OCRResult).where(OCRResult.document_id == document_id, OCRResult.is_latest == True)
+    res = await db.execute(stmt)
+    ocr = res.scalars().first()
+    text = (ocr.corrected_text or ocr.raw_text or "") if ocr else ""
+
+    extracted = await ai_service.extract_smart_fields(text)
+
+    # Cập nhật vào DB metadata
+    stmt_meta = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
+    meta_res = await db.execute(stmt_meta)
+    meta_obj = meta_res.scalars().first()
+
+    extra_data = {
+        "class_name": extracted.get("class_name"),
+        "faculty": extracted.get("faculty"),
+        "document_type": extracted.get("document_type"),
+        "reason": extracted.get("reason"),
+        "amount": extracted.get("amount"),
+        "summary": extracted.get("summary"),
+        "suggested_action": extracted.get("suggested_action"),
+        "ai_provider": extracted.get("provider"),
+        "ai_model": extracted.get("model"),
+    }
+
+    parsed_date = None
+    if extracted.get("document_date"):
+        try:
+            if isinstance(extracted["document_date"], str):
+                parsed_date = datetime.fromisoformat(extracted["document_date"])
+            elif isinstance(extracted["document_date"], datetime):
+                parsed_date = extracted["document_date"]
+        except Exception:
+            pass
+
+    if not meta_obj:
+        meta_obj = DocumentMetadata(
+            document_id=document_id,
+            student_id=extracted.get("student_id"),
+            student_name=extracted.get("student_name"),
+            document_date=parsed_date,
+            extra=extra_data,
+        )
+        db.add(meta_obj)
+    else:
+        if extracted.get("student_id"):
+            meta_obj.student_id = extracted["student_id"]
+        if extracted.get("student_name"):
+            meta_obj.student_name = extracted["student_name"]
+        if parsed_date:
+            meta_obj.document_date = parsed_date
+        current_extra = meta_obj.extra or {}
+        current_extra.update(extra_data)
+        meta_obj.extra = current_extra
+
+    await db.commit()
+    await db.refresh(meta_obj)
+
+    return AIExtractResponse(
+        student_name=extracted.get("student_name"),
+        student_id=extracted.get("student_id"),
+        class_name=extracted.get("class_name"),
+        faculty=extracted.get("faculty"),
+        document_type=extracted.get("document_type"),
+        reason=extracted.get("reason"),
+        amount=extracted.get("amount"),
+        document_date=extracted.get("document_date"),
+        summary=extracted.get("summary"),
+        suggested_action=extracted.get("suggested_action"),
+        provider=extracted.get("provider", "rule_based"),
+        model=extracted.get("model", "regex"),
+        confidence_score=extracted.get("confidence_score", 0.9),
+    )
 
 
 @router.get(

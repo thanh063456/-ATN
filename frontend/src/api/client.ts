@@ -18,6 +18,19 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Khi token hết hạn (401), tự động xóa token cũ và redirect về login
+    if (error.response?.status === 401) {
+      const storedToken = localStorage.getItem("access_token");
+      if (storedToken) {
+        console.warn("[API] 401 Unauthorized — clearing expired token");
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user_profile");
+        // Redirect về login nếu chưa ở trang login
+        if (!window.location.pathname.includes("/login")) {
+          window.location.href = "/login";
+        }
+      }
+    }
     const message =
       error.response?.data?.detail ||
       error.response?.data?.message ||

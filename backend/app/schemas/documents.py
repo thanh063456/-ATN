@@ -42,6 +42,7 @@ class ProcessingJobResponse(BaseModel):
     status: str
     error_message: str | None = None
     retry_count: int
+    ocr_progress: int = 0  # 0-100%
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime
@@ -71,6 +72,38 @@ class FieldExtractionUpdateRequest(BaseModel):
     document_number: str | None = None
     document_date: datetime | None = None
     extra: dict | None = None
+
+
+class AIRefineRequest(BaseModel):
+    """Payload yêu cầu AI hiệu chỉnh chính tả & cấu trúc văn bản OCR."""
+    text: str | None = Field(default=None, description="Văn bản OCR cần AI tinh chỉnh (nếu None sẽ lấy từ OCRResult mới nhất)")
+
+
+class AIRefineResponse(BaseModel):
+    """Kết quả AI hiệu chỉnh văn bản."""
+    original_text: str
+    refined_text: str
+    provider: str
+    model: str
+    success: bool
+    message: str | None = None
+
+
+class AIExtractResponse(BaseModel):
+    """Kết quả AI trích xuất thông tin thông minh."""
+    student_name: str | None = None
+    student_id: str | None = None
+    class_name: str | None = None
+    faculty: str | None = None
+    document_type: str | None = None
+    reason: str | None = None
+    amount: str | None = None
+    document_date: datetime | str | None = None
+    summary: str | None = None
+    suggested_action: str | None = None
+    provider: str = "rule_based"
+    model: str = "regex"
+    confidence_score: float = 0.9
 
 
 class VerificationResponse(BaseModel):
@@ -136,6 +169,7 @@ class DocumentListItem(DocumentResponse):
     ocr_confidence: float | None = None
     student_id: str | None = None
     student_name: str | None = None
+    ocr_progress: int = 0  # 0-100% tiến độ OCR thực tế
 
 
 class DocumentListResponse(BaseModel):

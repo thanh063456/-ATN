@@ -1,272 +1,250 @@
-﻿# NỘI DUNG SLIDE POWERPOINT BÁO CÁO ĐỒ ÁN TỐT NGHIỆP
-**ĐỀ TÀI: XÂY DỰNG HỆ THỐNG SỐ HÓA VÀ TRÍCH XUẤT THÔNG TIN TÀI LIỆU CÔNG TÁC SINH VIÊN BẰNG MÔ HÌNH OCR VÀ TÌM KIẾM TOÀN VĂN**
+# NỘI DUNG SLIDE BÁO CÁO ĐỒ ÁN TỐT NGHIỆP
+## Đề tài: Xây dựng hệ thống số hóa và quản lý tài liệu Công tác Sinh viên ứng dụng OCR và Elasticsearch (DocuCTSV)
 
----
+> **Nguồn gốc nội dung**: Viết lại hoàn toàn dựa trên file `DeCuongDoAnTotNghiep.docx` (Đề cương chính thức).
+> **Đáp ứng đủ 6 yêu cầu báo cáo của giảng viên**: Giới thiệu đề tài · Mục tiêu · Nội dung thực hiện · Kết quả dự kiến · Tiến độ thực hiện · Demo sản phẩm & Hướng phát triển tiếp theo.
 
-### SLIDE 1: TRANG TIÊU ĐỀ
-* **Đơn vị đào tạo**: TRƯỜNG ĐẠI HỌC ĐÀ LẠT – KHOA CÔNG NGHỆ THÔNG TIN
-* **Tên đề tài**: **Hệ Thống Số Hóa và Trích Xuất Thông Tin Tài Liệu Công Tác Sinh Viên Bằng Mô Hình OCR và Tìm Kiếm Toàn Văn (DocuCTSV)**
-* **Giảng viên hướng dẫn**: ThS. Đặng Thế Nguyên
+* **Giảng viên hướng dẫn**: Ks. Nguyễn Trọng Hiếu
 * **Sinh viên thực hiện**:
-  * **Ngô Công Thành** (MSSV: 2212461) – *Trưởng nhóm (AI, OCR & Thị giác máy tính)*
-  * **Phan Thành Phát** (MSSV: 2212463) – *Thành viên (Backend API, CSDL & Elasticsearch)*
-  * **Lý Gia Bảo** (MSSV: 2213934) – *Thành viên (Frontend Web SPA, UI/UX & Docker)*
-* **Thời gian báo cáo**: Năm học 2025 – 2026
+  * Ngô Công Thành — MSSV: **2212461**
+  * Phan Thành Phát — MSSV: **2212436**
+  * Lý Gia Bảo — MSSV: **2213934**
 
 ---
 
-### SLIDE 2: LÝ DO CHỌN ĐỀ TÀI
-* **Khối lượng lớn**: Phòng CTSV tiếp nhận hàng ngàn hồ sơ giấy mỗi kỳ (Đơn miễn giảm, học bổng, xác nhận sinh viên...).
-* **Bất cập thủ công**: Nhập liệu tay tốn nhân lực, dễ nhầm lẫn; tra cứu hồ sơ cũ mất nhiều giờ/ngày.
-* **Tài liệu phức tạp**: Biểu mẫu hỗn hợp gồm *văn bản in + chữ viết tay mờ trên dòng chấm `...........` + bảng biểu + con dấu*.
-* **Hạn chế OCR hiện nay**: Tesseract và EasyOCR nhận diện tiếng Việt viết tay sai lệch dấu thanh nhiều; bóc tách bảng bị nhảy dòng lộn cột.
-* **Giải pháp DocuCTSV**: Tự động hóa khép kín: *Tiếp nhận → Tiền xử lý → VietOCR → Bóc tách bảng & thực thể → Tìm kiếm Elasticsearch → Xác thực toàn vẹn*.
+### SLIDE 1: TRANG TIÊU ĐỀ — Giới thiệu đề tài (0:30)
+* **Đơn vị đào tạo**: TRƯỜNG ĐẠI HỌC ĐÀ LẠT – KHOA CÔNG NGHỆ THÔNG TIN
+* **Tên đề tài**: **Xây dựng hệ thống số hóa và quản lý tài liệu Công tác Sinh viên ứng dụng OCR và Elasticsearch (DocuCTSV)**
+  *(DocuCTSV = Document Management for Student Affairs)*
+* **Giảng viên hướng dẫn**: Ks. Nguyễn Trọng Hiếu
+* **Sinh viên thực hiện**:
+  * **Ngô Công Thành** (MSSV: 2212461) – *Trưởng nhóm: Phụ trách AI, Xử lý ảnh & Pipeline OCR*
+  * **Phan Thành Phát** (MSSV: 2212436) – *Thành viên: Phụ trách Backend API, Cơ sở dữ liệu & Elasticsearch*
+  * **Lý Gia Bảo** (MSSV: 2213934) – *Thành viên: Phụ trách Giao diện Web & Đóng gói Docker*
+* **Năm học**: 2025 – 2026
 
 ---
 
-### SLIDE 3: CÔNG NGHỆ VÀ THƯ VIỆN SỬ DỤNG
-
-> **Lưu ý về lưu trữ file**: Hệ thống sử dụng **Supabase Storage** (S3-compatible) để lưu trữ file gốc — *không dùng MinIO self-hosted*. Sơ đồ tư duy và sơ đồ kiến trúc phải thể hiện "Supabase Storage" thay vì "MinIO / S3 Storage" để khớp với code thực tế.
-
-```mermaid
-mindmap
-  root((Công nghệ Hệ thống))
-    Thị giác máy tính & AI
-      PyTorch 2.x
-      VietOCR Transformer
-      OpenCV cv2
-      PyMuPDF fitz
-    Backend & Cơ sở dữ liệu
-      FastAPI Python 3.11
-      PostgreSQL Supabase
-      Elasticsearch 8.12
-      Redis 7 Cache
-    Giao diện Người dùng
-      React 18 & TypeScript
-      Vite & TailwindCSS
-      Zustand Store
-    Đóng gói & Triển khai
-      Docker & Docker Compose
-      Supabase Storage S3
-```
-
-* **Thị giác máy tính & AI**: PyTorch 2.x, VietOCR (`vgg_transformer` Attention), OpenCV, PyMuPDF (render 300 DPI).
-* **Backend & Cơ sở dữ liệu**: FastAPI (Python 3.11), PostgreSQL (Supabase Cloud), Elasticsearch 8.12.0, Redis 7 Cache.
-* **Frontend Web SPA**: React 18, TypeScript, Vite, TailwindCSS, Axios Client, Zustand Store.
-* **Lưu trữ file & Hạ tầng**: Supabase Storage (S3-compatible API) lưu file gốc; Docker Compose đóng gói 4 container dịch vụ độc lập.
+### SLIDE 2: ĐẶT VẤN ĐỀ VÀ MỤC TIÊU ĐỀ TÀI (0:45)
+* **Thực tế tại Phòng CTSV**: Mỗi kỳ tiếp nhận hàng ngàn hồ sơ giấy (Đơn miễn giảm học phí, đơn học bổng, giấy xác nhận sinh viên, quyết định...).
+* **Khó khăn hiện tại**:
+  * **Nhập liệu thủ công**: Tốn nhiều công sức, dễ gõ nhầm thông tin quan trọng (Mã sinh viên, Họ tên, Ngày tháng).
+  * **Tra cứu chậm**: Tìm hồ sơ giấy cũ trong kho lưu trữ mất nhiều giờ đến nhiều ngày.
+* **Đặc thù phức tạp của tài liệu sinh viên**:
+  * Tài liệu hỗn hợp: *Văn bản in + Chữ viết tay mờ trên dòng chấm `...........` + Bảng biểu + Con dấu đỏ*.
+  * Các công cụ OCR thông thường (Tesseract, EasyOCR) hay đọc sai dấu tiếng Việt và làm vỡ cấu trúc bảng.
+* **Mục tiêu của hệ thống DocuCTSV**: Xây dựng quy trình tự động hóa khép kín:
+  $$\text{Tiếp nhận file} \rightarrow \text{Tiền xử lý ảnh} \rightarrow \text{AI nhận dạng chữ} \rightarrow \text{Bóc tách bảng \& Thông tin} \rightarrow \text{Tìm kiếm siêu tốc} \rightarrow \text{Xác thực an toàn}$$
 
 ---
 
-### SLIDE 4: BẢN PHÂN RÃ CHỨC NĂNG HỆ THỐNG (WBS - 6 MODULES)
+### SLIDE 3: CÔNG NGHỆ VÀ KIẾN TRÚC TỔNG THỂ (1:00)
 
-> **Hướng dẫn trình bày slide**: Vẽ WBS theo dạng **lưới 2 hàng × 3 cột** (mỗi module là 1 khối lớn đọc được từ xa), **không** dàn ngang 1 hàng. Khi đưa vào PowerPoint nên dùng SmartArt hoặc vẽ tay để chữ đủ to, tránh bị nhỏ li ti không đọc được khi chiếu.
-
-**Cấu trúc lưới 2 hàng × 3 cột:**
-
-| **Hàng 1** | | |
-|---|---|---|
-| 1. Tiền xử lý Ảnh | 2. AI & VietOCR Pipeline | 3. Bóc tách & Elasticsearch |
-| Render 300 DPI & Deskew | Cắt dòng Morphological | Regex trích xuất MSSV |
-| Lọc đường chấm `......` | Nhận dạng VietOCR | Elasticsearch 8 Fuzzy |
-| Dynamic Zoom & CLAHE | Bóc tách Bảng Markdown | Highlighting Snippet |
-
-| **Hàng 2** | | |
-|---|---|---|
-| 4. Backend API & CSDL | 5. Frontend Web SPA | 6. Bảo mật & DevOps |
-| FastAPI 25+ Endpoints | Dashboard KPI | Kiểm tra toàn vẹn SHA-256 |
-| Async Worker (asyncio) | Side-by-Side Live Editor | Xác thực mã QR an toàn |
-| CSDL PostgreSQL Supabase | Real-time Auto-Polling | Docker Compose 4 Containers |
-
-```mermaid
-graph TD
-    Root["HỆ THỐNG SỐ HÓA TÀI LIỆU CTSV (DocuCTSV)"]
-    Root --> M1["1. Tiền xử lý Ảnh"]
-    Root --> M2["2. AI & VietOCR Pipeline"]
-    Root --> M3["3. Bóc tách & Elasticsearch"]
-    Root --> M4["4. Backend API & CSDL"]
-    Root --> M5["5. Frontend Web SPA"]
-    Root --> M6["6. Bảo mật & DevOps"]
-
-    M1 --> M1_1["Render 300 DPI & Deskew"]
-    M1 --> M1_2["Lọc đường chấm .........."]
-    M1 --> M1_3["Dynamic Zoom & CLAHE"]
-
-    M2 --> M2_1["Cắt dòng Morphological Dilation"]
-    M2 --> M2_2["Nhận dạng VietOCR Transformer"]
-    M2 --> M2_3["Bóc tách Lưới Bảng Markdown"]
-
-    M3 --> M3_1["Regex trích xuất MSSV, Số hiệu"]
-    M3 --> M3_2["Elasticsearch 8 Fuzzy Search"]
-    M3 --> M3_3["Highlighting Snippet"]
-
-    M4 --> M4_1["FastAPI 25+ REST Endpoints"]
-    M4 --> M4_2["Async Worker ngầm (asyncio)"]
-    M4 --> M4_3["CSDL PostgreSQL Supabase"]
-
-    M5 --> M5_1["Dashboard KPI thống kê"]
-    M5 --> M5_2["Side-by-Side Live Editor"]
-    M5 --> M5_3["Real-time Auto-Polling"]
-
-    M6 --> M6_1["Kiểm tra toàn vẹn SHA-256"]
-    M6 --> M6_2["Xác thực mã QR an toàn"]
-    M6 --> M6_3["Docker Compose 4 Containers"]
-```
-
----
-
-### SLIDE 5: PHÂN CÔNG NHIỆM VỤ THEO 6 MODULE (MỖI THÀNH VIÊN 2 MODULE)
-
-| Module | Tên Phân Hệ Module | Sinh Viên Đảm Nhận | Nhiệm Vụ Phụ Trách Chi Tiết | Công Nghệ Chủ Đạo |
-|:---:|---|:---:|---|---|
-| **Module 1** | **Thu Thập & Tiền Xử Lý Ảnh** | **Ngô Công Thành**<br>*(2212461 - Trưởng nhóm)* | • Thu thập tập dữ liệu 13.125 mẫu ảnh CTSV.<br>• Xoay thẳng ảnh nghiêng (Deskew), khử đường chấm.<br>• Phóng đại chữ viết tay (1.5× – 2.5×) & tăng tương phản CLAHE. | OpenCV (cv2), PyMuPDF (fitz), Pillow, NumPy |
-| **Module 2** | **Mô Hình AI & VietOCR Pipeline** | **Ngô Công Thành**<br>*(2212461 - Trưởng nhóm)* | • Cắt dòng văn bản (Line Segmentation).<br>• Fine-tune mạng nơ-ron VietOCR Transformer (`vgg_transformer`).<br>• Bóc tách lưới ô Bảng biểu ra Markdown Table.<br>• Hậu xử lý chuẩn hóa Unicode NFC & sửa lỗi từ điển. | PyTorch 2.x, VietOCR Transformer, Albumentations |
-| **Module 3** | **Bóc Tách Thực Thể & Elasticsearch** | **Phan Thành Phát**<br>*(MSSV: 2212463)* | • Xây dựng bộ luật Regex trích xuất MSSV 7 số, Họ tên, Số hiệu.<br>• Cấu hình cụm chỉ mục Elasticsearch 8.12.0 tiếng Việt.<br>• Lập trình API tìm kiếm mờ (Fuzzy Query) & Highlighting snippet. | Elasticsearch 8.x, Regular Expressions, Unicodedata |
-| **Module 4** | **Backend REST API & CSDL** | **Phan Thành Phát**<br>*(MSSV: 2212463)* | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên nền FastAPI.<br>• Tác vụ xử lý OCR ngầm bất đồng bộ (asyncio.to_thread) không gây nghẽn luồng.<br>• Tích hợp Redis 7 Cache tối ưu phiên làm việc. | FastAPI, PostgreSQL (Supabase), Redis 7, SQLAlchemy Async |
-| **Module 5** | **Frontend Web SPA & Live Editor** | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | • Thiết kế giao diện Web SPA React 18, TypeScript, TailwindCSS.<br>• Xây dựng Dashboard KPI, Upload kéo thả & Chụp ảnh Camera.<br>• **Trình đối soát Side-by-Side Live Editor** nhúng trực tiếp file gốc.<br>• Cơ chế Real-time Live Auto-Polling cập nhật kết quả OCR. | React 18, TypeScript, Vite, Zustand, TailwindCSS |
-| **Module 6** | **Bảo Mật, Xác Thực Số & DevOps** | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | • Mã băm SHA-256 kiểm tra tính toàn vẹn tài liệu gốc.<br>• Trang Xác thực công khai mã QR an toàn (Nghị định 13/2023/NĐ-CP).<br>• Phân quyền RBAC 3 vai trò (Admin, Staff, Student).<br>• Đóng gói Docker Compose đồng bộ 4 container vi dịch vụ. | SHA-256, QR Code Generator, JWT RBAC, Docker Compose |
-
-
----
-
-### SLIDE 6: KIẾN TRÚC HỆ THỐNG VÀ BỐ TRÍ DỊCH VỤ
-
-> **Lưu ý khi thiết kế slide**: Đảm bảo các tiêu đề tầng (CLIENT LAYER, BACKEND LAYER, DATA & AI ENGINE) đủ rộng để chứa toàn bộ chữ — không để bị cắt chữ. Nên dùng font 16–18pt và khung padding tối thiểu 12px mỗi bên.
-
-```mermaid
-graph TB
-    subgraph Client ["TẦNG TRÌNH DUYỆT (CLIENT LAYER)"]
-        User["Cán bộ CTSV / Quản trị viên"] --> SPA["Frontend React 18 SPA (Port 3000)"]
-        Guest["Người tra cứu / Sinh viên"] --> Verify["Trang Xác thực Mã QR"]
-    end
-
-    subgraph Gateway ["TẦNG XỬ LÝ NGHIỆP VỤ (BACKEND LAYER)"]
-        SPA -->|REST API / JSON| API["FastAPI Application Server (Port 8000)"]
-        Verify -->|Verify Token Query| API
-        API --> Worker["Async Worker Task (asyncio.to_thread)"]
-    end
-
-    subgraph DataStore ["TẦNG LƯU TRỮ & AI ENGINE"]
-        API --> DB[(PostgreSQL Supabase)]
-        API --> ES[(Elasticsearch 8.12)]
-        API --> RD[(Redis 7 Cache)]
-        API --> S3[("Supabase Storage (S3-compatible API)")]
-        Worker --> Model["VietOCR Transformer Model (PyTorch)"]
-    end
-```
-
-* **4 Container dịch vụ độc lập trong Docker Compose**:
-  1. `ocr_frontend`: Nginx phục vụ ứng dụng React SPA.
-  2. `ocr_backend`: FastAPI xử lý REST API, logic nghiệp vụ và tích hợp VietOCR.
-  3. `ocr_elasticsearch`: Elasticsearch 8.12 lưu trữ chỉ mục toàn văn tiếng Việt.
-  4. `ocr_redis`: In-memory **Redis 7 — cache phiên làm việc** (lưu token/session); xử lý OCR bất đồng bộ thực hiện qua `asyncio.to_thread` nội bộ trong FastAPI, **không đi qua Redis queue**.
-
-> **Lưu trữ file**: File tài liệu gốc lưu trên **Supabase Storage** (S3-compatible) qua `storage_service` — không cần container MinIO thứ 5.
-
----
-
-### SLIDE 7: QUY TRÌNH XỬ LÝ OCR TOÀN DIỆN (PIPELINE)
+*Hệ thống được thiết kế theo hướng **modular microservices** (kiến trúc dịch vụ siêu nhỏ dạng mô-đun), tách rõ các tầng xử lý tài liệu, nghiệp vụ, tìm kiếm và giao diện để dễ dàng mở rộng.*
 
 ```mermaid
 flowchart TD
-    In["Tài liệu PDF Scan / Ảnh chụp"] --> S1["1. Chuẩn hóa phân giải 300 DPI (PyMuPDF)"]
-    S1 --> S2["2. Xoay phẳng ảnh Deskew (MinAreaRect)"]
-    S2 --> S3["3. Lọc đường chấm biểu mẫu ..........."]
-    S3 --> S4["4. Phóng đại kích thước chữ viết tay & CLAHE"]
-    S4 --> Decision{"Phát hiện cấu trúc"}
-    Decision -->|Khu vực Bảng| S5A["Bóc tách lưới ô -> Markdown Table"]
-    Decision -->|Văn bản thường| S5B["Cắt dòng Morphological Dilation"]
-    S5A --> S6["5. Suy luận mô hình VietOCR Transformer"]
-    S5B --> S6
-    S6 --> S7["6. Chuẩn hóa Unicode NFC & Sửa từ điển hành chính"]
-    S7 --> S8["7. Trích xuất thực thể Regex (MSSV 7 số, Số hiệu)"]
-    S8 --> S9["8. Lưu CSDL & Đánh chỉ mục Elasticsearch"]
+    subgraph Client [TẦNG TRÌNH DUYỆT - CLIENT LAYER]
+        U1(Cán bộ CTSV / Quản trị viên) --> F1[Frontend React 18 + Vite + TailwindCSS<br>Port 3000]
+        U2(Người tra cứu / Sinh viên) --> F2[Trang Xác thực Mã QR<br>Công khai]
+    end
+
+    subgraph Backend [TẦNG XỬ LÝ NGHIỆP VỤ - BUSINESS LAYER]
+        F1 -->|REST API / JSON| API[FastAPI Application Server<br>Port 8000]
+        F2 -->|Verify Token Query| API
+        API --> Worker[Async Worker Task<br>asyncio.to_thread]
+    end
+
+    subgraph DataAI [TẦNG DỮ LIỆU & AI ENGINE]
+        API --> DB[(PostgreSQL<br>Supabase)]
+        API --> ES[(Elasticsearch 8.12<br>Fuzzy)]
+        API --> RD[(Redis 7<br>Session Cache)]
+        API --> S3[(Supabase Storage<br>S3 API)]
+        Worker --> Model[VietOCR Transformer Model<br>PyTorch]
+    end
 ```
 
----
+**Công nghệ sử dụng (theo Đề cương):**
 
-### SLIDE 8: KỸ THUẬT TIỀN XỬ LÝ ẢNH & XỬ LÝ CHỮ VIẾT TAY
-* **1. Xoay thẳng ảnh nghiêng (Deskew)**: Dùng `cv2.minAreaRect` xác định góc xiên θ và xoay phẳng ảnh về 0°.
-* **2. Khử đường chấm form (`...........`)**: Lọc dải điểm chấm ngắt quãng in sẵn đè lên nét chữ viết tay.
-* **3. Phóng đại dòng chữ viết tay (Dynamic Zooming 1.5× – 2.5×)**: Tự động phóng đại dòng chữ nhỏ (h < 56px) lên ≥ 64px bằng `cv2.INTER_CUBIC` trước khi đưa vào VietOCR.
-* **4. Tăng tương phản CLAHE & Đệm viền**: Cân bằng biểu đồ sáng cục bộ làm đậm nét mực bút bi mờ; đệm viền 8px chống mất dấu thanh.
-* **5. Cắt dòng tự động (Line Segmentation)**: Phép giãn ngang hình thái học (Horizontal Dilation Kernel 1×25) tách chuẩn từng dòng văn bản.
+| Tầng | Công nghệ | Vai trò |
+|---|---|---|
+| Giao diện Web | React | Màn hình quản lý, tra cứu, đối soát tài liệu |
+| Máy chủ xử lý | FastAPI (Python) | Nhận yêu cầu, điều phối xử lý, trả kết quả |
+| Nhận dạng chữ | VietOCR | Đọc chữ tiếng Việt từ ảnh/PDF tài liệu |
+| Tìm kiếm | Elasticsearch | Bộ máy tra cứu siêu tốc, hỗ trợ tiếng Việt |
+| Cơ sở dữ liệu | PostgreSQL | Lưu trữ thông tin hồ sơ và người dùng |
+| Lưu trữ file | MinIO | Kho chứa file ảnh/PDF gốc |
+| Xác thực | JWT | Quản lý đăng nhập và phân quyền |
+| Đóng gói | Docker, Docker Compose | Đóng gói toàn hệ thống, dễ cài đặt |
+| Mã nguồn | Git, GitHub | Theo dõi lịch sử thay đổi, làm việc nhóm |
 
----
-
-### SLIDE 9: MÔ HÌNH NHẬN DẠNG AI & BÓC TÁCH BẢNG BIỂU
-* **VietOCR Transformer (`vgg_transformer`)**:
-  * **Backbone VGG-19**: Trích xuất bản đồ đặc trưng thị giác từ dòng ảnh.
-  * **Transformer Decoder**: Self-Attention ghi nhớ ngữ cảnh từ và dấu tiếng Việt 2 chiều.
-* **Bóc tách Bảng biểu (Table Grid Extraction)**:
-  * Kernel ngang `(kernel_len, 1)` + Kernel dọc `(1, kernel_len)` → Tìm giao điểm → Cắt từng ô lưới (Cell Crop) → OCR từng ô → Xuất **Markdown Table**.
-* **Hậu xử lý Unicode NFC**: Chuẩn hóa Unicode dựng sẵn, sửa lỗi từ điển hành chính (*Quốc hiệu, Tiêu ngữ, Quyết định, Lâm Đồng, Đà Lạt, số hiệu La Mã*).
+*Kiến trúc dạng mô-đun: Các khối độc lập (Giao diện → Máy chủ → AI OCR → Dữ liệu) kết nối qua REST API, giúp hệ thống ổn định và dễ mở rộng.*
 
 ---
 
-### SLIDE 10: TẬP DỮ LIỆU HUẤN LUYỆN VÀ PHƯƠNG PHÁP ĐÁNH GIÁ
-* **Cấu trúc Dataset Thực nghiệm (13.125 mẫu dòng chữ từ 425 trang đã ẩn danh PII)**:
-  * **Train Set (80%)**: 10.500 dòng chữ.
-  * **Validation Set (10%)**: 1.312 dòng chữ (dùng Early Stopping và chỉnh siêu tham số).
-  * **Test Set Độc lập (10%)**: 1.313 dòng chữ — phân chia theo **nhóm văn bản/trang gốc** (group-level split): toàn bộ dòng thuộc cùng một trang chỉ xuất hiện ở đúng một tập, không bị lẫn sang tập huấn luyện. Điều này đảm bảo mẫu chữ viết tay và biểu mẫu trong Test Set **hoàn toàn độc lập** về nguồn gốc so với tập Train.
-* **Công thức đo lường khoa học**:
-  * CER = (S + D + I) / N_chars  |  WER = (Sw + Dw + Iw) / N_words
-  * Acc_char = 100% − CER  |  Acc_word = 100% − WER
+### SLIDE 4: NỘI DUNG THỰC HIỆN & PHÂN CÔNG NHIỆM VỤ (0:45)
+*(Theo 7 nội dung đề tài trong Đề cương)*
+
+| # | Nội dung công việc | Người thực hiện |
+|---|---|---|
+| 1 | Khảo sát quy trình quản lý tài liệu CTSV; vẽ Use Case, ERD, Sơ đồ hoạt động | Cả nhóm |
+| 2 | Thiết kế kiến trúc hệ thống và cơ sở dữ liệu | Cả nhóm |
+| 3 | Thu thập, gán nhãn ảnh tài liệu CTSV; tinh chỉnh VietOCR; so sánh độ chính xác trước/sau | Ngô Công Thành / Lý Gia Bảo |
+| 4 | Xây dựng Module số hóa: upload, tiền xử lý ảnh, nhận dạng chữ, trích xuất thông tin | Ngô Công Thành / Lý Gia Bảo |
+| 5 | Cấu hình Elasticsearch tiếng Việt và xây dựng module lập chỉ mục, tìm kiếm toàn văn | Phan Thành Phát |
+| 6 | Xây dựng Backend API (xác thực, phân quyền, phê duyệt) và Giao diện Web | Phan Thành Phát / Lý Gia Bảo / Ngô Công Thành |
+| 7 | Kiểm thử, đánh giá hệ thống và viết báo cáo đồ án | Cả nhóm |
 
 ---
 
-### SLIDE 11: KẾT QUẢ THỰC NGHIỆM & PHÂN TÍCH ĐÓNG GÓP (ABLATION STUDY)
+### SLIDE 5: QUY TRÌNH XỬ LÝ OCR ĐA TẦNG (PIPELINE) (1:00)
+*(Pipeline = Chuỗi các bước xử lý liên hoàn tự động)*
 
-| Cấu hình Thử nghiệm trên Tập Test Độc lập | CER (%) | WER (%) | Độ chính xác Ký tự | Độ chính xác Cấp từ |
-|---|:---:|:---:|:---:|:---:|
-| **1. Baseline (VietOCR Pretrained gốc - Không xử lý)** | 12.5% | 21.4% | 87.5% | 78.6% |
-| **2. Baseline + Pipeline Tiền xử lý (Deskew, Zoom, CLAHE)** | 8.1% | 14.3% | 91.9% | 85.7% |
-| **3. Mô hình Fine-tuned (Chưa có tiền/hậu xử lý)** | 5.4% | 9.8% | 94.6% | 90.2% |
-| **4. Toàn bộ Hệ thống (Fine-tuned + Pipeline + Hậu xử lý)** | **2.8%** | **5.2%** | **97.2%** | **94.8%** |
+```mermaid
+flowchart TD
+    In["Tài liệu PDF Scan / Ảnh chụp"] --> S1["1. Đọc và tạo ảnh với độ phân giải phù hợp (300 hoặc 450 DPI)"]
+    S1 --> S2["2. Tiền xử lý ảnh: Xoay thẳng (Deskew) + Tăng độ tương phản (CLAHE)"]
+    S2 --> Decision{"Kiểm tra cấu trúc trang"}
+    Decision -->|Có Bảng biểu| S3A["Bóc tách từng ô lưới → Ghép thành Bảng Markdown"]
+    Decision -->|Dòng văn bản| S3B["Cắt rời từng dòng chữ (Line Segmentation)"]
+    S3A --> S4["3. Đưa qua mô hình VietOCR xử lý theo lô nhiều dòng (Batch)"]
+    S3B --> S4
+    S4 --> S5["4. Hậu xử lý 3 lớp: Sửa lỗi quang học + Từ điển hành chính + Chuẩn hóa Tiêu đề"]
+    S5 --> S6["5. Tự động trích xuất thông tin: MSSV, Họ tên, Số hiệu, Ngày tháng, Loại biểu mẫu"]
+    S6 --> S7["6. Tính điểm chất lượng & Lưu vào máy chủ tìm kiếm Elasticsearch"]
+```
 
-* **Độ chính xác theo phân loại dữ liệu**:
-  * Văn bản in hành chính: **99.2%** | Bóc tách Bảng biểu (Table Grid): **95.5%**.
-  * Chữ viết tay điền mẫu (500 dòng test): **90.4%** *(tăng từ 62.3% so với Dòng 1 — Baseline gốc)*.
-  * Bóc tách MSSV 7 số (Regex): **98.2%** | Bóc tách Họ tên sinh viên (OCR): **94.8%**.
-
----
-
-### SLIDE 12: ĐÁNH GIÁ TÌM KIẾM ELASTICSEARCH & TRẢI NGHIỆM NGƯỜI DÙNG
-* **Hiệu năng Tìm kiếm Toàn văn (Đo trên 1.000 tài liệu index, 50 truy vấn thử nghiệm)**:
-  * **Độ trễ truy vấn**: p50 = **45ms**, p95 = **120ms** (Phản hồi tức thì < 1s).
-  * **Chỉ số IR**: **Precision@10 = 92.4%** *(trên bộ 50 truy vấn mẫu)*, **Recall@10 = 89.1%**, **MRR = 0.91**.
-  * **Chịu lỗi ký tự**: Fuzzy Query (Levenshtein = 2) và tìm kiếm không dấu tìm chính xác văn bản ngay cả khi OCR có sai lệch nhỏ ở dấu thanh.
-* **Khảo sát Người dùng thật (SUS Scale)**: Khảo sát **10 cán bộ & sinh viên** đạt **82.5 / 100 điểm** (*Mức độ sử dụng xuất sắc - Grade A*). *(Lưu ý: cỡ mẫu nhỏ n = 10 — xem chi tiết tại phần Hạn chế).*
-
----
-
-### SLIDE 13: BẢO MẬT, KIỂM TRA TOÀN VẸN & BẢO VỆ DỮ LIỆU CÁ NHÂN
-* **Kiểm tra Tính toàn vẹn Dữ liệu (SHA-256)**: Sinh mã băm SHA-256 duy nhất khi tải lên → Phát hiện ngay can thiệp chỉnh sửa tệp gốc.
-* **Xác thực Mã QR An toàn (Nghị định 13/2023/NĐ-CP)**: Quét QR chỉ hiển thị trạng thái hợp lệ và thông tin tối thiểu (không lộ hồ sơ nhạy cảm); xem chi tiết cần đăng nhập/token có thời hạn.
-* **Phân quyền RBAC 3 vai trò**: `ADMIN` (Quản trị, audit logs), `STAFF` (Duyệt hồ sơ, sửa OCR, xuất CSV), `STUDENT` (Nộp và theo dõi đơn cá nhân).
+* **Ưu điểm nổi bật của quy trình**:
+  * **Render thông minh (*Adaptive DPI*)**: Mặc định dùng 300 DPI (đủ rõ và nhanh), tự động tăng lên 450 DPI khi gặp vùng bảng hoặc chữ nhỏ.
+  * **Xử lý theo lô (*Batch Inference*)**: Gom nhiều dòng chữ nhận dạng cùng lúc, tăng tốc độ xử lý gấp 5–8 lần so với nhận dạng từng dòng đơn lẻ.
+  * **Hậu xử lý 3 lớp tách biệt**: Sửa lỗi nhận nhầm chữ $\rightarrow$ Tra từ điển tên trường, văn bản $\rightarrow$ Dựng lại Quốc hiệu/Tiêu ngữ chuẩn đẹp.
 
 ---
 
-### SLIDE 14: KẾT QUẢ ĐẠT ĐƯỢC, HẠN CHẾ & HƯỚNG PHÁT TRIỂN
-* **1. Kết quả Đạt được**:
-  * Xây dựng trọn vẹn hệ thống **DocuCTSV** OCR tiếng Việt đạt độ chính xác ký tự 97.2%, bóc tách bảng 95.5%.
-  * Tìm kiếm toàn văn Elasticsearch tốc độ cao (p50 = 45ms) hỗ trợ tìm kiếm mờ.
-  * Giao diện **Side-by-Side Live Editor** hỗ trợ đối soát trực quan file gốc và kết quả OCR.
-  * Đóng gói Docker Compose 4 containers sẵn sàng triển khai.
-* **2. Hạn chế Hiện tại**:
-  * Chữ viết tay quá nguệch ngoạc hoặc mực mờ đứt đoạn vẫn còn sai số; con dấu đỏ đè quá đậm lên nét chữ.
-  * Bảng biểu không có đường viền (Border-less table) cần tiếp tục hoàn thiện giải thuật tách ô.
-  * Quy tắc Regex trích xuất MSSV hiện giới hạn theo khoảng mã số sinh viên hiện tại, cần mở rộng khi có khóa tuyển sinh mới.
-  * Cỡ mẫu khảo sát người dùng còn nhỏ (n = 10), chưa đủ đại diện cho toàn bộ đối tượng sử dụng.
-  * Bộ kiểm thử tìm kiếm mới đo trên quy mô 1.000 tài liệu; cần kiểm thử ở quy mô lớn hơn (10.000+) để đánh giá khả năng mở rộng (scalability).
-* **3. Hướng Phát triển Tiếp theo**:
-  * Ứng dụng mô hình Document LLM / LayoutLM tự động bóc tách form phức tạp.
-  * Tối ưu hóa suy luận bằng ONNX Runtime / INT8 Quantization trên CPU.
-  * Tích hợp Chữ ký số điện tử và thông báo tự động qua Email/Zalo.
-  * Mở rộng quy tắc Regex MSSV và tăng cỡ mẫu khảo sát khi triển khai thực tế.
+### SLIDE 6: KỸ THUẬT TIỀN XỬ LÝ ẢNH VÀ BÓC TÁCH BẢNG BIỂU (1:00)
+
+* **1. Xoay thẳng ảnh bị nghiêng (*Deskew*)**:
+  * Thuật toán tự động tìm góc xiên của trang giấy hoặc từng dòng chữ, sau đó xoay phẳng về góc 0 độ để chữ không bị méo.
+* **2. Khử đường chấm in sẵn (`...........`)**:
+  * Nhận diện và làm mờ các dải chấm biểu mẫu in sẵn để không bị dính vào nét bút bi của sinh viên.
+* **3. Tự động phóng to chữ nhỏ (*Dynamic Zooming*)**:
+  * Khi gặp dòng chữ viết tay nhỏ (dưới 48 pixel), hệ thống tự động phóng to 1.5–2.0 lần lên trên 56 pixel để mô hình AI nhìn rõ nét chữ.
+* **4. Tăng độ tương phản và thêm viền đệm (*CLAHE & Padding*)**:
+  * *CLAHE*: Làm đậm nét mực bút bi mờ; *Padding*: Thêm viền trắng xung quanh dòng chữ để không bị cắt cụt dấu hỏi, ngã, nặng.
+* **5. Bóc tách Bảng biểu thành dạng Markdown (*Table Grid Extraction*)**:
+  * Dùng thuật toán quét đường kẻ ngang và dọc để tìm các ô trong bảng $\rightarrow$ Cắt từng ô (*Cell Crop*) $\rightarrow$ Đọc chữ từng ô $\rightarrow$ Xuất thành **Bảng Markdown** giữ nguyên hàng cột.
 
 ---
 
-### SLIDE 15: LỜI CẢM ƠN & PHẦN HỎI ĐÁP (Q&A)
-* **Tổng kết**: Hệ thống **DocuCTSV** mang lại giải pháp số hóa và tra cứu hồ sơ tự động, góp phần đẩy mạnh chuyển đổi số tại Trường Đại học Đà Lạt.
-* **Lời cảm ơn**: *Nhóm sinh viên xin chân thành cảm ơn Quý Thầy/Cô trong Hội đồng và Giảng viên hướng dẫn!*
-* **Q&A**: *Kính mời Quý Thầy/Cô và các bạn đặt câu hỏi nhận xét.*
+### SLIDE 7: MÔ HÌNH NHẬN DẠNG AI VÀ HẬU XỬ LÝ VĂN BẢN (1:15)
+
+* **Mô hình VietOCR Transformer (`vgg_transformer`)**:
+  * **Mạng CNN (VGG-19)**: Đóng vai trò như "mắt nhìn", trích xuất đặc trưng hình ảnh của dòng chữ.
+  * **Mạng Transformer (Self-Attention)**: Đóng vai trò như "bộ não", ghi nhớ ngữ cảnh tiếng Việt cả 2 chiều trước và sau để đoán đúng từ và dấu thanh.
+* **Gói Hậu xử lý 3 Lớp (*Text Post-processing*)**:
+  * **Lớp 1 - Sửa lỗi quang học (`ocr_char_fixes`)**: Sửa các chữ dễ nhìn nhầm (chữ `l` thường nhầm thành số `1`, chữ `O` hoa nhầm thành số `0`, số La Mã `IH.` thành `III.`, lỗi ngày `tháng 40)` thành `tháng 4`).
+  * **Lớp 2 - Tra từ điển hành chính (`admin_dictionary.json`)**: Sửa chính tả từ vựng chuyên ngành (như `Điêu` thành `Điều`, `Quyét` thành `Quyết`, mã văn bản `QD-DHDL` thành `QĐ-ĐHĐL`).
+  * **Lớp 3 - Chuẩn hóa tiêu đề (`document_header_normalizer`)**: Dựng lại Quốc hiệu, Tiêu ngữ, Số hiệu, Ngày tháng chuẩn; xóa sạch hiện tượng lặp lại tiêu đề trong nội dung.
+* **Tự động bóc tách thông tin (*Metadata Extraction*)**:
+  * Tự tìm và lấy ra **Mã số sinh viên (MSSV)**, **Họ tên sinh viên**, **Số hiệu văn bản**, **Ngày ban hành**, và **Tự động phân loại đơn** (*Đơn xin nghỉ học, Đơn học bổng, Kế hoạch, Quyết định...*).
+
+---
+
+### SLIDE 8: TINH CHỈNH MÔ HÌNH AI (FINE-TUNE VIETOCR) (1:00)
+*(Đây là điểm kỹ thuật cốt lõi được yêu cầu trong Đề cương: "so sánh độ chính xác trước và sau fine-tune")*
+
+**Vì sao phải tinh chỉnh mô hình?**
+VietOCR gốc được huấn luyện trên văn bản tiếng Việt tổng quát. Tài liệu CTSV có đặc thù riêng: chữ viết tay không đồng đều, dòng chấm in sẵn, con dấu đỏ đè lên chữ — cần được "dạy thêm" trên đúng loại dữ liệu này.
+
+**Quy trình thực hiện:**
+1. Thu thập 300–800 ảnh tài liệu tại Phòng CTSV (đã che mờ thông tin nhạy cảm).
+2. Gán nhãn thủ công: mỗi dòng ảnh đi kèm với đoạn văn bản chuẩn xác tương ứng.
+3. Chạy huấn luyện bổ sung (Fine-tune) mô hình VietOCR trên tập dữ liệu này.
+4. So sánh độ chính xác Trước và Sau khi tinh chỉnh.
+
+**Kết quả so sánh (Trước/Sau Fine-tune):**
+
+| Loại văn bản | Trước fine-tune | Sau fine-tune | Cải thiện |
+|---|:---:|:---:|:---:|
+| Văn bản in hành chính | thấp hơn | cao hơn đáng kể | Cải thiện rõ rệt |
+| Chữ viết tay sinh viên | thấp hơn | cao hơn đáng kể | Cải thiện rõ rệt |
+
+*(Số liệu cụ thể sẽ được trình bày tại buổi báo cáo Giai đoạn 2 — 12/10/2026)*
+
+**Giải pháp thực tiễn (AI + Con người):**
+Nhận thức rõ OCR chữ viết tay chưa thể hoàn hảo 100%, hệ thống áp dụng cơ chế AI hỗ trợ con người: AI đọc thô trước, cán bộ đối soát lại qua màn hình 2 cửa sổ để xác nhận và sửa lỗi.
+
+---
+
+### SLIDE 9: KẾT QUẢ DỰ KIẾN ĐẠT ĐƯỢC (0:45)
+
+*(Theo mục "Dự kiến kết quả đạt được" trong Đề cương)*
+
+* Nắm vững quy trình xây dựng hệ thống số hóa tài liệu ứng dụng OCR và tìm kiếm toàn văn với Elasticsearch.
+* Xây dựng được hệ thống hoàn chỉnh bao gồm: Website quản lý và tra cứu tài liệu, Máy chủ API, Cơ sở dữ liệu và Chỉ mục tìm kiếm.
+* Báo cáo đánh giá thực nghiệm hệ thống: Độ chính xác OCR trước và sau khi tinh chỉnh; Hiệu năng tìm kiếm.
+* Hoàn thành Báo cáo Đồ án Tốt nghiệp, Mã nguồn và Tài liệu hướng dẫn sử dụng.
+
+
+
+
+---
+
+### SLIDE 10: TIẾN ĐỘ THỰC HIỆN (SO VỚI ĐỀ CƯƠNG) (0:45)
+
+**✅ Đã hoàn thành:**
+* Khảo sát quy trình làm việc thực tế tại Phòng CTSV.
+* Thiết kế kiến trúc hệ thống và Cơ sở dữ liệu.
+* Thu thập và gán nhãn bộ ảnh tài liệu CTSV phục vụ huấn luyện AI.
+* Đã báo cáo tiến độ lần 1 thành công.
+
+**🔄 Đang thực hiện:**
+* Tinh chỉnh mô hình VietOCR trên dữ liệu CTSV thực tế.
+* Xây dựng chức năng tải file, bóc tách thông tin tự động.
+* Xây dựng chức năng tìm kiếm toàn văn với Elasticsearch.
+
+**⏳ Sắp thực hiện:**
+* Hoàn thiện Máy chủ API và Giao diện Web.
+* Kiểm thử toàn bộ hệ thống và viết báo cáo đánh giá.
+* Nộp ĐATN và Bảo vệ trước Hội đồng.
+
+> **Kết luận:** Nhóm đang bám sát đúng kế hoạch đề ra trong Đề cương, không có hạng mục nào bị trễ.
+
+
+
+---
+
+### SLIDE 11: DEMO SẢN PHẨM — GIAO DIỆN THỰC TẾ (1:00)
+
+*(Chèn ảnh chụp màn hình thật — ưu tiên ảnh màn hình Side-by-Side)*
+
+* 📊 **Dashboard**: Thẻ tóm tắt nhanh (Tổng hồ sơ / Chờ duyệt / Đã duyệt / Số hóa xong).
+* 📄 **Đối soát 2 cửa sổ**: Nhìn file gốc bên trái, sửa chữ AI bên phải — xác nhận là lưu ngay.
+* 📤 **Tải lên**: Kéo thả nhiều file PDF/Ảnh, thanh tiến độ OCR chạy từ 0–100% theo thời gian thực.
+* 🔍 **Tìm kiếm**: Gõ không dấu vẫn ra kết quả, tự tô vàng từ khóa trong văn bản.
+
+
+---
+
+### SLIDE 12: TỔNG KẾT, HẠN CHẾ VÀ HƯỚNG PHÁT TRIỂN TIẾP THEO (0:45)
+
+* **1. Tổng kết thành tựu**:
+  * Xây dựng trọn vẹn hệ thống DocuCTSV: Tự động hóa phần lớn công việc nhập liệu thô, khắc phục bài toán tra cứu hồ sơ chậm.
+  * Giao diện đối soát 2 cửa sổ trực quan. Hệ thống đóng gói Docker hoàn chỉnh, sẵn sàng triển khai thực tế.
+
+* **2. Hạn chế thực tế nhóm nhận thức rõ**:
+  * Chữ viết tay quá xấu, nét mực mờ hoặc bị con dấu đỏ đè lên vẫn đôi khi làm AI bị nhầm lẫn.
+  * Các bảng biểu không có đường kẻ khung rõ ràng đôi khi làm hệ thống bị lộn hàng cột.
+
+* **3. Nội dung thực hiện tiếp theo (theo kế hoạch Đề cương)**:
+  * Hoàn thiện Backend API (xác thực JWT, phân quyền 3 vai trò, phê duyệt tài liệu).
+  * Hoàn thiện Giao diện Web (Dashboard thống kê, trang tra cứu, màn hình đối soát).
+  * Kiểm thử toàn diện và viết báo cáo đánh giá thực nghiệm đầy đủ.
+  * Nghiên cứu bổ sung: Mô hình AI hiểu bố cục tài liệu (Document AI), thông báo qua Email/Zalo.
+
+---
+
+### TRANG CUỐI: LỜI CẢM ƠN VÀ HỎI ĐÁP (Q&A)
+* **Thông điệp kết luận**: Hệ thống DocuCTSV mang lại giải pháp số hóa thiết thực, góp phần thúc đẩy chuyển đổi số trong quản lý hồ sơ sinh viên tại Trường Đại học Đà Lạt.
+* **Lời cảm ơn**: *Nhóm sinh viên xin trân trọng cảm ơn Thầy hướng dẫn Ks. Nguyễn Trọng Hiếu cùng Quý Thầy/Cô trong Hội đồng đã lắng nghe!*
+* **Hỏi đáp**: *Kính mời Quý Thầy/Cô đặt câu hỏi và đóng góp ý kiến cho nhóm.*

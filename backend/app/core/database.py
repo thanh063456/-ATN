@@ -94,6 +94,7 @@ async def init_db() -> None:
                 ("documents", "is_verified", "BOOLEAN DEFAULT FALSE"),
                 ("documents", "verification_code", "VARCHAR(255)"),
                 ("documents", "qr_code_url", "TEXT"),
+                ("processing_jobs", "ocr_progress", "SMALLINT DEFAULT 0"),
             ]
             for tbl, col, col_type in columns_to_add:
                 try:

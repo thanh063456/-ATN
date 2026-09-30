@@ -38,9 +38,21 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
     now = datetime.now()
     logger.info("Starting async OCR processing for document_id={doc_id}", doc_id=document_id)
 
+    async def _set_progress(session, progress: int) -> None:
+        """Cập nhật tiến độ OCR (0-100%) vào ProcessingJob và commit ngay."""
+        try:
+            await session.execute(
+                update(ProcessingJob)
+                .where(ProcessingJob.document_id == doc_uuid)
+                .values(ocr_progress=progress)
+            )
+            await session.commit()
+        except Exception:
+            pass  # Không để lỗi progress làm hỏng luồng chính
+
     async with AsyncSessionLocal() as session:
         try:
-            # ── 1. Đánh dấu RUNNING & PROCESSING ─────────────────────────────
+            # ── 1. Đánh dấu RUNNING & PROCESSING (progress: 10%) ──────────────
             await session.execute(
                 update(Document)
                 .where(Document.id == doc_uuid)
@@ -49,11 +61,12 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
             await session.execute(
                 update(ProcessingJob)
                 .where(ProcessingJob.document_id == doc_uuid)
-                .values(status="RUNNING", started_at=now)
+                .values(status="RUNNING", started_at=now, ocr_progress=10)
             )
             await session.commit()
 
-            # ── 2. Lấy Document từ DB ─────────────────────────────────────────
+            # ── 2. Lấy Document từ DB (progress: 20%) ─────────────────────────
+            await _set_progress(session, 20)
             stmt = (
                 select(Document)
                 .where(Document.id == doc_uuid)
@@ -64,17 +77,21 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
             if not doc:
                 raise ValueError(f"Document {document_id} không tồn tại trong database")
 
-            # ── 3. Đọc file từ MinIO (Tuân thủ nguyên tắc OCR chỉ đọc từ MinIO) ─
+            # ── 3. Đọc file từ MinIO (progress: 35%) ──────────────────────────
+            await _set_progress(session, 35)
             file_bytes = await asyncio.to_thread(storage_service.get_file, doc.minio_object_key)
             logger.info("Retrieved file from MinIO: key={key}, bytes={len}",
                         key=doc.minio_object_key, len=len(file_bytes))
 
-            # ── 4. Chạy VietOCR trong thread pool để không block FastAPI event loop ─
+            # ── 4. Chạy VietOCR (progress: 45% → 85% sau khi xong) ───────────
+            await _set_progress(session, 45)
             raw_text, confidence = await asyncio.to_thread(
                 ocr_service.extract_text_from_file, file_bytes, doc.file_type
             )
+            await _set_progress(session, 85)
 
-            # ── 5. Trích xuất Metadata bằng Regex ─────────────────────────────
+            # ── 5. Trích xuất Metadata (progress: 90%) ─────────────────────────
+            await _set_progress(session, 90)
             meta_dict = await asyncio.to_thread(ocr_service.extract_metadata, raw_text)
 
             # ── 6. Lưu OCRResult vào PostgreSQL (is_latest=True, reset cũ) ─────
@@ -119,7 +136,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
                 )
                 session.add(new_meta)
 
-            # ── 8. Cập nhật Document và Job hoàn thành ─────────────────────────
+            # ── 8. Cập nhật Document và Job hoàn thành (progress: 100%) ────────
             await session.execute(
                 update(Document)
                 .where(Document.id == doc_uuid)
@@ -128,7 +145,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
             await session.execute(
                 update(ProcessingJob)
                 .where(ProcessingJob.document_id == doc_uuid)
-                .values(status="SUCCESS", completed_at=now)
+                .values(status="SUCCESS", completed_at=now, ocr_progress=100)
             )
             await session.commit()
 

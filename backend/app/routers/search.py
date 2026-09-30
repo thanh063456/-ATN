@@ -43,6 +43,17 @@ GENERIC_STOPWORDS_ASCII = {
 }
 
 
+VIETNAMESE_VOWEL_MAP = {
+    "a": r"[aAáàảãạâấầẩẫậăắằẳẵặ]",
+    "e": r"[eEéèẻẽẹêếềểễệ]",
+    "i": r"[iIíìỉĩị]",
+    "o": r"[oOóòỏõọôốồổỗộơớờởỡợ]",
+    "u": r"[uUúùủũụưứừửữự]",
+    "y": r"[yYýỳỷỹỵ]",
+    "d": r"[dDđĐ]",
+}
+
+
 def _strip_accents(text: str) -> str:
     """Chuyển đổi chuỗi tiếng Việt có dấu sang không dấu."""
     if not text:
@@ -52,8 +63,83 @@ def _strip_accents(text: str) -> str:
     return "".join(c for c in normalized if unicodedata.category(c) != "Mn").lower().strip()
 
 
+def _accent_to_regex_pattern(term: str) -> str:
+    """Tạo regex pattern khớp cả có dấu và không dấu tiếng Việt."""
+    term_ascii = _strip_accents(term)
+    res = []
+    for ch in term_ascii:
+        if ch in VIETNAMESE_VOWEL_MAP:
+            res.append(VIETNAMESE_VOWEL_MAP[ch])
+        elif ch.isspace():
+            res.append(r"\s+")
+        elif ch.isalnum():
+            res.append(re.escape(ch))
+        else:
+            res.append(re.escape(ch))
+    return "".join(res)
+
+
+def _highlight_spans(text: str, terms: list[str]) -> str:
+    """Đánh dấu thẻ <em> cho tất cả các từ/cụm từ khớp (hỗ trợ không dấu tiếng Việt)."""
+    if not text or not terms:
+        return text
+
+    clean_text = re.sub(r"</?em>", "", text)
+    intervals: list[tuple[int, int]] = []
+
+    # Thu thập tất cả các cụm từ và từ đơn
+    all_terms: list[str] = []
+    for t in terms:
+        t_clean = t.strip()
+        if len(t_clean) >= 2:
+            all_terms.append(t_clean)
+        words = t_clean.split()
+        if len(words) > 1:
+            for w in words:
+                if len(w) >= 2 and _strip_accents(w) not in GENERIC_STOPWORDS_ASCII:
+                    all_terms.append(w)
+
+    sorted_terms = sorted(list(set(all_terms)), key=lambda x: len(_strip_accents(x)), reverse=True)
+    if not sorted_terms:
+        sorted_terms = [t.strip() for t in terms if t.strip()]
+
+    for term in sorted_terms:
+        pattern_str = _accent_to_regex_pattern(term)
+        if not pattern_str:
+            continue
+        try:
+            for m in re.finditer(rf"(?i){pattern_str}", clean_text):
+                intervals.append((m.start(), m.end()))
+        except Exception:
+            continue
+
+    if not intervals:
+        return clean_text
+
+    # Hợp nhất các khoảng giao nhau (Merge overlapping intervals)
+    intervals.sort(key=lambda x: (x[0], -x[1]))
+    merged: list[list[int]] = []
+    for start, end in intervals:
+        if not merged:
+            merged.append([start, end])
+        else:
+            prev_start, prev_end = merged[-1]
+            if start <= prev_end:
+                merged[-1][1] = max(prev_end, end)
+            else:
+                merged.append([start, end])
+
+    # Chèn thẻ <em> và </em> từ cuối chuỗi lên đầu (không làm lệch index)
+    res = list(clean_text)
+    for start, end in reversed(merged):
+        res.insert(end, "</em>")
+        res.insert(start, "<em>")
+
+    return "".join(res)
+
+
 def _extract_highlight_snippet(content: str, target_terms: list[str], max_length: int = 220) -> tuple[str, list[str]]:
-    """Tạo đoạn trích kèm thẻ <em> highlight cho các từ khóa/cụm từ quan trọng."""
+    """Tạo đoạn trích kèm thẻ <em> highlight cho các từ khóa/cụm từ quan trọng (hỗ trợ không dấu)."""
     if not content:
         return ("", [])
 
@@ -69,11 +155,27 @@ def _extract_highlight_snippet(content: str, target_terms: list[str], max_length
     sorted_terms = sorted(target_terms, key=len, reverse=True)
     for term in sorted_terms:
         term_ascii = _strip_accents(term)
+        if len(term_ascii) < 2:
+            continue
         idx = ascii_content.find(term_ascii)
         if idx != -1:
             first_idx = idx
             best_term = term
             break
+
+    # Nếu không tìm thấy cụm dài, thử từng từ đơn
+    if first_idx == -1:
+        for term in target_terms:
+            for w in term.split():
+                w_ascii = _strip_accents(w)
+                if len(w_ascii) >= 2 and w_ascii not in GENERIC_STOPWORDS_ASCII:
+                    idx = ascii_content.find(w_ascii)
+                    if idx != -1:
+                        first_idx = idx
+                        best_term = w
+                        break
+            if first_idx != -1:
+                break
 
     if first_idx == -1:
         snippet = content[:max_length] + ("..." if len(content) > max_length else "")
@@ -83,18 +185,9 @@ def _extract_highlight_snippet(content: str, target_terms: list[str], max_length
     end = min(len(content), start + max_length)
     raw_snippet = ("..." if start > 0 else "") + content[start:end] + ("..." if end < len(content) else "")
 
-    # Đánh dấu highlight
-    highlighted = raw_snippet
-    matched_fragments = []
-    for term in sorted_terms:
-        if len(term.strip()) <= 1:
-            continue
-        pattern = re.compile(re.escape(term.strip()), re.IGNORECASE)
-        if pattern.search(highlighted):
-            highlighted = pattern.sub(r"<em>\g<0></em>", highlighted)
-            matched_fragments.append(term.strip())
-
-    return (highlighted, matched_fragments)
+    # Đánh dấu highlight không dấu
+    highlighted = _highlight_spans(raw_snippet, target_terms)
+    return (highlighted, [best_term])
 
 
 @router.get(
@@ -123,6 +216,7 @@ async def search_documents(
     """
     t0 = time.monotonic()
     query_str = q.strip()
+    raw_words = [w.strip() for w in query_str.split() if w.strip()]
     from_offset = (page - 1) * page_size
     role_name = current_user.role.name if current_user and current_user.role else "STUDENT"
 
@@ -423,6 +517,12 @@ async def search_documents(
                     created_at=doc.created_at,
                 )
             )
+
+    # ── Đảm bảo mọi snippet trả về đều được highlight từ khóa chuẩn (kể cả tìm không dấu) ──
+    highlight_terms = [query_str] + [w for w in raw_words if len(w) >= 2]
+    for r in results:
+        if r.content_snippet:
+            r.content_snippet = _highlight_spans(r.content_snippet, highlight_terms)
 
     total_pages = math.ceil(total_hits / page_size) if total_hits > 0 else 0
     took_ms = int((time.monotonic() - t0) * 1000)

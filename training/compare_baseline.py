@@ -67,6 +67,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
+# Fix Windows console encoding
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # ── Guards ────────────────────────────────────────────────────────────────────
 try:
     import torch
@@ -269,12 +275,15 @@ def load_annotation(ann_path: Path, data_root: Path) -> List[Tuple[Path, str]]:
 
 # ── Predictor ─────────────────────────────────────────────────────────────────
 
-def build_predictor(checkpoint: Path, device: str, beamsearch: bool) -> Predictor:
+def build_predictor(checkpoint: Optional[Path], device: str, beamsearch: bool) -> Predictor:
     config = Cfg.load_config_from_name("vgg_transformer")
-    config["weights"]                 = str(checkpoint.resolve())
+    if checkpoint is not None and str(checkpoint).lower() not in ("none", "default", "pretrained") and checkpoint.exists():
+        config["weights"]                 = str(checkpoint.resolve())
+        config["pretrain"]                = False
+    else:
+        config["pretrain"]                = True
     config["device"]                  = device
     config["predictor"]["beamsearch"] = beamsearch
-    config["pretrain"]                = False
     return Predictor(config)
 
 
@@ -685,8 +694,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--pretrained", type=Path, required=True,
-        help="Checkpoint pretrained gốc (.pth)",
+        "--pretrained", type=Path, default=None,
+        help="Checkpoint pretrained gốc (.pth). Nếu không truyền sẽ dùng trọng số VietOCR mặc định.",
     )
     parser.add_argument(
         "--finetuned", type=Path, required=True,
@@ -704,6 +713,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--data-root", type=Path, default=None,
         help="Thư mục gốc để resolve relative path trong annotation. Mặc định: cwd",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=0,
+        help="Giới hạn số mẫu đánh giá (0 = tất cả mẫu)",
     )
     parser.add_argument(
         "--pretrained-label", type=str,
@@ -740,10 +753,12 @@ def main() -> None:
     print("=" * 65)
 
     # ── Validate inputs ───────────────────────────────────────────────────────
-    for name, p in [("--pretrained", args.pretrained), ("--finetuned", args.finetuned)]:
-        if not p.exists():
-            print(f"[ERROR] {name}: file không tồn tại: {p}", file=sys.stderr)
-            sys.exit(1)
+    if args.pretrained and not args.pretrained.exists():
+        print(f"[ERROR] --pretrained: file không tồn tại: {args.pretrained}", file=sys.stderr)
+        sys.exit(1)
+    if not args.finetuned.exists():
+        print(f"[ERROR] --finetuned: file không tồn tại: {args.finetuned}", file=sys.stderr)
+        sys.exit(1)
     if not args.annotation.exists():
         print(f"[ERROR] --annotation: file không tồn tại: {args.annotation}", file=sys.stderr)
         sys.exit(1)
@@ -764,11 +779,16 @@ def main() -> None:
     if not samples:
         print("[ERROR] Không có sample hợp lệ. Kiểm tra file annotation.")
         sys.exit(1)
-    print(f"  Tìm thấy {len(samples)} samples hợp lệ.")
+    if args.limit and args.limit > 0:
+        samples = samples[:args.limit]
+        print(f"  Giới hạn đánh giá: {len(samples)} samples.")
+    else:
+        print(f"  Tìm thấy {len(samples)} samples hợp lệ.")
 
     # ── Run inference ─────────────────────────────────────────────────────────
     # Pretrained
-    print(f"\n  Tải model pretrained: {args.pretrained.name}")
+    pre_name = args.pretrained.name if args.pretrained else "VietOCR Default Pretrained"
+    print(f"\n  Tải model pretrained: {pre_name}")
     predictor_pre = build_predictor(args.pretrained, device, args.beamsearch)
     preds_pre = run_inference(predictor_pre, samples, args.pretrained_label)
     del predictor_pre   # giải phóng VRAM trước khi load model tiếp theo

@@ -1,0 +1,68 @@
+{
+  "_comment": "Admin dictionary cho Vietnamese administrative document OCR correction",
+  "_version": "1.0.0",
+  "_description": "Từ điển sửa lỗi OCR chuyên biệt cho văn bản hành chính Đại học Đà Lạt",
+
+  "char_corrections": [
+    {"wrong": "Điêu",      "correct": "Điều",       "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "điêu",      "correct": "điều",        "case_insensitive": false, "boundary": "word"},
+    {"wrong": "Căn cú",    "correct": "Căn cứ",      "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "căn cú",    "correct": "căn cứ",      "case_insensitive": false, "boundary": "word"},
+    {"wrong": "Quyét",     "correct": "Quyết",       "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "quyét",     "correct": "quyết",       "case_insensitive": false, "boundary": "word"},
+    {"wrong": "hiêu",      "correct": "hiệu",        "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "quy đinh",  "correct": "quy định",    "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "thưc",      "correct": "thực",        "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "Đai học",   "correct": "Đại học",     "case_insensitive": false, "boundary": "word"},
+    {"wrong": "Đai hoc",   "correct": "Đại học",     "case_insensitive": false, "boundary": "word"},
+    {"wrong": "năm hoc",   "correct": "năm học",     "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "chu nhiêm", "correct": "chủ nhiệm",   "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "chü",       "correct": "chủ",         "case_insensitive": false, "boundary": "word"},
+    {"wrong": "phan công", "correct": "phân công",   "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "phan cong", "correct": "phân công",   "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "Đa Lat",    "correct": "Đà Lạt",      "case_insensitive": false, "boundary": "word"},
+    {"wrong": "nhiêm năm", "correct": "nhiệm năm",   "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "Kế hoach",  "correct": "Kế hoạch",    "case_insensitive": false, "boundary": "word"},
+    {"wrong": "kế hoach",  "correct": "kế hoạch",    "case_insensitive": false, "boundary": "word"},
+    {"wrong": "Thi hành",  "correct": "Thi hành",    "case_insensitive": false, "boundary": "word"},
+    {"wrong": "giao viên", "correct": "giáo viên",   "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "sinh viên", "correct": "sinh viên",   "case_insensitive": false, "boundary": "none"},
+    {"wrong": "hoc phí",   "correct": "học phí",     "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "hoc bổng",  "correct": "học bổng",    "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "cán bô",    "correct": "cán bộ",      "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "tinh",      "correct": "tỉnh",        "case_insensitive": false, "boundary": "none"},
+    {"wrong": "Lam Đong",  "correct": "Lâm Đồng",   "case_insensitive": false, "boundary": "word"},
+    {"wrong": "Lam Dong",  "correct": "Lâm Đồng",   "case_insensitive": false, "boundary": "word"}
+  ],
+
+  "code_map": {
+    "_comment": "Chuẩn hóa mã loại văn bản UPPERCASE → dạng chuẩn có dấu",
+    "QD-DHDL":  "QĐ-ĐHĐL",
+    "QD-DHĐL":  "QĐ-ĐHĐL",
+    "QĐ-DHDL":  "QĐ-ĐHĐL",
+    "TB-DHDL":  "TB-ĐHĐL",
+    "TB-DHĐL":  "TB-ĐHĐL",
+    "CV-DHDL":  "CV-ĐHĐL",
+    "CV-DHĐL":  "CV-ĐHĐL",
+    "HD-DHDL":  "HD-ĐHĐL",
+    "HD-DHĐL":  "HD-ĐHĐL",
+    "KH-DHDL":  "KH-ĐHĐL",
+    "KH-DHĐL":  "KH-ĐHĐL",
+    "BC-DHDL":  "BC-ĐHĐL",
+    "BC-DHĐL":  "BC-ĐHĐL",
+    "BGDDT":    "BGDĐT",
+    "BGD&DT":   "BGDĐT",
+    "TTG":      "TTg",
+    "DHDL":     "ĐHĐL",
+    "DHĐL":     "ĐHĐL"
+  },
+
+  "unit_names": {
+    "_comment": "Tên đơn vị thường bị OCR nhận sai",
+    "PHONG CONG TAC SINH VIEN": "PHÒNG CÔNG TÁC SINH VIÊN",
+    "BO GIAO DUC VA DAO TAO":   "BỘ GIÁO DỤC VÀ ĐÀO TẠO",
+    "TRUONG DAI HOC DA LAT":    "TRƯỜNG ĐẠI HỌC ĐÀ LẠT",
+    "CONG HOA XA HOI CHU NGHIA VIET NAM": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+    "DOC LAP - TU DO - HANH PHUC": "Độc lập - Tự do - Hạnh phúc"
+  }
+}

@@ -514,9 +514,65 @@ export const DocumentsPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Trạng thái OCR */}
-                      <td style={{ padding: "1rem 1rem", verticalAlign: "middle" }}>
-                        <OCRStatusBadge status={doc.ocr_status as any} />
+                      {/* Tiến độ OCR - Thanh % thực tế */}
+                      <td style={{ padding: "1rem 1rem", verticalAlign: "middle", minWidth: "140px" }}>
+                        {(() => {
+                          const status = doc.ocr_status;
+                          const rawProgress = doc.ocr_progress ?? 0;
+                          const progress = status === "DONE" || status === "APPROVED" ? 100
+                            : status === "FAILED" ? 0
+                            : status === "PENDING" ? Math.max(rawProgress, 5)
+                            : rawProgress;
+
+                          const isProcessing = status === "PROCESSING" || status === "PENDING";
+                          const isFailed = status === "FAILED";
+                          const isDone = status === "DONE" || status === "APPROVED";
+
+                          const barColor = isDone ? "#16a34a"
+                            : isFailed ? "#dc2626"
+                            : "#6366f1";
+
+                          const label = isDone ? "Hoàn thành"
+                            : isFailed ? "Thất bại"
+                            : status === "PENDING" ? "Chờ xử lý"
+                            : `Đang OCR...`;
+
+                          return (
+                            <div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                                <span style={{
+                                  fontSize: "0.7rem",
+                                  fontWeight: 600,
+                                  color: isDone ? "#16a34a" : isFailed ? "#dc2626" : "#6366f1"
+                                }}>
+                                  {label}
+                                </span>
+                                <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--gray-700)" }}>
+                                  {progress}%
+                                </span>
+                              </div>
+                              <div style={{
+                                width: "100%",
+                                height: "6px",
+                                backgroundColor: "var(--gray-100)",
+                                borderRadius: "999px",
+                                overflow: "hidden",
+                              }}>
+                                <div style={{
+                                  height: "100%",
+                                  width: `${progress}%`,
+                                  backgroundColor: barColor,
+                                  borderRadius: "999px",
+                                  transition: "width 0.6s ease",
+                                  backgroundImage: isProcessing && progress < 100
+                                    ? `repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(255,255,255,0.25) 8px, rgba(255,255,255,0.25) 16px)`
+                                    : "none",
+                                  animation: isProcessing && progress < 100 ? "progress-stripe 1s linear infinite" : "none",
+                                }} />
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Trạng thái Phê duyệt */}

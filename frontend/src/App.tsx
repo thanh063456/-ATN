@@ -24,16 +24,25 @@ const queryClient = new QueryClient({
   },
 });
 
-/** Khôi phục session từ Supabase khi app khởi động */
+/** Khôi phục session từ Supabase khi app khởi động và xử lý token hết hạn */
 const useSupabaseAuth = () => {
-  const { setSession } = useAuthStore();
+  const { setSession, logout } = useAuthStore();
 
   useEffect(() => {
     try {
+      // Kiểm tra session hiện tại khi app load
       supabase.auth.getSession()
         .then(({ data }) => {
           if (data?.session) {
             setSession(data.session);
+          } else {
+            // Không có session hợp lệ → xóa token cũ khỏi localStorage
+            const storedToken = localStorage.getItem("access_token");
+            if (storedToken) {
+              console.warn("[Auth] Stored token invalid, clearing...");
+              localStorage.removeItem("access_token");
+              localStorage.removeItem("user_profile");
+            }
           }
         })
         .catch((err) => {
@@ -41,8 +50,13 @@ const useSupabaseAuth = () => {
         });
 
       const { data: authListener } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          if (session) setSession(session);
+        (event, session) => {
+          if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+            if (session) setSession(session);
+          } else if (event === "SIGNED_OUT") {
+            // Token hết hạn hoặc bị thu hồi → logout sạch
+            logout();
+          }
         }
       );
 
@@ -52,7 +66,7 @@ const useSupabaseAuth = () => {
     } catch (err) {
       console.warn("Supabase auth listener initialization error:", err);
     }
-  }, [setSession]);
+  }, [setSession, logout]);
 };
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
