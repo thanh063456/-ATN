@@ -150,49 +150,224 @@ class VietOCRService:
     def segment_lines(self, pil_image: Image.Image) -> list[Image.Image]:
         """
         Tách ảnh thành danh sách ảnh dòng đơn lẻ.
-        Dùng kernel ngang rộng để nối từ → dòng liên tục.
+
+        Cải tiến (Bước 1):
+          1. Lọc vùng con dấu đỏ tròn trước nhị phân hóa → giảm dòng nhiễu.
+          2. Sắp xếp box theo y-center cluster thực tế (thay vì y//20 cứng).
+          3. Tách header 2 cột chuẩn văn bản hành chính Việt Nam.
+          4. Giảm padding top/bottom từ 10/8 → 4/4px để tránh cắt nhầm dòng kề nhau.
         """
         if cv2 is None:
             return [pil_image]
 
         try:
             img_np = np.array(pil_image)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np.copy()
+            gray   = (
+                cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+                if len(img_np.shape) == 3
+                else img_np.copy()
+            )
             h_img, w_img = gray.shape[:2]
 
+            # Bước 1a: Nhị phân hóa
             _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-            # Kernel ngang rộng: nối các từ trên cùng dòng thành 1 blob
-            # Chiều cao = 1 để tuyệt đối KHÔNG làm dính 2 dòng trên/dưới lại với nhau.
-            # Kernel ngang rộng: nối các từ trên cùng dòng thành 1 blob
-            # Chiều cao = 1 để tuyệt đối KHÔNG làm dính 2 dòng trên/dưới lại với nhau.
-            kw = max(40, w_img // 20)  # ~5% chiều rộng trang, tối thiểu 40px
+            # Bước 1b: Xóa vùng con dấu đỏ khỏi binary image trước khi dilate
+            # Mục tiêu: tránh con dấu tạo ra ~10-20 dòng nhiễu mỗi trang
+            stamp_mask = self._get_red_stamp_mask(img_np)
+            if stamp_mask is not None:
+                binary = cv2.bitwise_and(binary, cv2.bitwise_not(stamp_mask))
+                logger.debug("segment_lines: đã xóa vùng con dấu đỏ")
+
+            # Bước 1c: Dilate ngang để nối từ → dòng liên tục
+            # Kernel height = 1: KHÔNG nối dòng trên/dưới lại với nhau
+            kw     = max(40, w_img // 20)  # ~5% chiều rộng trang, tối thiểu 40px
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, 1))
             dilated = cv2.dilate(binary, kernel, iterations=1)
 
             contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            boxes = sorted(
-                [cv2.boundingRect(c) for c in contours],
-                key=lambda b: (b[1] // 20, b[0]),
-            )
+            raw_boxes = [cv2.boundingRect(c) for c in contours]
 
+            # Bước 1d: Lọc nhiễu điểm và khung viền
+            valid_boxes = [
+                (x, y, w, h) for x, y, w, h in raw_boxes
+                if w >= 15 and 6 <= h <= h_img * 0.6
+            ]
+
+            # Bước 1e: Sắp xếp theo hàng thực tế dựa y-center cluster
+            # Thay vì y//20, dùng tolerance = h_trung_binh * 0.6
+            ordered_boxes = self._sort_boxes_by_row(valid_boxes)
+
+            # Bước 1f: Tách header 2 cột (nếu box rộng > 65% trang và ở 15% đầu)
+            expanded: list[tuple[int, int, int, int]] = []
+            for x, y, w, h in ordered_boxes:
+                if w > w_img * 0.65 and y < h_img * 0.20:
+                    sub = self._split_two_column(binary, x, y, w, h)
+                    expanded.extend(sub)
+                else:
+                    expanded.append((x, y, w, h))
+
+            # Bước 1g: Crop với padding nhỏ hơn
+            # top=4 đủ bảo vệ dấu thanh; bottom=4 không cắt xuống chân chữ
+            PAD_TOP, PAD_BOT, PAD_LR = 4, 4, 3
             line_images: list[Image.Image] = []
-            for x, y, w, h in boxes:
-                if w < 15 or h < 6 or h > h_img * 0.6:
-                    continue  # bỏ nhiễu điểm và khung viền toàn trang
-                pad_top    = max(0, y - 10)
-                pad_bottom = min(h_img, y + h + 8)
-                pad_left   = max(0, x - 4)
-                pad_right  = min(w_img, x + w + 4)
-                line_images.append(Image.fromarray(img_np[pad_top:pad_bottom, pad_left:pad_right]))
+            for x, y, w, h in expanded:
+                t = max(0, y - PAD_TOP)
+                b = min(h_img, y + h + PAD_BOT)
+                lo = max(0, x - PAD_LR)
+                ro = min(w_img, x + w + PAD_LR)
+                line_images.append(Image.fromarray(img_np[t:b, lo:ro]))
 
             if line_images:
-                logger.info("Segmented {n} lines ({h}×{w}px)", n=len(line_images), h=h_img, w=w_img)
+                logger.info(
+                    "Segmented {n} lines (raw={r}, valid={v}, {h}x{w}px)",
+                    n=len(line_images), r=len(raw_boxes), v=len(valid_boxes),
+                    h=h_img, w=w_img,
+                )
                 return line_images
         except Exception as exc:
             logger.warning("segment_lines fallback: {err}", err=str(exc))
 
         return [pil_image]
+
+    # ── Helpers tách dòng ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _get_red_stamp_mask(img_np: np.ndarray) -> "np.ndarray | None":
+        """
+        Tạo mask (uint8, 255) cho vùng con dấu đỏ tròn.
+        Dùng không gian HSV để tách màu đỏ (hue ở 2 cực: 0-12° và 160-180°).
+        Trả None nếu không có vùng đỏ đáng kể (tránh overhead không cần thiết).
+        """
+        try:
+            if len(img_np.shape) < 3 or img_np.shape[2] < 3:
+                return None
+            hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
+            # Đỏ thấp: hue 0-12
+            m1  = cv2.inRange(hsv, (0, 90, 60), (12, 255, 255))
+            # Đỏ cao: hue 160-180
+            m2  = cv2.inRange(hsv, (160, 90, 60), (180, 255, 255))
+            red = cv2.bitwise_or(m1, m2)
+            # Nếu vùng đỏ quá nhỏ → không có con dấu thực
+            if cv2.countNonZero(red) < 200:
+                return None
+            # Dãn rộng để bao phủ toàn bộ vùng con dấu (bao gồm cả chữ đen bên trong)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
+            return cv2.dilate(red, kernel, iterations=3)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _sort_boxes_by_row(
+        boxes: list[tuple[int, int, int, int]],
+        tolerance_ratio: float = 0.55,
+    ) -> list[tuple[int, int, int, int]]:
+        """
+        Sắp xếp boxes theo hàng thực tế.
+
+        Hai box được coi là cùng hàng nếu khoảng cách y-center nhỏ hơn
+        `min(h_a, h_b) * tolerance_ratio`. Điều này chống lỗi dòng bị đảo thứ tự
+        khi y//20 quá thô (ví dụ: y=19 và y=21 bị tách thành 2 hàng khác nhau).
+        """
+        if not boxes:
+            return []
+
+        # Sắp xếp sơ bộ theo y tăng dần
+        sorted_by_y = sorted(boxes, key=lambda b: b[1])
+
+        rows: list[list[tuple[int, int, int, int]]] = []
+        for bx in sorted_by_y:
+            bx_y, bx_h = bx[1], bx[3]
+            bx_cy = bx_y + bx_h / 2
+            placed = False
+            for row in rows:
+                # Y-center trung bình của row hiện tại
+                row_cy = sum(b[1] + b[3] / 2 for b in row) / len(row)
+                row_h  = sum(b[3] for b in row) / len(row)
+                if abs(bx_cy - row_cy) < row_h * tolerance_ratio:
+                    row.append(bx)
+                    placed = True
+                    break
+            if not placed:
+                rows.append([bx])
+
+        # Sắp xếp hàng theo y-center tăng dần; trong hàng sắp theo x
+        result: list[tuple[int, int, int, int]] = []
+        for row in sorted(rows, key=lambda r: sum(b[1] + b[3] / 2 for b in r) / len(r)):
+            result.extend(sorted(row, key=lambda b: b[0]))
+        return result
+
+    @staticmethod
+    def _split_two_column(
+        binary: "np.ndarray",
+        x: int, y: int, w: int, h: int,
+    ) -> list[tuple[int, int, int, int]]:
+        """
+        Tách box rộng thành 2 cột nếu có khoảng trắng liên tục ở vùng giữa.
+
+        Áp dụng cho header 2 cột chuẩn VBHC Việt Nam:
+          Cột trái: tên cơ quan chủ quản
+          Cột phải: Cộng hòa XHCN Việt Nam / Độc lập - Tự do - Hạnh phúc
+
+        Nếu không tìm được gap rõ ràng, trả về box gốc nguyên vẹn.
+        """
+        try:
+            region = binary[max(0, y - 2): y + h + 2, max(0, x): x + w]
+            if region.size == 0:
+                return [(x, y, w, h)]
+
+            # Histogram dọc: tổng pixel đen theo từng cột x
+            col_hist = region.sum(axis=0).astype(np.float32)
+            max_val  = col_hist.max()
+            if max_val == 0:
+                return [(x, y, w, h)]
+
+            # Tìm gap trong vùng 30%-70% chiều rộng box
+            center_l = int(w * 0.30)
+            center_r = int(w * 0.70)
+            if center_r <= center_l:
+                return [(x, y, w, h)]
+
+            center_zone = col_hist[center_l:center_r]
+            gap_threshold = max_val * 0.04  # < 4% max → coi là khoảng trắng
+
+            gap_mask = (center_zone < gap_threshold)
+            if not gap_mask.any():
+                return [(x, y, w, h)]
+
+            # Chọn gap liên tục dài nhất trong vùng trung tâm
+            best_start, best_len, cur_start = 0, 0, None
+            for i, is_gap in enumerate(gap_mask):
+                if is_gap and cur_start is None:
+                    cur_start = i
+                elif not is_gap and cur_start is not None:
+                    length = i - cur_start
+                    if length > best_len:
+                        best_len, best_start = length, cur_start
+                    cur_start = None
+            if cur_start is not None:
+                length = len(gap_mask) - cur_start
+                if length > best_len:
+                    best_len, best_start = length, cur_start
+
+            if best_len < 8:  # gap quá hẹp → không tách
+                return [(x, y, w, h)]
+
+            split_offset = best_start + best_len // 2  # điểm giữa gap
+            split_x = x + center_l + split_offset
+
+            w_left  = split_x - x
+            w_right = x + w - split_x
+            if w_left < 20 or w_right < 20:
+                return [(x, y, w, h)]
+
+            logger.debug(
+                "split_two_column: tách box ({x},{y},{w},{h}) tại x={sx}",
+                x=x, y=y, w=w, h=h, sx=split_x,
+            )
+            return [(x, y, w_left, h), (split_x, y, w_right, h)]
+        except Exception:
+            return [(x, y, w, h)]
 
     # ── Lọc nhiễu ─────────────────────────────────────────────────────────────
     @staticmethod

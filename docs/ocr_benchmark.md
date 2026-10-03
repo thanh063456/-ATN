@@ -1,24 +1,24 @@
 # OCR Benchmark Report
 
-> **Lần đo [truoc]**: 2026-10-04 00:47  
+> **Lần đo [sau_buoc1]**: 2026-10-04 00:56  
 > Script: `scripts/bench_ocr.py`
 
 ## Hiệu năng theo trang
 
 | Trang | Seg dòng | Dòng hợp lệ | Thời gian (s) | Ký tự | Từ |
 |-------|----------|-------------|--------------|-------|-----|
-| CTSV_013_2025-09-03-Ke_hoach_Trien_khai_0_1435-KH-DHDL_Ke_hoach_Bao_hi_p01.png | 101 | 54 | 79.45 | 2239 | 436 |
-| CTSV_013_2025-09-03-Ke_hoach_Trien_khai_0_1435-KH-DHDL_Ke_hoach_Bao_hi_p02.png | 68 | 44 | 49.03 | 1910 | 369 |
+| CTSV_013_2025-09-03-Ke_hoach_Trien_khai_0_1435-KH-DHDL_Ke_hoach_Bao_hi_p01.png | 101 | 61 | 72.33 | 2398 | 445 |
+| CTSV_013_2025-09-03-Ke_hoach_Trien_khai_0_1435-KH-DHDL_Ke_hoach_Bao_hi_p02.png | 68 | 50 | 46.05 | 1962 | 374 |
 
 ## Tổng kết
 
-| Chỉ số | [truoc] |
+| Chỉ số | [sau_buoc1] |
 |--------|----------|
 | Số trang | 2 |
-| Tổng thời gian (s) | 128.48 |
-| TB thời gian/trang (s) | 64.24 |
+| Tổng thời gian (s) | 118.39 |
+| TB thời gian/trang (s) | 59.19 |
 | Tổng dòng segment | 169 |
-| Tổng dòng hợp lệ | 98 |
+| Tổng dòng hợp lệ | 111 |
 | Mẫu annotation | 0 |
 | CER (avg) | N/A |
 | WER (avg) | N/A |
@@ -29,14 +29,14 @@
 
 ### CTSV_013_2025-09-03-Ke_hoach_Trien_khai_0_1435-KH-DHDL_Ke_hoach_Bao_hi_p01.png
 ```
-Contractionalists
-BỘ GIÁO DỤC VÀ ĐÀO TẠO CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
-và nhà sơn thị thức thức
+10 4 - - - 1 sơn 1 sơn
+22.9 Thị Thứ Thị Thức
+BỘ GIÁO DỤC VÀ ĐÀO TẠO
 ```
 
 ### CTSV_013_2025-09-03-Ke_hoach_Trien_khai_0_1435-KH-DHDL_Ke_hoach_Bao_hi_p02.png
 ```
 2. Thời gian đóng BHYT
-Từ ngày 25/8/2025 đến ngày 15/10/2025;
 Contractionalists
+Từ ngày 25/8/2025 đến ngày 15/10/2025;
 ```
