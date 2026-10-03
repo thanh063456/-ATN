@@ -93,6 +93,8 @@ export interface DocumentDetail extends DocumentSummary {
   metadata?: DocumentMetadata;
   tags?: string[];
   priority_score?: number;
+  file_url?: string;
+  is_public?: boolean;
 }
 
 export interface TagSummaryItem {

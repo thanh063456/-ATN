@@ -180,6 +180,7 @@ class DocumentResponse(BaseModel):
     uploaded_by: UUID | None = None
     ocr_status: str
     minio_object_key: str | None = None
+    is_public: bool = False
     is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
@@ -218,3 +219,4 @@ class DocumentDetailResponse(DocumentResponse):
     metadata_: DocumentMetadataResponse | None = Field(default=None, alias="metadata")
     tags: list[str] = Field(default_factory=list)
     priority_score: int = 0
+    file_url: str | None = None

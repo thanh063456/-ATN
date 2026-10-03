@@ -624,6 +624,10 @@ export const DocumentDetailPage: React.FC = () => {
   const isRejected = doc.ocr_status === "REJECTED";
   const confidenceScore = doc.ocr_result?.confidence_score ? Math.round(doc.ocr_result.confidence_score * 100) : 98;
 
+  const filePreviewUrl = doc?.file_url
+    ? (doc.file_url.startsWith("http") ? doc.file_url : `${API_BASE_URL.replace("/api/v1", "")}${doc.file_url}`)
+    : (doc ? `${API_BASE_URL}/documents/${doc.id}/file` : "");
+
   return (
     <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       {/* Top Header */}
@@ -1049,7 +1053,7 @@ export const DocumentDetailPage: React.FC = () => {
                 )}
                 {doc && (
                   <a
-                    href={`${API_BASE_URL}/documents/${doc.id}/file${token ? `?token=${encodeURIComponent(token)}` : ""}`}
+                    href={filePreviewUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ ...viewerIconBtn, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}
@@ -1103,7 +1107,7 @@ export const DocumentDetailPage: React.FC = () => {
 
               {doc.file_type?.toUpperCase() === "PDF" ? (
                 <iframe
-                  src={`${API_BASE_URL}/documents/${doc.id}/file${token ? `?token=${encodeURIComponent(token)}` : ""}`}
+                  src={filePreviewUrl}
                   title={doc.original_filename}
                   style={{
                     width: "100%",
@@ -1127,7 +1131,7 @@ export const DocumentDetailPage: React.FC = () => {
                   }}
                 >
                   <img
-                    src={`${API_BASE_URL}/documents/${doc.id}/file${token ? `?token=${encodeURIComponent(token)}` : ""}`}
+                    src={filePreviewUrl}
                     alt={doc.original_filename}
                     style={{
                       width: `${zoomLevel * 3.8}px`,

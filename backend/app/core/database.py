@@ -101,6 +101,7 @@ async def init_db() -> None:
             {"table": "users", "column": "supabase_uid", "type": "VARCHAR(255)"},
             {"table": "users", "column": "mssv", "type": "VARCHAR(20)"},
             {"table": "documents", "column": "is_verified", "type": "BOOLEAN DEFAULT FALSE"},
+            {"table": "documents", "column": "is_public", "type": "BOOLEAN DEFAULT FALSE"},
             {"table": "documents", "column": "verification_code", "type": "VARCHAR(255)"},
             {"table": "documents", "column": "qr_code_url", "type": "TEXT"},
             {"table": "processing_jobs", "column": "ocr_progress", "type": "SMALLINT DEFAULT 0"},

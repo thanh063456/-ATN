@@ -48,6 +48,7 @@ class Document(Base):
     ocr_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=OCR_STATUS_PENDING
     )
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),

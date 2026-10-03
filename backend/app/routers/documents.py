@@ -20,10 +20,12 @@ from datetime import datetime, timezone
 import hashlib
 import io
 import math
+import os
+import re
 import urllib.parse
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from sqlalchemy import func, select, update
@@ -34,6 +36,8 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import _resolve_user_from_token, get_current_user, get_current_user_optional, require_roles
 from app.core.exceptions import AppException, DocumentNotFoundException, FileTooLargeException, UnsupportedFileTypeException
+from app.core.rate_limiter import limiter
+from app.core.tickets import create_file_ticket, validate_and_consume_file_ticket
 from app.models.audit_logs import AuditLog
 from app.models.document_categories import DocumentCategory
 from app.models.document_metadata import DocumentMetadata
@@ -77,6 +81,31 @@ def _is_redis_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def _sanitize_filename(name: str) -> str:
+    """Loại bỏ ký tự nguy hiểm và path traversal khỏi tên file upload."""
+    base = os.path.basename(name.replace("\\", "/"))
+    sanitized = re.sub(r'[^a-zA-Z0-9._\-+ ()\[\]]', '_', base)
+    return sanitized.strip() or "uploaded_document"
+
+
+def _validate_magic_bytes(data: bytes, ext: str) -> bool:
+    """
+    Kiểm tra magic bytes thực tế của file: PDF, PNG, JPEG, TIFF.
+    Ngăn chặn tấn công spoofing phần mở rộng file.
+    """
+    if len(data) < 4:
+        return False
+    if ext == "pdf":
+        return data.startswith(b"%PDF")
+    elif ext == "png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n") or data.startswith(b"\x89PNG")
+    elif ext in ("jpg", "jpeg"):
+        return data.startswith(b"\xff\xd8\xff")
+    elif ext in ("tif", "tiff"):
+        return data.startswith(b"II*\x00") or data.startswith(b"MM\x00*")
+    return False
 
 
 @router.get(
@@ -361,26 +390,46 @@ async def export_documents_excel(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload tài liệu mới và đưa vào hàng đợi OCR",
 )
+@limiter.limit("20/minute")
 async def upload_document(
+    request: Request,
     file: UploadFile = File(..., description="File tài liệu cần OCR (PDF, JPG, PNG, TIFF)"),
     title: str | None = Form(None, description="Tiêu đề tài liệu"),
     category_id: UUID | None = Form(None, description="ID danh mục tài liệu"),
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentUploadResponse:
-    filename = file.filename or "uploaded_document"
+    raw_filename = file.filename or "uploaded_document"
+    filename = _sanitize_filename(raw_filename)
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
     if ext not in settings.allowed_file_types:
         raise UnsupportedFileTypeException(ext)
 
-    content = await file.read()
-    file_size = len(content)
+    # Đọc file theo chunk và dừng sớm nếu vượt max_file_size_bytes
+    CHUNK_SIZE = 1024 * 1024  # 1MB
+    chunks = []
+    total_size = 0
+    while True:
+        chunk = await file.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > settings.max_file_size_bytes:
+            raise FileTooLargeException(
+                size_mb=total_size / (1024 * 1024),
+                max_mb=settings.max_file_size_mb,
+            )
+        chunks.append(chunk)
 
-    if file_size > settings.max_file_size_bytes:
-        raise FileTooLargeException(
-            size_mb=file_size / (1024 * 1024),
-            max_mb=settings.max_file_size_mb,
+    content = b"".join(chunks)
+    file_size = total_size
+
+    # Kiểm tra magic bytes
+    if not _validate_magic_bytes(content, ext):
+        raise AppException(
+            message=f"Định dạng nội dung file không hợp lệ (magic bytes không khớp với .{ext})",
+            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     doc_title = title.strip() if title and title.strip() else filename
@@ -392,7 +441,7 @@ async def upload_document(
     )
 
     doc_service = DocumentService(db)
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     document, job = await doc_service.create_document(
         title=doc_title,
         original_filename=filename,
@@ -450,7 +499,54 @@ async def get_document(
                 message="Bạn không có quyền truy cập hồ sơ này",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
+
+        # Cấp signed URL hoặc file ticket ngắn hạn cho preview
+        try:
+            signed = storage_service.get_signed_url(detail.minio_object_key, expires_in=180)
+            if signed:
+                detail.file_url = signed
+            else:
+                ticket = create_file_ticket(str(detail.id), str(current_user.id), ttl_seconds=180)
+                detail.file_url = f"/api/v1/documents/{detail.id}/file?ticket={ticket}"
+        except Exception as exc:
+            logger.debug("Could not generate pre-signed file URL: {err}", err=str(exc))
     return detail
+
+
+@router.post(
+    "/{document_id}/file-url",
+    summary="Cấp signed URL ngắn hạn (TTL 60-300s) hoặc file ticket dùng 1 lần",
+)
+async def get_document_file_url(
+    document_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Tạo signed URL hoặc file ticket dùng 1 lần để xem file tài liệu."""
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    role_name = current_user.role.name if current_user.role else "STUDENT"
+    is_allowed = False
+    if doc.ocr_status == "APPROVED" and getattr(doc, "is_public", False):
+        is_allowed = True
+    elif role_name in ("ADMIN", "STAFF") or (doc.uploaded_by is not None and doc.uploaded_by == current_user.id):
+        is_allowed = True
+
+    if not is_allowed:
+        raise AppException("Bạn không có quyền truy cập tệp tài liệu này", status_code=status.HTTP_403_FORBIDDEN)
+
+    signed = storage_service.get_signed_url(doc.minio_object_key, expires_in=180)
+    ticket = create_file_ticket(str(doc.id), str(current_user.id), ttl_seconds=180)
+    ticket_url = f"/api/v1/documents/{doc.id}/file?ticket={ticket}"
+    return {
+        "file_url": signed or ticket_url,
+        "signed_url": signed,
+        "ticket": ticket,
+        "ticket_url": ticket_url,
+        "expires_in": 180,
+    }
 
 
 @router.api_route(
@@ -460,34 +556,32 @@ async def get_document(
 )
 async def view_document_file(
     document_id: UUID,
-    token: str | None = Query(None, description="JWT Access Token (dành cho iframe/img preview)"),
+    ticket: str | None = Query(None, description="Single-use file ticket ngắn hạn"),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
     """Truy xuất file nhị phân gốc từ Storage kèm xác thực quyền truy cập RBAC."""
-    if not current_user and token:
-        current_user = await _resolve_user_from_token(token, db)
-
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    # Quyền xem tệp tài liệu:
-    # 1. Nếu tài liệu đã APPROVED hoặc được upload công khai/demo (uploaded_by is None) -> cho phép xem
-    # 2. Nếu có current_user: ADMIN, STAFF hoặc chính người upload -> cho phép xem
-    # 3. Cho phép xem để preview hiển thị trên giao diện trực quan
+    # Quyền xem tệp tài liệu (P0 Rule 9):
+    # 1. Vé dùng một lần (ticket) hợp lệ và chưa hết hạn (TTL 60-300s)
+    # 2. Hoặc tài liệu APPROVED và được đánh dấu public
+    # 3. Hoặc người dùng đăng nhập là ADMIN/STAFF hoặc chính người upload
+    # Lưu ý: Tài liệu uploaded_by is None KHÔNG được mặc định công khai.
     is_allowed = False
-    if doc.ocr_status == "APPROVED" or doc.uploaded_by is None:
+    if ticket and validate_and_consume_file_ticket(ticket, str(document_id)):
+        is_allowed = True
+    elif doc.ocr_status == "APPROVED" and getattr(doc, "is_public", False):
         is_allowed = True
     elif current_user:
         role_name = current_user.role.name if current_user.role else "STUDENT"
-        if role_name in ("ADMIN", "STAFF") or doc.uploaded_by == current_user.id:
+        if role_name in ("ADMIN", "STAFF") or (doc.uploaded_by is not None and doc.uploaded_by == current_user.id):
             is_allowed = True
-    else:
-        is_allowed = True
 
     if not is_allowed:
-        if not current_user:
+        if not current_user and not ticket:
             raise AppException(
                 message="Vui lòng đăng nhập để thực hiện thao tác này",
                 status_code=status.HTTP_401_UNAUTHORIZED,

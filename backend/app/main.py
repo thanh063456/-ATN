@@ -38,7 +38,7 @@ class MaskTokenAccessLogFilter(logging.Filter):
     2. Hoặc Authorization header Bearer token qua fetch/Blob URL.
     """
 
-    TOKEN_REGEX = re.compile(r'([?&]token=)[^&\s"\']+', re.IGNORECASE)
+    TOKEN_REGEX = re.compile(r'([?&](?:token|ticket)=)[^&\s"\']+', re.IGNORECASE)
 
     def filter(self, record: logging.LogRecord) -> bool:
         if record.args:
@@ -180,17 +180,12 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     API_PREFIX = "/api/v1"
 
-    app.include_router(health.router)                # /health, /health/ping (no prefix)
+    app.include_router(health.router)                        # /health, /health/ping (no prefix)
     app.include_router(auth.router, prefix=API_PREFIX)       # /api/v1/auth
-    app.include_router(auth.router)                          # /auth (alias)
     app.include_router(documents.router, prefix=API_PREFIX)  # /api/v1/documents
-    app.include_router(documents.router)                     # /documents (alias)
     app.include_router(search.router, prefix=API_PREFIX)     # /api/v1/search
-    app.include_router(search.router)                        # /search (alias)
     app.include_router(stats.router, prefix=API_PREFIX)      # /api/v1/stats
-    app.include_router(stats.router)                         # /stats (alias)
     app.include_router(verify.router, prefix=API_PREFIX)     # /api/v1/verify
-    app.include_router(verify.router)                        # /verify (public alias)
 
     # ── Root ──────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)
