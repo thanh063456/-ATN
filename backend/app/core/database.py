@@ -70,6 +70,16 @@ async def init_db() -> None:
             AsyncSessionLocal.configure(bind=engine)
             logger.info("Connected to PostgreSQL (Supabase) database successfully with PgBouncer compatibility.")
         except Exception as exc:
+            if settings.app_env != "development":
+                logger.critical(
+                    "PostgreSQL connection failed in environment '{env}': {err}. Refusing SQLite fallback in non-development.",
+                    env=settings.app_env,
+                    err=str(exc),
+                )
+                raise RuntimeError(
+                    f"Không thể kết nối cơ sở dữ liệu PostgreSQL trong môi trường '{settings.app_env}': {str(exc)}"
+                ) from exc
+
             logger.warning(
                 "PostgreSQL connection failed ({err}). Using SQLite local DB: {path}",
                 err=str(exc), path=str(SQLITE_DB_PATH)
@@ -77,6 +87,11 @@ async def init_db() -> None:
             engine = create_async_engine(SQLITE_URL, echo=False)
             AsyncSessionLocal.configure(bind=engine)
     else:
+        if settings.app_env != "development":
+            logger.critical("SQLite database is not allowed in environment '{env}'.", env=settings.app_env)
+            raise RuntimeError(
+                f"Chỉ cho phép sử dụng SQLite ở môi trường development. Môi trường hiện tại: {settings.app_env}"
+            )
         engine = create_async_engine(SQLITE_URL, echo=False)
         AsyncSessionLocal.configure(bind=engine)
 

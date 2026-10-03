@@ -84,6 +84,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await init_db()
     except Exception as exc:
+        if settings.app_env != "development":
+            logger.critical("Fatal: Database initialization failed in environment '{env}': {err}", env=settings.app_env, err=str(exc))
+            raise
         logger.warning("Could not initialize database on startup: {err}", err=str(exc))
 
     # Khởi tạo Elasticsearch index và mapping tiếng Việt nếu chưa tồn tại
