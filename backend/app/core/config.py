@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +35,30 @@ class Settings(BaseSettings):
     app_secret_key: str = Field(default="CHANGE_ME_TO_A_RANDOM_SECRET_KEY")
     app_port: int = 8000
     app_host: str = "0.0.0.0"
+
+    # ── Default Seed Passwords (chỉ sử dụng cho development) ───────────────────
+    seed_admin_password: str = Field(default="admin123")
+    seed_staff_password: str = Field(default="password123")
+    seed_student_password: str = Field(default="123456")
+
+    @model_validator(mode="after")
+    def validate_secrets_in_production(self) -> "Settings":
+        if self.app_env != "development":
+            default_secrets = {
+                "CHANGE_ME_TO_A_RANDOM_SECRET_KEY",
+                "CHANGE_ME_TO_A_JWT_SECRET",
+                "secret",
+                "changeme",
+            }
+            if self.jwt_secret_key in default_secrets or len(self.jwt_secret_key) < 32:
+                raise ValueError(
+                    f"jwt_secret_key không được dùng giá trị mặc định và phải có độ dài tối thiểu 32 ký tự ở môi trường {self.app_env}"
+                )
+            if self.app_secret_key in default_secrets or len(self.app_secret_key) < 32:
+                raise ValueError(
+                    f"app_secret_key không được dùng giá trị mặc định và phải có độ dài tối thiểu 32 ký tự ở môi trường {self.app_env}"
+                )
+        return self
 
     # ── Database ──────────────────────────────────────────────────────
     # asyncpg URL — Supabase / PostgreSQL Connection

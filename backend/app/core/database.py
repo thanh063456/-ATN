@@ -137,42 +137,43 @@ async def init_db() -> None:
         async with AsyncSessionLocal() as session:
             try:
                 from app.core.security import get_password_hash
-                role_res = await session.execute(select(Role).limit(1))
-                if not role_res.scalars().first():
-                    admin_role = Role(name="ADMIN", description="Quản trị viên hệ thống")
-                    staff_role = Role(name="STAFF", description="Cán bộ CTSV")
-                    student_role = Role(name="STUDENT", description="Sinh viên")
-                    session.add_all([admin_role, staff_role, student_role])
-                    await session.flush()
+                # Ensure roles exist
+                role_map = {}
+                for r_name, r_desc in [("ADMIN", "Quản trị viên hệ thống"), ("STAFF", "Cán bộ CTSV"), ("STUDENT", "Sinh viên")]:
+                    r_check = await session.execute(select(Role).where(Role.name == r_name))
+                    role_obj = r_check.scalars().first()
+                    if not role_obj:
+                        role_obj = Role(name=r_name, description=r_desc)
+                        session.add(role_obj)
+                        await session.flush()
+                    role_map[r_name] = role_obj
 
-                    admin_user = User(
-                        username="admin_hethong",
-                        email="admin@dlu.edu.vn",
-                        hashed_password=get_password_hash("admin123"),
-                        full_name="Quản trị viên Hệ thống (DLU)",
-                        role_id=admin_role.id,
-                        is_active=True,
-                    )
-                    staff_user = User(
-                        username="canbo_ctsv",
-                        email="canbo@dlu.edu.vn",
-                        hashed_password=get_password_hash("password123"),
-                        full_name="Cán bộ CTSV (STAFF)",
-                        role_id=staff_role.id,
-                        is_active=True,
-                    )
-                    student_demo = User(
-                        username="sinhvien_demo",
-                        email="sinhvien@dlu.edu.vn",
-                        mssv="2210001",
-                        hashed_password=get_password_hash("123456"),
-                        full_name="Sinh Viên Mẫu (DLU)",
-                        role_id=student_role.id,
-                        is_active=True,
-                    )
-                    session.add_all([admin_user, staff_user, student_demo])
+                # Yêu cầu bảo mật: User mặc định chỉ được seed ở môi trường development.
+                # Mật khẩu được đọc từ cấu hình (seed_admin_password, seed_staff_password...), không hardcode.
+                if settings.app_env == "development":
+                    user_configs = [
+                        ("admin_hethong", "admin@dlu.edu.vn", settings.seed_admin_password, "Quản trị viên Hệ thống (DLU)", "ADMIN", None),
+                        ("canbo_ctsv", "canbo@dlu.edu.vn", settings.seed_staff_password, "Cán bộ CTSV (STAFF)", "STAFF", None),
+                        ("sinhvien_demo", "sinhvien@dlu.edu.vn", settings.seed_student_password, "Sinh Viên Mẫu (DLU)", "STUDENT", "2210001"),
+                    ]
+                    for uname, email, pwd, fname, rname, mssv in user_configs:
+                        u_check = await session.execute(select(User).where((User.username == uname) | (User.email == email)))
+                        if not u_check.scalars().first():
+                            u_obj = User(
+                                username=uname,
+                                email=email,
+                                hashed_password=get_password_hash(pwd),
+                                full_name=fname,
+                                role_id=role_map[rname].id,
+                                mssv=mssv,
+                                is_active=True,
+                            )
+                            session.add(u_obj)
                     await session.commit()
-                    logger.info("Database seeded with default roles and validly hashed users.")
+                    logger.info("Database ensured default roles and development demo users.")
+                else:
+                    await session.commit()
+                    logger.info("Database initialized default roles for production/staging (no demo users seeded).")
             except Exception as seed_exc:
                 await session.rollback()
                 logger.warning("Seed initialization note: {err}", err=str(seed_exc))

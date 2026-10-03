@@ -57,13 +57,16 @@ def create_access_token(subject: str | Any, extra_claims: dict[str, Any] | None 
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
-    """Giải mã và xác thực JWT token."""
+    """Giải mã và xác thực JWT token (bắt buộc claim type == 'access')."""
     try:
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
+        if payload.get("type") != "access":
+            return None
         return payload
     except jwt.PyJWTError:
         return None
+

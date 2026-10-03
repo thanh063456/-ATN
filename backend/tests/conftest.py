@@ -22,28 +22,45 @@ async def async_client() -> httpx.AsyncClient:
         yield client
 
 
+from app.core.database import AsyncSessionLocal
+from app.models.users import User
+from sqlalchemy import select
+
+
 @pytest_asyncio.fixture
-def staff_token() -> str:
+async def staff_token() -> str:
     """Token dành cho vai trò Cán bộ CTSV (STAFF)."""
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(select(User).where(User.username == "canbo_ctsv"))
+        user = res.scalars().first()
+        uid = str(user.id) if user else "50fe2351-becd-4412-931e-44929ced9d63"
     return create_access_token(
-        subject="50fe2351-becd-4412-931e-44929ced9d63",
-        extra_claims={"username": "canbo_ctsv", "role": "STAFF"},
+        subject=uid,
+        extra_claims={"username": "canbo_ctsv", "role": "STAFF", "type": "access"},
     )
 
 
 @pytest_asyncio.fixture
-def admin_token() -> str:
+async def admin_token() -> str:
     """Token dành cho vai trò Quản trị viên (ADMIN)."""
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(select(User).where(User.username == "admin_hethong"))
+        user = res.scalars().first()
+        uid = str(user.id) if user else "c45bdb7f-2ffc-48b4-9705-9a7c1aebd9a0"
     return create_access_token(
-        subject="c45bdb7f-2ffc-48b4-9705-9a7c1aebd9a0",
-        extra_claims={"username": "admin_hethong", "role": "ADMIN"},
+        subject=uid,
+        extra_claims={"username": "admin_hethong", "role": "ADMIN", "type": "access"},
     )
 
 
 @pytest_asyncio.fixture
-def student_token() -> str:
+async def student_token() -> str:
     """Token dành cho vai trò Sinh viên (STUDENT)."""
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(select(User).where(User.username == "sinhvien_demo"))
+        user = res.scalars().first()
+        uid = str(user.id) if user else "a62a05a2-20bc-4d24-ac25-762f08201006"
     return create_access_token(
-        subject="a62a05a2-20bc-4d24-ac25-762f08201006",
-        extra_claims={"username": "20210678", "role": "STUDENT"},
+        subject=uid,
+        extra_claims={"username": "sinhvien_demo", "role": "STUDENT", "type": "access"},
     )

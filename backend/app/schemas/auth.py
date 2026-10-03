@@ -21,11 +21,11 @@ class ConfirmEmailRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     """Payload từ frontend sau khi Supabase Auth signup thành công."""
-    supabase_uid: str = Field(..., description="Supabase auth.users.id")
-    email: str
     full_name: str
     mssv: str | None = Field(None, description="Mã số sinh viên (STUDENT only)")
-    access_token: str = Field(..., description="Supabase JWT để xác minh")
+    supabase_uid: str | None = Field(None, description="Supabase auth.users.id")
+    email: str | None = None
+    access_token: str | None = Field(None, description="Supabase JWT để xác minh (nếu có)")
 
 
 class LoginRequest(BaseModel):

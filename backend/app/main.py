@@ -11,9 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 
+import uuid
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.core.config import settings
 from app.core.elasticsearch import init_elasticsearch_index
 from app.core.exceptions import AppException
+from app.core.rate_limiter import limiter
 from app.routers import auth, documents, health, search, stats, verify
 
 
@@ -127,6 +132,10 @@ def create_app() -> FastAPI:
         expose_headers=["*"],
     )
 
+    # ── Rate Limiter ───────────────────────────────────────────────────────────
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
     # ── Global exception handler ───────────────────────────────────────────────
     def _get_safe_cors_headers(request: Request) -> dict[str, str]:
         req_origin = request.headers.get("origin", "")
@@ -152,14 +161,19 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         logger.exception(
-            "Unhandled exception: path={path} error={error}",
+            "Unhandled exception [request_id={req_id}]: path={path} error={error}",
+            req_id=request_id,
             path=request.url.path,
             error=str(exc),
         )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": "Lỗi hệ thống: " + str(exc)},
+            content={
+                "detail": "Đã có lỗi hệ thống xảy ra. Vui lòng liên hệ quản trị viên.",
+                "request_id": request_id,
+            },
             headers=_get_safe_cors_headers(request),
         )
 

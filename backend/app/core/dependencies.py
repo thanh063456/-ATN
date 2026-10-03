@@ -51,19 +51,8 @@ async def _resolve_user_from_token(
         except ValueError:
             user_id = None
 
-        # Nếu JWT đã được ký hợp lệ và có claim role (vd: test token hoặc signed service token)
-        if payload.get("role"):
-            role_claim = str(payload["role"]).upper()
-            role_obj = Role(id=UUID("00000000-0000-0000-0000-000000000002"), name=role_claim, description=f"Vai trò {role_claim}")
-            mock_user = User(
-                id=user_id or UUID("00000000-0000-0000-0000-000000000001"),
-                username=payload.get("username", "authenticated_user"),
-                email=payload.get("email", "user@dlu.edu.vn"),
-                role_id=role_obj.id,
-                is_active=True,
-            )
-            mock_user.role = role_obj
-            return mock_user
+        # Yêu cầu bảo mật: User bắt buộc phải tồn tại trong Database, không tạo mock user từ JWT claim.
+        return None
 
     # 2. Thử xác thực với Supabase Auth
     try:
@@ -71,14 +60,25 @@ async def _resolve_user_from_token(
         if supa_res and supa_res.user:
             supa_user = supa_res.user
             supa_uid = str(supa_user.id)
-            email = supa_user.email or ""
+            email = (supa_user.email or "").strip().lower()
             metadata = supa_user.user_metadata or {}
 
-            # Tìm trong DB theo supabase_uid hoặc email
+            # Kiểm tra trạng thái xác minh email của Supabase
+            email_confirmed = bool(
+                getattr(supa_user, "email_confirmed_at", None)
+                or getattr(supa_user, "confirmed_at", None)
+            )
+
+            # Tìm trong DB: Luôn ưu tiên supabase_uid. Chỉ cho phép match theo email nếu email đã được xác nhận.
+            if email_confirmed and email:
+                condition = (User.supabase_uid == supa_uid) | (User.email == email)
+            else:
+                condition = (User.supabase_uid == supa_uid)
+
             stmt = (
                 select(User)
                 .where(
-                    (User.supabase_uid == supa_uid) | (User.email == email),
+                    condition,
                     User.is_active == True,
                 )
                 .options(selectinload(User.role))
@@ -89,7 +89,7 @@ async def _resolve_user_from_token(
             if user:
                 # Cập nhật supabase_uid hoặc mssv nếu chưa có
                 updated = False
-                if not user.supabase_uid:
+                if not user.supabase_uid and email_confirmed:
                     user.supabase_uid = supa_uid
                     updated = True
                 if metadata.get("mssv") and not user.mssv:
@@ -100,16 +100,13 @@ async def _resolve_user_from_token(
                 return user
 
             # Nếu user chưa có trong DB (tài khoản vừa tạo qua Supabase), auto-sync vào PostgreSQL
-            role_req = metadata.get("role", "STUDENT").upper()
-            role_res = await db.execute(select(Role).where(Role.name == role_req))
-            role_obj = role_res.scalars().first()
-            if not role_obj:
-                role_res = await db.execute(select(Role).where(Role.name == "STUDENT"))
-                role_obj = role_res.scalars().first()
-
-            if not role_obj:
-                role_obj = Role(name="STUDENT", description="Sinh viên")
-                db.add(role_obj)
+            # Quy tắc bảo mật: User mới đồng bộ từ Supabase LUÔN có role STUDENT.
+            # Chỉ ADMIN mới có quyền nâng role qua API quản trị (role lưu trong DB, không tin user_metadata).
+            role_res = await db.execute(select(Role).where(Role.name == "STUDENT"))
+            student_role = role_res.scalars().first()
+            if not student_role:
+                student_role = Role(name="STUDENT", description="Sinh viên")
+                db.add(student_role)
                 await db.flush()
 
             username = metadata.get("username") or (email.split("@")[0] if email else supa_uid[:8])
@@ -122,7 +119,7 @@ async def _resolve_user_from_token(
                 full_name=full_name,
                 mssv=metadata.get("mssv"),
                 hashed_password="",
-                role_id=role_obj.id,
+                role_id=student_role.id,
                 is_active=True,
             )
             db.add(new_user)
