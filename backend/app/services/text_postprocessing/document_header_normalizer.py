@@ -29,11 +29,19 @@ from .admin_dictionary import normalize_document_code
 
 _NATIONAL_HEADER_PATTERNS = [
     (
-        r'C[OỘÔ]NG\s*H[OÒÓAÀÁ][AÀÁ]?\s*X[AÃ][AÀÁ]?\s*H?[OỘÔ]I\s*CH[UỦÙ]\s*NGH[IĨÍ]A\s*VI[EỆÊ]T\s*NAM',
+        r'C[OỘÔoồô]\s*NG\s*H[OÒÓAÀÁoòóaàá][AÀÁaàá]?\s*X[AÃaã][AÀÁaàá]?\s*H?[OỘÔoộô]I\s*CH[UỦÙuủù]\s*NGH[IĨÍiĩí][AÀÁaàá]?\s*VI[EỆÊeệê]T\s*NAM',
         'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
     ),
     (
-        r'[ĐD][OÔỘ]C\s*L[AÂẬ]P\s*[\?\!\.\:\;\-\u2013\u2014~]*\s*T[UỰƯ]\s*DO\s*[\?\!\.\:\;\-\u2013\u2014~]*\s*H[AẠ][NM]H\s*PH[UÚÙ]C',
+        r'C[OỘÔoồô]\s*NG\s*H[OÒÓAÀÁoòóaàá][AÀÁaàá]?\s*X[AÃaã][AÀÁaàá]?\s*H?[OỘÔoộô]I\s*CH[UỦÙuủù]\s*NGH[IĨÍiĩí][AÀÁaàá]?\b',
+        'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
+    ),
+    (
+        r'[ĐD][OÔỘoôộ]\s*C\s*L[AÂẬaâậ]\s*P\s*[\?\!\.\:\;\,\_\-\u2013\u2014~/\\\s]*\s*T[UỰƯuựư]\s*DO\s*[\?\!\.\:\;\,\_\-\u2013\u2014~/\\\s]*\s*H[AẠaạ][NMnm]H\s*PH[UÚÙƯuúùư][CCTct\?]*',
+        'Độc lập - Tự do - Hạnh phúc',
+    ),
+    (
+        r'[ĐD][OÔỘoôộ]\s*C\s*L[AÂẬaâậ]\s*P\s*[\?\!\.\:\;\,\_\-\u2013\u2014~/\\\s]*\s*T[UỰƯuựư]\s*DO\b',
         'Độc lập - Tự do - Hạnh phúc',
     ),
     (
@@ -161,61 +169,189 @@ def _normalize_date(text: str) -> tuple[str, str | None]:
     return text, date_str
 
 
+def _is_header_fragment(line: str, doc_no: str | None, date_str: str | None) -> bool:
+    """Kiểm tra một dòng text có phải là mảnh vỡ của khối header đã được chuẩn hóa."""
+    line_clean = line.strip()
+    if not line_clean:
+        return True
+
+    line_upper = line_clean.upper()
+    keywords = [
+        "BỘ GIÁO DỤC VÀ ĐÀO TẠO",
+        "TRƯỜNG ĐẠI HỌC ĐÀ LẠT",
+        "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+        "CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+        "ĐỘC LẬP - TỰ DO - HẠNH PHÚC",
+        "ĐỘC LẬP – TỰ DO – HẠNH PHÚC",
+        "PHÒNG CÔNG TÁC SINH VIÊN",
+    ]
+    for kw in keywords:
+        if line_upper == kw:
+            return True
+
+    if doc_no and (line_clean == doc_no or line_clean == f"Số: {doc_no}" or line_upper == doc_no.upper()):
+        return True
+    if date_str and (line_clean == date_str or line_upper == date_str.upper()):
+        return True
+
+    # Kiểm tra dòng ghép 2 cột bị OCR đọc chung 1 hàng
+    stripped = line_upper
+    for kw in keywords:
+        stripped = stripped.replace(kw, "").strip()
+    if doc_no:
+        stripped = stripped.replace(doc_no.upper(), "").strip()
+    if date_str:
+        stripped = stripped.replace(date_str.upper(), "").strip()
+
+    # Dòng chỉ chứa các từ khóa header hoặc ký tự ngăn cách rác
+    if not stripped or len(re.sub(r'[\s\.\:\,\-\_\?\!/]+', '', stripped)) == 0:
+        return True
+
+    return False
+
+
 def _rebuild_header_block(
     doc_no: str | None,
     date_str: str | None,
+    is_admin_doc: bool,
+    has_national_header: bool,
 ) -> str:
-    """
-    Tạo lại khối header chuẩn 2 cột theo Nghị định 30/2020/NĐ-CP:
-    Cột trái: Cơ quan ban hành & Số hiệu
-    Cột phải: Quốc hiệu, Tiêu ngữ & Địa danh ngày tháng
-    """
-    left_col = [
-        "BỘ GIÁO DỤC VÀ ĐÀO TẠO",
-        "TRƯỜNG ĐẠI HỌC ĐÀ LẠT",
-        doc_no if doc_no else "Số: .../KH-ĐHĐL",
-    ]
-    right_col = [
-        "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
-        "Độc lập - Tự do - Hạnh phúc",
-        date_str if date_str else "Lâm Đồng, ngày ... tháng ... năm 2025",
-    ]
-
-    col_width = 38
     lines = []
-    for l_text, r_text in zip(left_col, right_col):
-        if not r_text:
-            lines.append(l_text)
-        else:
-            padding = max(6, col_width - len(l_text))
-            lines.append(f"{l_text}{' ' * padding}{r_text}")
 
-    return "\n".join(lines) + "\n\n"
+    # Văn bản hành chính (theo Nghị định 30/2020/NĐ-CP, luôn có Quốc hiệu, Tiêu ngữ và Tên cơ quan)
+    if is_admin_doc:
+        left_col = [
+            "BỘ GIÁO DỤC VÀ ĐÀO TẠO",
+            "TRƯỜNG ĐẠI HỌC ĐÀ LẠT",
+        ]
+        if doc_no:
+            left_col.append(doc_no)
+        else:
+            left_col.append("")
+
+        right_col = [
+            "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
+            "Độc lập - Tự do - Hạnh phúc",
+        ]
+        if date_str:
+            right_col.append(date_str)
+        else:
+            right_col.append("")
+
+        col_width = 38
+        max_len = max(len(left_col), len(right_col))
+        while len(left_col) < max_len:
+            left_col.append("")
+        while len(right_col) < max_len:
+            right_col.append("")
+
+        for l_text, r_text in zip(left_col, right_col):
+            if not l_text and not r_text:
+                continue
+            if not r_text:
+                lines.append(l_text)
+            elif not l_text:
+                lines.append(f"{' ' * col_width}{r_text}")
+            else:
+                padding = max(6, col_width - len(l_text))
+                lines.append(f"{l_text}{' ' * padding}{r_text}")
+
+    elif has_national_header:
+        # Văn bản cá nhân / đơn từ sinh viên (chỉ có Quốc hiệu, Tiêu ngữ)
+        lines.append("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
+        lines.append("Độc lập - Tự do - Hạnh phúc")
+        if doc_no:
+            lines.append(doc_no)
+        if date_str:
+            lines.append(date_str)
+
+    if lines:
+        return "\n".join(lines) + "\n\n"
+    return ""
 
 
 def normalize_document_header(text: str) -> str:
     """
     Chuẩn hóa toàn bộ phần header của văn bản hành chính:
     - Loại bỏ hoàn toàn sự trùng lặp do OCR cắt dòng 2 cột.
-    - Tìm ranh giới Tiêu đề văn bản (Title Boundary) và tái cấu trúc Header chuẩn 2 cột.
-
-    Args:
-        text: Văn bản sau khi đã qua ocr_char_fixes và admin_dictionary
-
-    Returns:
-        Văn bản với header được chuẩn hóa và loại bỏ sạch lặp tiêu ngữ.
+    - Xóa các dòng rác (barcode, dấu mộc bị nhận diện nhầm).
+    - Tái cấu trúc Header chuẩn 2 cột ở đầu văn bản (theo Nghị định 30/2020/NĐ-CP).
     """
     if not text:
         return text
 
-    # Bước 1: Chuẩn hóa Quốc hiệu / Tiêu ngữ (regex fuzzy)
+    # Bước 1: Chuẩn hóa Quốc hiệu / Tiêu ngữ và lấy thông tin
     text = _normalize_national_header(text)
-
-    # Bước 2: Chuẩn hóa số hiệu + thay inline
     text, doc_no = _normalize_doc_number(text)
-
-    # Bước 3: Chuẩn hóa ngày tháng + thay inline
     text, date_str = _normalize_date(text)
 
-    # Chuẩn hóa inline các thông tin chính yếu nhưng bảo toàn 100% nguyên vẹn toàn bộ các dòng chữ thật
-    return text.strip()
+    upper_text = text.upper()
+    is_admin_doc = (
+        "ĐẠI HỌC ĐÀ LẠT" in upper_text
+        or "ĐẠI HỌC ĐA LẠT" in upper_text
+        or "BỘ GIÁO DỤC" in upper_text
+        or "BO GIAO DUC" in upper_text
+        or "PHÒNG CÔNG TÁC SINH VIÊN" in upper_text
+        or "PHONG CONG TAC SINH VIEN" in upper_text
+    )
+    has_national_header = (
+        "CỘNG HÒA" in upper_text
+        or "CỘNG HOÀ" in upper_text
+        or "CÔNG HÒA" in upper_text
+        or "CÔNG HOÀ" in upper_text
+        or "CONG HOA" in upper_text
+        or "CHỦ NGHĨA VIỆT NAM" in upper_text
+        or "ĐỘC LẬP" in upper_text
+        or "DOC LAP" in upper_text
+        or "HẠNH PHÚC" in upper_text
+        or "HANH PHUC" in upper_text
+        or "TỰ DO" in upper_text
+    )
+
+    if not (is_admin_doc or has_national_header):
+        # Không có header cơ quan / quốc hiệu để tái cấu trúc → giữ nguyên text đã chuẩn hóa inline
+        return text.strip()
+
+    # Bước 2: Tái cấu trúc Header chuẩn 2 cột
+    header_block = _rebuild_header_block(doc_no, date_str, is_admin_doc, has_national_header)
+
+    # Bước 3: Dọn dẹp các mảnh vỡ của header cũ và dòng rác
+    lines = text.splitlines()
+    cleaned_lines = []
+    found_title = False
+
+    for line in lines:
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+
+        # Bỏ qua các thành phần đã được gộp vào header_block
+        if _is_header_fragment(line_clean, doc_no, date_str):
+            continue
+
+        # Bỏ qua các dòng rác dài đặc biệt (do barcode hoặc mộc mờ)
+        if len(line_clean) > 20:
+            if re.search(r'\d{10,}', line_clean):
+                continue
+            if len(re.findall(r'[\.\-]', line_clean)) > 8:
+                continue
+
+        # Đánh dấu đã tìm thấy Tiêu đề văn bản
+        if _DOC_TITLE_REGEX.search(line_clean):
+            found_title = True
+
+        cleaned_lines.append(line_clean)
+
+    # Nếu tìm thấy Tiêu đề, xóa mọi thứ đứng TRƯỚC tiêu đề
+    if found_title:
+        title_idx = -1
+        for i, l in enumerate(cleaned_lines):
+            if _DOC_TITLE_REGEX.search(l):
+                title_idx = i
+                break
+        if title_idx > 0:
+            cleaned_lines = cleaned_lines[title_idx:]
+
+    final_text = header_block + "\n".join(cleaned_lines)
+    return final_text.strip()
+

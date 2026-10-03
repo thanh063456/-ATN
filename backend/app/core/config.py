@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     ocr_beam_size: int = 4                  # Beam size khi beamsearch=True
     ocr_beam_width: int = 4                 # Backward compat alias
     ocr_batch_size: int = 16                # Batch size predict_batch() với Padded Batching
-    ocr_max_lines_per_page: int = 60       # Giới hạn dòng/trang để tránh quá tải
+    ocr_max_lines_per_page: int = 300      # Tăng lên 300: đủ cho mọi trang A4 (40-80 dòng thực tế)
     ocr_extract_tables: bool = True         # Bóc tách cấu trúc bảng biểu nếu có lưới bảng rõ ràng
 
     # Morphology kernel sizes cho phát hiện đường kẻ bảng
@@ -142,7 +142,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
-    ai_timeout_seconds: float = 20.0
+    ai_timeout_seconds: float = 60.0
 
     # ── JWT ───────────────────────────────────────────────────────────────────
     jwt_secret_key: str = Field(default="CHANGE_ME_TO_A_JWT_SECRET")

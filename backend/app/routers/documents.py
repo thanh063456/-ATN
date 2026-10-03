@@ -60,7 +60,7 @@ from app.schemas.documents import (
 from app.services.ai_service import ai_service
 from app.services.document_service import DocumentService
 from app.services.extraction_service import extraction_service
-from app.services.ocr_service import ocr_service
+from app.services.vietocr_service import vietocr_service
 from app.services.search_index_service import search_index_service
 from app.services.storage_service import storage_service
 from app.services.tag_service import tag_service
@@ -623,10 +623,11 @@ async def correct_ocr_text(
 
 @router.post(
     "/{document_id}/reprocess-ocr",
-    summary="Chạy lại quy trình OCR cho tài liệu với mô hình VietOCR mới nhất (ADMIN, STAFF)",
+    summary="Chạy lại quy trình OCR cho tài liệu (ADMIN, STAFF)",
 )
 async def reprocess_document_ocr(
     document_id: UUID,
+    engine: str | None = Query(None, description="vietocr hoặc tesseract"),
     current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ):
@@ -635,7 +636,7 @@ async def reprocess_document_ocr(
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    asyncio.create_task(async_process_ocr(str(document_id), task_id="reprocess_worker"))
+    asyncio.create_task(async_process_ocr(str(document_id), task_id="reprocess_worker", engine=engine))
     return {"message": "Đang chạy lại OCR cho tài liệu", "document_id": document_id, "status": "PROCESSING"}
 
 
@@ -662,7 +663,7 @@ async def compare_document_ocr_models(
     if not file_bytes:
         raise AppException(message="Không tìm thấy file trên hệ thống lưu trữ", status_code=404)
 
-    results = await asyncio.to_thread(ocr_service.compare_ocr_engines, file_bytes, doc.file_type)
+    results = await asyncio.to_thread(vietocr_service.compare_ocr_engines, file_bytes, doc.file_type)
     return {
         "document_id": document_id,
         "filename": doc.original_filename,

@@ -230,6 +230,11 @@ class DocumentService:
             created_at=document.created_at,
             updated_at=document.updated_at,
             ocr_result=latest_ocr,
+            all_ocr_results=sorted(
+                [OCRResultResponse.model_validate(ocr) for ocr in document.ocr_results],
+                key=lambda x: x.created_at,
+                reverse=True
+            ),
             processing_job=latest_job,
             metadata=meta_response,
             tags=doc_tags,

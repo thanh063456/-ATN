@@ -145,7 +145,7 @@ class OCRProcessingException(AppException):
 
 
 class StorageException(AppException):
-    """Lỗi khi thao tác với MinIO."""
+    """Lỗi khi thao tác với Supabase Storage."""
 
     def __init__(self, detail: str) -> None:
         super().__init__(f"Lỗi lưu trữ file: {detail}", status_code=500)

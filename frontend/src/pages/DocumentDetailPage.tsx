@@ -60,11 +60,12 @@ export const DocumentDetailPage: React.FC = () => {
   const [isAIRefining, setIsAIRefining] = useState(false);
   const [isAIExtracting, setIsAIExtracting] = useState(false);
   const [isAutoTagging, setIsAutoTagging] = useState(false);
-  const [isHighlightTagsEnabled, setIsHighlightTagsEnabled] = useState(true);
+  const [isHighlightTagsEnabled, setIsHighlightTagsEnabled] = useState(false); // TẮT tô nhãn tạm thời
   const [newTagInput, setNewTagInput] = useState("");
   const [aiExtractData, setAiExtractData] = useState<AIExtractResponse | null>(null);
   const [benchmarkData, setBenchmarkData] = useState<ModelComparisonResponse | null>(null);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [selectedOcrEngine, setSelectedOcrEngine] = useState<string>("vietocr");
 
   // Document Viewer controls
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -76,7 +77,10 @@ export const DocumentDetailPage: React.FC = () => {
       if (showSpinner) setIsLoading(true);
       const data = await documentsApi.getById(id);
       setDoc(data);
-      if (data.ocr_result?.corrected_text || data.ocr_result?.raw_text) {
+      if (data.all_ocr_results && data.all_ocr_results.length > 0) {
+        const engineResult = data.all_ocr_results.find(r => r.ocr_engine === selectedOcrEngine) || data.all_ocr_results[0];
+        setCorrectedText(engineResult?.corrected_text || engineResult?.raw_text || "");
+      } else if (data.ocr_result?.corrected_text || data.ocr_result?.raw_text) {
         setCorrectedText(data.ocr_result?.corrected_text || data.ocr_result?.raw_text || "");
       }
 
@@ -143,6 +147,19 @@ export const DocumentDetailPage: React.FC = () => {
       });
     } finally {
       if (showSpinner) setIsLoading(false);
+    }
+  };
+
+  const switchOcrEngine = (engine: string) => {
+    setSelectedOcrEngine(engine);
+    setIsEditingOCR(false);
+    if (doc?.all_ocr_results) {
+      const engineResult = doc.all_ocr_results.find((r: any) => r.ocr_engine === engine);
+      if (engineResult) {
+        setCorrectedText(engineResult.corrected_text || engineResult.raw_text || "");
+      } else {
+        setCorrectedText("");
+      }
     }
   };
 
@@ -383,8 +400,9 @@ export const DocumentDetailPage: React.FC = () => {
     if (!text) {
       return <span style={{ color: "var(--gray-400)", fontStyle: "italic" }}>Chưa có nội dung nhận diện.</span>;
     }
+    // Tô nhãn tạm thời bị TẮT — hiển thị toàn bộ văn bản thuần túy
     if (!isHighlightTagsEnabled) {
-      return text;
+      return <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{text}</span>;
     }
 
     // 5 Nhóm Nhãn Cốt Lõi: 1.Số hiệu (Đỏ) | 2.Loại đơn/VB (Cam) | 3.Ngành (Xanh lá) | 4.Khoa (Xanh dương) | 5.Khóa (Tím)
@@ -439,7 +457,7 @@ export const DocumentDetailPage: React.FC = () => {
       }
     }
 
-    if (matches.length === 0) return text;
+    if (matches.length === 0) return <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{text}</span>;
 
     matches.sort((a, b) => a.start - b.start || b.end - a.end);
 
@@ -542,14 +560,14 @@ export const DocumentDetailPage: React.FC = () => {
     }
   };
 
-  const handleReprocessOCR = async () => {
+  const handleReprocessOCR = async (engine: string) => {
     if (!id) return;
     try {
-      await documentsApi.reprocessOCR(id);
+      await documentsApi.reprocessOCR(id, engine);
       addToast({
         type: "info",
         title: "Đang quét lại OCR",
-        message: "Hệ thống đang quét lại văn bản và bóc tách bảng biểu qua VietOCR Transformer...",
+        message: `Hệ thống đang quét lại văn bản bằng ${engine.toUpperCase()}...`,
       });
       loadDoc(true);
     } catch (err: any) {
@@ -642,8 +660,11 @@ export const DocumentDetailPage: React.FC = () => {
 
         {/* Action Buttons */}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <Button variant="outline" size="sm" onClick={handleReprocessOCR} leftIcon={<RefreshCw size={14} />}>
-            Quét lại OCR
+          <Button variant="outline" size="sm" onClick={() => handleReprocessOCR('vietocr')} leftIcon={<RefreshCw size={14} />}>
+            OCR lại (VietOCR)
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleReprocessOCR('tesseract')} leftIcon={<RefreshCw size={14} />}>
+            OCR lại (Tesseract)
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownloadTxt} leftIcon={<FileDown size={14} />}>
             Xuất Text (.txt)
@@ -1124,6 +1145,45 @@ export const DocumentDetailPage: React.FC = () => {
 
           {/* RIGHT: LIVE OCR TEXT EDITOR */}
           <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            
+            {/* Tabs for OCR Engines */}
+            <div style={{ display: "flex", borderBottom: "1px solid var(--border-color)", backgroundColor: "var(--gray-50)" }}>
+              <button
+                onClick={() => switchOcrEngine("vietocr")}
+                style={{
+                  flex: 1,
+                  padding: "0.6rem 1rem",
+                  border: "none",
+                  backgroundColor: selectedOcrEngine === "vietocr" ? "#fff" : "transparent",
+                  borderBottom: selectedOcrEngine === "vietocr" ? "2px solid var(--primary-600)" : "none",
+                  color: selectedOcrEngine === "vietocr" ? "var(--primary-700)" : "var(--gray-500)",
+                  fontWeight: 700,
+                  fontSize: "0.8125rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                KẾT QUẢ VIETOCR
+              </button>
+              <button
+                onClick={() => switchOcrEngine("tesseract")}
+                style={{
+                  flex: 1,
+                  padding: "0.6rem 1rem",
+                  border: "none",
+                  backgroundColor: selectedOcrEngine === "tesseract" ? "#fff" : "transparent",
+                  borderBottom: selectedOcrEngine === "tesseract" ? "2px solid var(--primary-600)" : "none",
+                  color: selectedOcrEngine === "tesseract" ? "var(--primary-700)" : "var(--gray-500)",
+                  fontWeight: 700,
+                  fontSize: "0.8125rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                KẾT QUẢ TESSERACT
+              </button>
+            </div>
+
             {/* Editor Toolbar */}
             <div
               style={{
@@ -1244,7 +1304,7 @@ export const DocumentDetailPage: React.FC = () => {
                   }}
                   placeholder="Nhập nội dung chỉnh sửa..."
                 />
-              ) : (!doc.ocr_result?.raw_text && !doc.ocr_result?.corrected_text && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING")) ? (
+              ) : (!correctedText && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING")) ? (
                 <div
                   style={{
                     flex: 1,
@@ -1303,7 +1363,15 @@ export const DocumentDetailPage: React.FC = () => {
                     overflowY: "auto",
                   }}
                 >
-                  {renderHighlightedOCRText(correctedText || doc.ocr_result?.raw_text || "")}
+                  {correctedText || doc.ocr_result?.raw_text ? (
+                    renderHighlightedOCRText(correctedText || doc.ocr_result?.raw_text || "")
+                  ) : (
+                    <div style={{ display: "flex", height: "100%", width: "100%", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontStyle: "italic", color: "var(--gray-400)" }}>
+                        (Vui lòng nhấn "OCR lại ({selectedOcrEngine.toUpperCase()})" để xem kết quả của mô hình này)
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1319,8 +1387,8 @@ export const DocumentDetailPage: React.FC = () => {
                   color: "var(--gray-400)",
                 }}
               >
-                <span>Engine: <strong>VietOCR v2.0 (PyTorch Transformer) + AI Spellcheck</strong></span>
-                <span>Thời gian OCR: <strong>{doc.ocr_result?.processing_time_ms || 1150}ms</strong></span>
+                <span>Engine: <strong>{selectedOcrEngine === "tesseract" ? "Tesseract v5.3 (LSTM Baseline)" : "VietOCR v2.0 (PyTorch Transformer) + AI Spellcheck"}</strong></span>
+                <span>Thời gian OCR: <strong>{doc.all_ocr_results?.find((r: any) => r.ocr_engine === selectedOcrEngine)?.processing_time_ms || doc.ocr_result?.processing_time_ms || 1150}ms</strong></span>
               </div>
             </div>
           </Card>

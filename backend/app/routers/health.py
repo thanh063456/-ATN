@@ -2,7 +2,7 @@
 backend/app/routers/health.py — GET /health
 
 Kiểm tra kết nối tới tất cả external services:
-  PostgreSQL, Elasticsearch, MinIO, Redis
+  PostgreSQL, Elasticsearch, Storage (Supabase), Redis
 
 Ref: .ai/CODING_RULES.md §2 (1 file = 1 resource)
 """

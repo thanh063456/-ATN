@@ -88,19 +88,48 @@ async def init_db() -> None:
         )
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            columns_to_add = [
-                ("users", "supabase_uid", "VARCHAR(255)"),
-                ("users", "mssv", "VARCHAR(20)"),
-                ("documents", "is_verified", "BOOLEAN DEFAULT FALSE"),
-                ("documents", "verification_code", "VARCHAR(255)"),
-                ("documents", "qr_code_url", "TEXT"),
-                ("processing_jobs", "ocr_progress", "SMALLINT DEFAULT 0"),
-            ]
-            for tbl, col, col_type in columns_to_add:
-                try:
-                    await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type};"))
-                except Exception as col_exc:
-                    logger.debug("Column {col} on {tbl} already exists or error: {err}", col=col, tbl=tbl, err=str(col_exc))
+
+        # Danh sách các cột cần migration bổ sung
+        # Lưu ý: Mỗi câu lệnh ALTER chạy trong transaction/connection riêng
+        # để tránh InFailedSQLTransactionError trên asyncpg khi một cột đã tồn tại hoặc gặp lỗi.
+        #
+        # KIẾN NGHỊ VỀ ALEMBIC:
+        # Trong tương lai, nên chuyển cơ chế migration thủ công này sang Alembic
+        # (alembic upgrade head) để quản lý phiên bản schema, hỗ trợ rollback
+        # và đồng bộ CI/CD một cách chuyên nghiệp.
+        columns_to_add = [
+            {"table": "users", "column": "supabase_uid", "type": "VARCHAR(255)"},
+            {"table": "users", "column": "mssv", "type": "VARCHAR(20)"},
+            {"table": "documents", "column": "is_verified", "type": "BOOLEAN DEFAULT FALSE"},
+            {"table": "documents", "column": "verification_code", "type": "VARCHAR(255)"},
+            {"table": "documents", "column": "qr_code_url", "type": "TEXT"},
+            {"table": "processing_jobs", "column": "ocr_progress", "type": "SMALLINT DEFAULT 0"},
+        ]
+
+        is_postgres = engine.dialect.name == "postgresql"
+        for item in columns_to_add:
+            tbl = item["table"]
+            col = item["column"]
+            col_type = item["type"]
+            try:
+                async with engine.begin() as conn:
+                    if is_postgres:
+                        stmt = f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {col_type};"
+                    else:
+                        stmt = f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type};"
+                    await conn.execute(text(stmt))
+                logger.debug("Column {col} on table {tbl} checked/added successfully.", col=col, tbl=tbl)
+            except Exception as col_exc:
+                err_msg = str(col_exc).lower()
+                if "already exists" in err_msg or "duplicate column" in err_msg:
+                    logger.debug("Column {col} on table {tbl} đã tồn tại.", col=col, tbl=tbl)
+                else:
+                    logger.warning(
+                        "Lỗi khi thêm cột {col} vào bảng {tbl}: {err}",
+                        col=col,
+                        tbl=tbl,
+                        err=str(col_exc),
+                    )
 
         logger.info("Database schema initialized successfully.")
 

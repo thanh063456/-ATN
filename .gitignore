@@ -56,10 +56,13 @@ docker-compose.override.yml
 *.h5
 *.pkl
 *.bin
+*.traineddata
+tessdata/
 checkpoints/
 runs/
 mlruns/
 wandb/
+debug_boxes*.jpg
 
 # ── Datasets & LMDB ──────────────────────────────────────────
 dataset/raw/

@@ -319,6 +319,26 @@ class TestDocumentHeaderNormalizer:
         assert result.count("BỘ GIÁO DỤC VÀ ĐÀO TẠO") == 1
         assert result.count("Độc lập - Tự do - Hạnh phúc") == 1
 
+    def test_hoa_accent_variant_and_motto_preserved(self):
+        """Kiểm tra biến thể dấu HOÀ/HÒA và tiêu ngữ có dấu ? được chuẩn hóa và giữ đầy đủ cả 2 cột"""
+        raw_ocr = (
+            "BỘ GIÁO DỤC VÀ ĐÀO TẠO CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
+            "TRƯỜNG ĐẠI HỌC ĐÀ LẠT\n"
+            "Độc lập ? Tự do - Hạnh phúc\n"
+            "Số 1432/KH-ĐHĐL\n"
+            "Lâm Đồng, ngày 29 tháng 8 năm 2025\n"
+            "KẾ HOẠCH\n"
+            "Tổ chức buổi gặp mặt nam sinh viên khoá 45 đi đào tạo sĩ quan dự bị năm 2025\n"
+        )
+        result = self.normalize(raw_ocr)
+        assert "BỘ GIÁO DỤC VÀ ĐÀO TẠO" in result
+        assert "TRƯỜNG ĐẠI HỌC ĐÀ LẠT" in result
+        assert "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM" in result
+        assert "Độc lập - Tự do - Hạnh phúc" in result
+        assert "Số: 1432/KH-ĐHĐL" in result
+        assert "Lâm Đồng, ngày 29 tháng 8 năm 2025" in result
+        assert "KẾ HOẠCH" in result
+
     # ── No crash tests ────────────────────────────────────────────────────────
 
     def test_empty_input_no_crash(self):

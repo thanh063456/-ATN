@@ -138,21 +138,37 @@ class TagService:
             tags.append("#ToTrinh")
         elif re.search(r"\b(bao\s*cao|báo\s*cáo)\b", clean_text) or "/bc-" in clean_text:
             tags.append("#BaoCao")
+            
         # Đơn từ sinh viên
-        elif re.search(r"mi[eễ]n\s*gi[aả]m\s*h[oọ]c\s*ph[ií]", clean_text):
+        is_don_tu = False
+        if re.search(r"mi[eễ]n\s*gi[aả]m\s*h[oọ]c\s*ph[ií]", clean_text):
             tags.append("#MienGiamHocPhi")
+            is_don_tu = True
         elif re.search(r"h[oọ]c\s*b[oổ]ng\s*khuy[eế]n\s*kh[ií]ch", clean_text):
             tags.append("#HocBongKhuyenKhich")
+            is_don_tu = True
         elif re.search(r"h[oọ]c\s*b[oổ]ng", clean_text):
             tags.append("#HocBong")
+            is_don_tu = True
         elif re.search(r"b[aả]o\s*l[uư]u", clean_text):
             tags.append("#BaoLuu")
+            is_don_tu = True
         elif re.search(r"ngh[iỉ]\s*h[oọ]c\s*t[aạ]m\s*th[oờ]i", clean_text):
             tags.append("#NghiHocTamThoi")
+            is_don_tu = True
+        elif re.search(r"gia\s*h[aạ]n\s*th[oờ]i\s*gian\s*h[oọ]c\s*t[aậ]p", clean_text) or "gia han thoi gian hoc tap" in ascii_text:
+            tags.append("#GiaHanHocTap")
+            is_don_tu = True
         elif re.search(r"x[aá]c\s*nh[aậ]n\s*sinh\s*vi[eê]n", clean_text):
             tags.append("#XacNhanSinhVien")
+            is_don_tu = True
         elif re.search(r"c[aấ]p\s*l[aạ]i\s*th[eẻ]\s*sinh\s*vi[eê]n", clean_text):
             tags.append("#CapLaiTheSV")
+            is_don_tu = True
+        
+        if is_don_tu or "đơn xin" in clean_text or "đơn đề nghị" in clean_text or "don xin" in ascii_text:
+            if "#DonTu" not in tags:
+                tags.append("#DonTu")
 
         # ── 3. NGÀNH (NẾU CÓ) ────────────────────────────────────────
         if re.search(r"(giao\s*duc\s*mam\s*non|mầm\s*non|su\s*pham\s*mam\s*non)", ascii_text):

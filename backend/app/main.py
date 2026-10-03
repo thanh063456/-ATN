@@ -1,6 +1,8 @@
 """
 backend/app/main.py — FastAPI application entry point
 """
+import logging
+import re
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -15,10 +17,62 @@ from app.core.exceptions import AppException
 from app.routers import auth, documents, health, search, stats, verify
 
 
+# ── Access log token masking ──────────────────────────────────────────────────
+class MaskTokenAccessLogFilter(logging.Filter):
+    """
+    logging.Filter cho logger 'uvicorn.access' để che giấu JWT token trong query parameter.
+
+    Ví dụ:
+        /api/v1/documents/41e6f99e/file?token=eyJhbGciOi... -> /api/v1/documents/41e6f99e/file?token=***
+        /api/v1/documents/41e6f99e/file?download=1&token=eyJ...&page=1 -> /api/v1/documents/41e6f99e/file?download=1&token=***&page=1
+
+    GHI CHÚ KIẾN TRÚC & BẢO MẬT DÀI HẠN:
+    Việc truyền JWT token qua query string (?token=<JWT>) trên URL chỉ nên dùng tạm thời
+    cho preview (iframe/img tags). Về lâu dài, dự án nên chuyển sang:
+    1. Pre-signed URLs ngắn hạn (Supabase Storage createSignedUrl với TTL 60-300s).
+    2. Hoặc Authorization header Bearer token qua fetch/Blob URL.
+    """
+
+    TOKEN_REGEX = re.compile(r'([?&]token=)[^&\s"\']+', re.IGNORECASE)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args:
+            if isinstance(record.args, tuple):
+                record.args = tuple(
+                    self.TOKEN_REGEX.sub(r'\g<1>***', arg) if isinstance(arg, str) else arg
+                    for arg in record.args
+                )
+            elif isinstance(record.args, dict):
+                record.args = {
+                    k: (self.TOKEN_REGEX.sub(r'\g<1>***', v) if isinstance(v, str) else v)
+                    for k, v in record.args.items()
+                }
+        if isinstance(record.msg, str):
+            record.msg = self.TOKEN_REGEX.sub(r'\g<1>***', record.msg)
+        return True
+
+
+def setup_access_log_filter() -> None:
+    """Đăng ký MaskTokenAccessLogFilter cho logger uvicorn.access và các handlers của nó."""
+    access_filter = MaskTokenAccessLogFilter()
+    for logger_name in ("uvicorn.access", "uvicorn"):
+        target_logger = logging.getLogger(logger_name)
+        if not any(isinstance(f, MaskTokenAccessLogFilter) for f in target_logger.filters):
+            target_logger.addFilter(access_filter)
+        for handler in target_logger.handlers:
+            if not any(isinstance(f, MaskTokenAccessLogFilter) for f in handler.filters):
+                handler.addFilter(access_filter)
+
+
+# Đăng ký filter ngay khi module được import
+setup_access_log_filter()
+
+
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup và shutdown lifecycle hooks."""
+    setup_access_log_filter()
     logger.info("Starting {name} [{env}]", name=settings.app_name, env=settings.app_env)
     # Khởi tạo Database schema và seed data
     from app.core.database import init_db

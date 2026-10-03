@@ -213,6 +213,7 @@ class DocumentListResponse(BaseModel):
 class DocumentDetailResponse(DocumentResponse):
     """Thông tin chi tiết tài liệu kèm kết quả OCR mới nhất và trạng thái Job."""
     ocr_result: OCRResultResponse | None = None
+    all_ocr_results: list[OCRResultResponse] = Field(default_factory=list)
     processing_job: ProcessingJobResponse | None = None
     metadata_: DocumentMetadataResponse | None = Field(default=None, alias="metadata")
     tags: list[str] = Field(default_factory=list)

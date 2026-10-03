@@ -88,6 +88,7 @@ export interface DocumentDetail extends DocumentSummary {
   is_deleted: boolean;
   updated_at: string;
   ocr_result?: OCRResult;
+  all_ocr_results?: OCRResult[];
   processing_job?: ProcessingJob;
   metadata?: DocumentMetadata;
   tags?: string[];
@@ -233,8 +234,9 @@ export const documentsApi = {
     return res.data;
   },
 
-  reprocessOCR: async (id: string): Promise<{ message: string; document_id: string; status: string }> => {
-    const res = await apiClient.post(`/documents/${id}/reprocess-ocr`);
+  reprocessOCR: async (id: string, engine?: string): Promise<{ message: string; document_id: string; status: string }> => {
+    const url = engine ? `/documents/${id}/reprocess-ocr?engine=${engine}` : `/documents/${id}/reprocess-ocr`;
+    const res = await apiClient.post(url);
     return res.data;
   },
 

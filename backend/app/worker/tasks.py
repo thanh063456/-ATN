@@ -4,7 +4,7 @@ backend/app/worker/tasks.py — Celery Tasks for OCR Pipeline
 Luồng xử lý chuẩn theo .ai/AGENTS.md:
 1. Đánh dấu Job RUNNING và Document PROCESSING.
 2. Lấy thông tin Document từ PostgreSQL -> nhận minio_object_key.
-3. Đọc dữ liệu file nhị phân từ MinIO qua storage_service.get_file(minio_object_key).
+3. Đọc dữ liệu file nhị phân từ Supabase Storage qua storage_service.get_file(doc.minio_object_key).
 4. Chạy tiền xử lý và gọi mô hình VietOCR qua ocr_service.
 5. Trích xuất metadata (MSSV, Họ tên, Ngày, Số hiệu) tự động.
 6. Lưu OCRResult vào PostgreSQL (is_latest=True, reset các bản ghi cũ về False).
@@ -27,14 +27,15 @@ from app.models.documents import Document
 from app.models.ocr_results import OCRResult
 from app.models.processing_jobs import ProcessingJob
 from app.services.ai_service import ai_service
-from app.services.ocr_service import ocr_service
+from app.services.vietocr_service import vietocr_service
+from app.services.trocr_service import trocr_service
 from app.services.search_index_service import search_index_service
 from app.services.storage_service import storage_service
 from app.services.tag_service import tag_service
 from app.worker.celery_app import celery_app
 
 
-async def async_process_ocr(document_id: str, task_id: str | None = None) -> dict:
+async def async_process_ocr(document_id: str, task_id: str | None = None, engine: str | None = None) -> dict:
     """Coroutine thực thi toàn bộ logic OCR, Metadata Extraction và Elasticsearch indexing."""
     doc_uuid = UUID(document_id)
     now = datetime.now()
@@ -79,22 +80,82 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
             if not doc:
                 raise ValueError(f"Document {document_id} không tồn tại trong database")
 
-            # ── 3. Đọc file từ MinIO (progress: 35%) ──────────────────────────
+            # ── 3. Đọc file từ Supabase Storage (progress: 35%) ───────────────
             await _set_progress(session, 35)
             file_bytes = await asyncio.to_thread(storage_service.get_file, doc.minio_object_key)
-            logger.info("Retrieved file from MinIO: key={key}, bytes={len}",
+            logger.info("Retrieved file from Supabase Storage: key={key}, bytes={len}",
                         key=doc.minio_object_key, len=len(file_bytes))
 
-            # ── 4. Chạy VietOCR (progress: 45% → 85% sau khi xong) ───────────
+            # ── 4. Chạy OCR (progress: 45% → 85% sau khi xong) ───────────
             await _set_progress(session, 45)
-            raw_text, confidence = await asyncio.to_thread(
-                ocr_service.extract_text_from_file, file_bytes, doc.file_type
-            )
+            
+            # Nếu được yêu cầu chạy riêng 1 engine (chức năng OCR lại)
+            if engine:
+                if engine == "trocr":
+                    service = trocr_service
+                else:
+                    service = vietocr_service
+                    
+                raw_text, confidence = await asyncio.to_thread(
+                    service.extract_text_from_file, file_bytes, doc.file_type, engine
+                )
+                
+                # Reset is_latest cũ cho engine này
+                await session.execute(
+                    update(OCRResult)
+                    .where(OCRResult.document_id == doc_uuid)
+                    .where(OCRResult.ocr_engine == engine)
+                    .values(is_latest=False)
+                )
+                ocr_result = OCRResult(
+                    document_id=doc_uuid,
+                    is_latest=True,
+                    raw_text=raw_text,
+                    confidence_score=confidence,
+                    ocr_engine=engine,
+                    is_corrected=False,
+                )
+                session.add(ocr_result)
+                
+            else:
+                # Nếu là upload mới, chạy SONG SONG cả 2 mô hình (VietOCR và TrOCR)
+                logger.info("Running PARALLEL OCR for VietOCR + TrOCR simultaneously...")
+                
+                # Chạy đồng thời 2 engine → tiết kiệm ~50% thời gian
+                (raw_text, confidence), (trocr_text, trocr_conf) = await asyncio.gather(
+                    asyncio.to_thread(
+                        vietocr_service.extract_text_from_file, file_bytes, doc.file_type, "vietocr"
+                    ),
+                    asyncio.to_thread(
+                        trocr_service.extract_text_from_file, file_bytes, doc.file_type, "trocr"
+                    ),
+                )
+                
+                ocr_result_main = OCRResult(
+                    document_id=doc_uuid,
+                    is_latest=True,
+                    raw_text=raw_text,
+                    confidence_score=confidence,
+                    ocr_engine="vietocr",
+                    is_corrected=False,
+                )
+                session.add(ocr_result_main)
+                
+                ocr_result_alt = OCRResult(
+                    document_id=doc_uuid,
+                    is_latest=True,
+                    raw_text=trocr_text,
+                    confidence_score=trocr_conf,
+                    ocr_engine="trocr",
+                    is_corrected=False,
+                )
+                session.add(ocr_result_alt)
+                
             await _set_progress(session, 85)
 
-            # ── 5. Trích xuất Metadata & AI Smart Fields đồng thời (progress: 90%) ────
+            # ── 5. Trích xuất Metadata & AI Smart Fields (dùng text chính) ────
             await _set_progress(session, 90)
-            meta_dict = await asyncio.to_thread(ocr_service.extract_metadata, raw_text)
+            meta_dict = await asyncio.to_thread(vietocr_service.extract_metadata, raw_text)
             
             try:
                 ai_fields = await ai_service.extract_smart_fields(raw_text)
@@ -109,23 +170,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None) -> dic
             auto_tags = ai_fields.get("tags") or tag_service.generate_auto_tags(raw_text, metadata=meta_dict)
             priority_score = ai_fields.get("priority_score") or tag_service.calculate_priority_score(auto_tags)
 
-            # ── 6. Lưu OCRResult vào PostgreSQL (is_latest=True, reset cũ) ─────
-            await session.execute(
-                update(OCRResult)
-                .where(OCRResult.document_id == doc_uuid)
-                .values(is_latest=False)
-            )
-            ocr_result = OCRResult(
-                document_id=doc_uuid,
-                is_latest=True,
-                raw_text=raw_text,
-                confidence_score=confidence,
-                ocr_engine=settings.ocr_engine,
-                is_corrected=False,
-            )
-            session.add(ocr_result)
-
-            # ── 7. Lưu / Cập nhật DocumentMetadata ────────────────────────────
+            # ── 6. Lưu / Cập nhật DocumentMetadata ────────────────────────────
             doc_date = None
             date_str = ai_fields.get("document_date") or meta_dict.get("document_date")
             if date_str:
