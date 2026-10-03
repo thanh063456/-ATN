@@ -147,6 +147,10 @@ class Settings(BaseSettings):
     ocr_morph_kernel_horiz: int = 25       # Kernel ngang phát hiện đường kẻ ngang
     ocr_morph_kernel_vert: int = 25        # Kernel dọc phát hiện đường kẻ dọc
 
+    # OCR Debug — lưu overlay ảnh khi OCR_DEBUG_DUMP=1 (chỉ dùng khi debug)
+    # Overlay box (xanh = dòng hợp lệ) lưu vào logs/ocr_debug/<doc_id>/
+    ocr_debug_dump: bool = False
+
     # MSSV pattern — cấu hình được, không hardcode "2[0-3]" trong service
     # Ví dụ: "2[0-3]" = chấp nhận MSSV bắt đầu bằng 20, 21, 22, 23
     mssv_year_prefix_pattern: str = r"2[0-3]"
