@@ -151,6 +151,10 @@ class Settings(BaseSettings):
     # Overlay box (xanh = dòng hợp lệ) lưu vào logs/ocr_debug/<doc_id>/
     ocr_debug_dump: bool = False
 
+    # OCR Quantization — INT8 dynamic quantization để tăng tốc trên CPU
+    # Tăng tốc ~1.5x nhưng có thể giảm độ chính xác một chút; thử nghiệm trước khi dùng
+    ocr_quantize: bool = False
+
     # MSSV pattern — cấu hình được, không hardcode "2[0-3]" trong service
     # Ví dụ: "2[0-3]" = chấp nhận MSSV bắt đầu bằng 20, 21, 22, 23
     mssv_year_prefix_pattern: str = r"2[0-3]"

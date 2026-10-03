@@ -98,6 +98,23 @@ class VietOCREngine:
                 config["weights"] = best_weights
 
             self._predictor = Predictor(config)
+
+            # Quantization tùy chọn (INT8 dynamic) — tăng tốc ~1.5x trên CPU không có AVX512
+            # Chỉ áp dụng khi ocr_quantize=True (mặc định False để giữ độ chính xác)
+            _quantize = getattr(_s, "ocr_quantize", False) if _s else False
+            if _quantize:
+                try:
+                    import torch
+                    torch.backends.quantized.engine = "fbgemm"  # tốt cho Intel x86
+                    self._predictor.model = torch.quantization.quantize_dynamic(
+                        self._predictor.model,
+                        {torch.nn.Linear, torch.nn.LSTM},
+                        dtype=torch.qint8,
+                    )
+                    logger.info("VietOCR quantized (INT8 dynamic) — inference nhanh hơn trên CPU")
+                except Exception as qe:
+                    logger.warning("Quantization thất bại (bỏ qua): {err}", err=str(qe))
+
             logger.info("Initialized VietOCR vgg_transformer predictor successfully")
 
         except Exception as exc:
@@ -159,7 +176,7 @@ class VietOCREngine:
                     outs.append("")
             return outs
 
-    # ── Line OCR ──────────────────────────────────────────────────────────────
+    # ── Line OCR ─────────────────────────────────────────────────────────────
     def ocr_lines(
         self,
         line_images: list[Image.Image],
@@ -168,13 +185,17 @@ class VietOCREngine:
         """
         OCR danh sách ảnh dòng bằng VietOCR.
 
+        Tối ưu (Bước 2): Sort-by-width batching — sắp xếp dòng theo chiều rộng
+        trước khi batch để giảm overhead padding trong mỗi batch.
+        Các dòng có độ rộng gần nhau sẽ cùng batch → max_w nhỏ hơn → nhanh hơn.
+        Kết quả được unsort để trả về đúng thứ tự dòng gốc.
+
         Args:
             line_images: Danh sách ảnh đã segment từ segment_lines().
-            preprocess_fn: Hàm tiền xử lý từng dòng (preprocess_handwriting),
-                           nếu None thì bỏ qua.
+            preprocess_fn: Hàm tiền xử lý từng dòng (preprocess_handwriting).
 
         Returns:
-            list[(text, confidence)] — chỉ trả về dòng có nội dung.
+            list[(text, confidence)] theo đúng thứ tự dòng gốc.
         """
         predictor = self.get_predictor()
         if not predictor or not line_images:
@@ -182,24 +203,47 @@ class VietOCREngine:
 
         _s = self._get_settings()
         _max_lines  = getattr(_s, "ocr_max_lines_per_page", 300) if _s else 300
-        _batch_size = getattr(_s, "ocr_batch_size", 16)          if _s else 16
+        _batch_size = getattr(_s, "ocr_batch_size", 32)          if _s else 32  # 16 -> 32
 
         imgs = line_images[:_max_lines] if _max_lines > 0 else line_images
-        cleaned = [preprocess_fn(li) if preprocess_fn else li for li in imgs]
+
+        # Tiền xử lý từng dòng
+        cleaned: list[Image.Image] = [
+            preprocess_fn(li) if preprocess_fn else li for li in imgs
+        ]
         total_lines = len(cleaned)
 
-        line_results: list[tuple[str, float]] = []
-        for i in range(0, total_lines, _batch_size):
-            batch = cleaned[i: i + _batch_size]
-            logger.info("[VietOCR] Đang xử lý dòng {start}-{end}/{total}...",
-                        start=i + 1, end=min(i + _batch_size, total_lines), total=total_lines)
+        # Sort-by-width: nhóm dòng có độ rộng gần nhau vào cùng batch
+        # Lưu index gốc để unsort sau
+        indexed = sorted(enumerate(cleaned), key=lambda iv: iv[1].size[0])
+        orig_indices  = [i for i, _ in indexed]
+        sorted_images = [img for _, img in indexed]
+
+        # OCR theo batch (sorted by width)
+        sorted_texts: dict[int, str] = {}
+        for batch_start in range(0, total_lines, _batch_size):
+            batch     = sorted_images[batch_start: batch_start + _batch_size]
+            batch_idx = orig_indices[batch_start: batch_start + _batch_size]
+            logger.info(
+                "[VietOCR] Dòng {s}-{e}/{t} (w={wmin}-{wmax}px)",
+                s=batch_start + 1,
+                e=min(batch_start + _batch_size, total_lines),
+                t=total_lines,
+                wmin=batch[0].size[0],
+                wmax=batch[-1].size[0],
+            )
             texts = self.predict_batch_padded(batch)
-            for txt in texts:
-                txt = str(txt).strip() if txt else ""
-                if txt:
-                    bad  = len(re.findall(r'[%~^|<>{}\\[\]\\\\]', txt))
-                    conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
-                    line_results.append((txt, round(conf, 2)))
+            for orig_i, txt in zip(batch_idx, texts):
+                sorted_texts[orig_i] = str(txt).strip() if txt else ""
+
+        # Tổng hợp kết quả theo đúng thứ tự dòng gốc
+        line_results: list[tuple[str, float]] = []
+        for i in range(total_lines):
+            txt = sorted_texts.get(i, "")
+            if txt:
+                bad  = len(re.findall(r'[%~^|<>{}\\[\]\\\\]', txt))
+                conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
+                line_results.append((txt, round(conf, 2)))
 
         return line_results
 
