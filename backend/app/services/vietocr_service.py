@@ -148,8 +148,13 @@ class VietOCRService:
 
     # ── Tách dòng ─────────────────────────────────────────────────────────────
     def segment_lines(self, pil_image: Image.Image) -> list[Image.Image]:
+        """Tương thích ngược: chỉ trả về danh sách ảnh dòng."""
+        lines_with_boxes = self.segment_lines_with_boxes(pil_image)
+        return [img for img, box in lines_with_boxes]
+
+    def segment_lines_with_boxes(self, pil_image: Image.Image) -> list[tuple[Image.Image, tuple[int, int, int, int]]]:
         """
-        Tách ảnh thành danh sách ảnh dòng đơn lẻ.
+        Tách ảnh thành danh sách ảnh dòng đơn lẻ kèm bounding box (x, y, w, h).
 
         Cải tiến (Bước 1):
           1. Lọc vùng con dấu đỏ tròn trước nhị phân hóa → giảm dòng nhiễu.
@@ -158,7 +163,7 @@ class VietOCRService:
           4. Giảm padding top/bottom từ 10/8 → 4/4px để tránh cắt nhầm dòng kề nhau.
         """
         if cv2 is None:
-            return [pil_image]
+            return [(pil_image, (0, 0, pil_image.width, pil_image.height))]
 
         try:
             img_np = np.array(pil_image)
@@ -173,15 +178,13 @@ class VietOCRService:
             _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
             # Bước 1b: Xóa vùng con dấu đỏ khỏi binary image trước khi dilate
-            # Mục tiêu: tránh con dấu tạo ra ~10-20 dòng nhiễu mỗi trang
             stamp_mask = self._get_red_stamp_mask(img_np)
             if stamp_mask is not None:
                 binary = cv2.bitwise_and(binary, cv2.bitwise_not(stamp_mask))
                 logger.debug("segment_lines: đã xóa vùng con dấu đỏ")
 
             # Bước 1c: Dilate ngang để nối từ → dòng liên tục
-            # Kernel height = 1: KHÔNG nối dòng trên/dưới lại với nhau
-            kw     = max(40, w_img // 20)  # ~5% chiều rộng trang, tối thiểu 40px
+            kw     = max(40, w_img // 20)
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, 1))
             dilated = cv2.dilate(binary, kernel, iterations=1)
 
@@ -195,10 +198,9 @@ class VietOCRService:
             ]
 
             # Bước 1e: Sắp xếp theo hàng thực tế dựa y-center cluster
-            # Thay vì y//20, dùng tolerance = h_trung_binh * 0.6
             ordered_boxes = self._sort_boxes_by_row(valid_boxes)
 
-            # Bước 1f: Tách header 2 cột (nếu box rộng > 65% trang và ở 15% đầu)
+            # Bước 1f: Tách header 2 cột
             expanded: list[tuple[int, int, int, int]] = []
             for x, y, w, h in ordered_boxes:
                 if w > w_img * 0.65 and y < h_img * 0.20:
@@ -207,28 +209,28 @@ class VietOCRService:
                 else:
                     expanded.append((x, y, w, h))
 
-            # Bước 1g: Crop với padding nhỏ hơn
-            # top=4 đủ bảo vệ dấu thanh; bottom=4 không cắt xuống chân chữ
+            # Bước 1g: Crop
             PAD_TOP, PAD_BOT, PAD_LR = 4, 4, 3
-            line_images: list[Image.Image] = []
+            lines_with_boxes: list[tuple[Image.Image, tuple[int, int, int, int]]] = []
             for x, y, w, h in expanded:
                 t = max(0, y - PAD_TOP)
                 b = min(h_img, y + h + PAD_BOT)
                 lo = max(0, x - PAD_LR)
                 ro = min(w_img, x + w + PAD_LR)
-                line_images.append(Image.fromarray(img_np[t:b, lo:ro]))
+                line_img = Image.fromarray(img_np[t:b, lo:ro])
+                lines_with_boxes.append((line_img, (x, y, w, h)))
 
-            if line_images:
+            if lines_with_boxes:
                 logger.info(
                     "Segmented {n} lines (raw={r}, valid={v}, {h}x{w}px)",
-                    n=len(line_images), r=len(raw_boxes), v=len(valid_boxes),
+                    n=len(lines_with_boxes), r=len(raw_boxes), v=len(valid_boxes),
                     h=h_img, w=w_img,
                 )
-                return line_images
+                return lines_with_boxes
         except Exception as exc:
             logger.warning("segment_lines fallback: {err}", err=str(exc))
 
-        return [pil_image]
+        return [(pil_image, (0, 0, pil_image.width, pil_image.height))]
 
     # ── Helpers tách dòng ──────────────────────────────────────────────────────
 
@@ -486,11 +488,56 @@ class VietOCRService:
         self, image: Image.Image
     ) -> list[tuple[str, float]]:
         """Tách dòng rồi OCR bằng VietOCR."""
-        line_images = self.segment_lines(image)
-        if not line_images:
+        lines_with_boxes = self.segment_lines_with_boxes(image)
+        if not lines_with_boxes:
             return []
             
-        return self._vietocr().ocr_lines(line_images, preprocess_fn=self.preprocess_handwriting)
+        line_images = [img for img, box in lines_with_boxes]
+        results = self._vietocr().ocr_lines(line_images, preprocess_fn=self.preprocess_handwriting)
+        
+        # Debug Dump
+        import os
+        import json
+        import time
+        if os.environ.get("OCR_DEBUG_DUMP") == "1":
+            try:
+                import cv2
+                import numpy as np
+                debug_dir = os.path.abspath("backend/tests/data/thong_bao_1413")
+                os.makedirs(debug_dir, exist_ok=True)
+                
+                # Vẽ overlay boxes
+                img_np = np.array(image)
+                if len(img_np.shape) == 2:
+                    img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
+                elif img_np.shape[2] == 4:
+                    img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
+                else:
+                    img_np = img_np.copy()
+                    
+                dump_data = []
+                for idx, ((img, box), (text, conf)) in enumerate(zip(lines_with_boxes, results)):
+                    x, y, w, h = box
+                    # Màu xanh lá cho kept, màu đỏ cho dropped
+                    is_dropped = self._is_noise_line(text)
+                    color = (0, 0, 255) if is_dropped else (0, 255, 0)
+                    cv2.rectangle(img_np, (x, y), (x + w, y + h), color, 2)
+                    
+                    dump_data.append({
+                        "id": idx,
+                        "box": [x, y, w, h],
+                        "raw_text": text,
+                        "drop_reason": "noise_line" if is_dropped else None
+                    })
+                    
+                timestamp = int(time.time() * 1000)
+                cv2.imwrite(os.path.join(debug_dir, f"debug_overlay_{timestamp}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
+                with open(os.path.join(debug_dir, f"debug_overlay_{timestamp}_dump.json"), "w", encoding="utf-8") as f:
+                    json.dump(dump_data, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Failed to dump debug OCR: {e}")
+
+        return results
 
     # ── Bóc tách bảng biểu ────────────────────────────────────────────────────
     def detect_and_extract_tables(self, pil_image: Image.Image) -> list[str]:
