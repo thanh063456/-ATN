@@ -4,14 +4,18 @@ backend/app/services/trocr_engine.py — Microsoft TrOCR Engine
 Chịu trách nhiệm:
   - Load TrOCRProcessor + VisionEncoderDecoderModel (lazy load)
   - Batch predict danh sách ảnh dòng
-  - Fallback sang VietOCR nếu TrOCR không khả dụng
+  - Báo lỗi rõ ràng (EngineUnavailableError) khi không khả dụng, TUYỆT ĐỐI KHÔNG FALLBACK sang VietOCR.
 
 Mọi ngưỡng số đọc từ app.core.config.settings.
 """
+from __future__ import annotations
+
 import re
 
 from loguru import logger
 from PIL import Image
+
+from app.core.exceptions import EngineUnavailableError
 
 
 class TrOCREngine:
@@ -21,6 +25,7 @@ class TrOCREngine:
         self._processor = None
         self._model = None
         self._settings = None
+        self._init_error = None
 
     # ── Settings ──────────────────────────────────────────────────────────────
     def _get_settings(self):
@@ -41,7 +46,6 @@ class TrOCREngine:
                 from transformers import TrOCRProcessor, VisionEncoderDecoderModel, ViTImageProcessor, RobertaTokenizer
 
                 _s = self._get_settings()
-                # Dùng trocr-base-printed với RobertaTokenizer đầy đủ vocab
                 model_name = getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
                 device     = getattr(_s, "trocr_device", "cpu")                                if _s else "cpu"
 
@@ -54,11 +58,17 @@ class TrOCREngine:
                     VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
                 )
                 self._model.eval()
+                self._init_error = None
                 logger.info("Initialized Microsoft TrOCR Vision Transformer successfully")
             except Exception as exc:
+                self._init_error = str(exc)
                 logger.warning("TrOCR model initialization failed: {err}", err=str(exc))
                 self._processor = None
                 self._model = None
+                raise EngineUnavailableError(
+                    "trocr",
+                    f"Không thể khởi tạo mô hình Microsoft TrOCR: {exc}"
+                ) from exc
 
         return self._processor, self._model
 
@@ -66,6 +76,7 @@ class TrOCREngine:
     def predict_batch(self, images: list[Image.Image]) -> list[str]:
         """
         Predict batch ảnh dòng bằng TrOCR.
+        Không bao giờ fallback sang VietOCR.
         """
         if not images:
             return []
@@ -73,8 +84,7 @@ class TrOCREngine:
         proc, model = self.get_model()
 
         if proc is None or model is None:
-            logger.warning("TrOCR is completely unavailable. Returning empty results.")
-            return [""] * len(images)
+            raise EngineUnavailableError("trocr", f"TrOCR chưa được khởi tạo: {self._init_error}")
 
         try:
             import torch
@@ -91,9 +101,10 @@ class TrOCREngine:
             return [str(t).strip() for t in generated_texts]
 
         except Exception as exc:
-            logger.warning("TrOCR batch prediction error: {err}", err=str(exc))
-            from app.services.vietocr_engine import vietocr_engine
-            return vietocr_engine.predict_batch_padded(images)
+            if isinstance(exc, EngineUnavailableError):
+                raise
+            logger.error("TrOCR batch prediction error: {err}", err=str(exc))
+            raise EngineUnavailableError("trocr", f"Lỗi suy luận TrOCR: {exc}") from exc
 
     # ── Line OCR ──────────────────────────────────────────────────────────────
     def ocr_lines(
@@ -106,11 +117,10 @@ class TrOCREngine:
 
         Args:
             line_images: Danh sách ảnh đã segment từ segment_lines().
-            preprocess_fn: Hàm tiền xử lý từng dòng (preprocess_handwriting),
-                           nếu None thì bỏ qua.
+            preprocess_fn: Hàm tiền xử lý từng dòng (preprocess_handwriting).
 
         Returns:
-            list[(text, confidence)] — chỉ trả về dòng có nội dung.
+            list[(text, confidence)]
         """
         if not line_images:
             return []
@@ -123,20 +133,18 @@ class TrOCREngine:
         cleaned = [preprocess_fn(li) if preprocess_fn else li for li in imgs]
         total_lines = len(cleaned)
         line_results: list[tuple[str, float]] = []
-        try:
-            for i in range(0, total_lines, _batch_size):
-                batch = cleaned[i: i + _batch_size]
-                logger.info("[TrOCR] Đang xử lý dòng {start}-{end}/{total}...",
-                            start=i + 1, end=min(i + _batch_size, total_lines), total=total_lines)
-                texts = self.predict_batch(batch)
-                for txt in texts:
-                    txt = str(txt).strip() if txt else ""
-                    if txt:
-                        bad  = len(re.findall(r'[%~^|<>{}\\[\]\\\\]', txt))
-                        conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
-                        line_results.append((txt, round(conf, 2)))
-        except Exception as e:
-            logger.debug("TrOCR line prediction failed: {err}", err=str(e))
+
+        for i in range(0, total_lines, _batch_size):
+            batch = cleaned[i: i + _batch_size]
+            logger.info("[TrOCR] Đang xử lý dòng {start}-{end}/{total}...",
+                        start=i + 1, end=min(i + _batch_size, total_lines), total=total_lines)
+            texts = self.predict_batch(batch)
+            for txt in texts:
+                txt = str(txt).strip() if txt else ""
+                if txt:
+                    bad  = len(re.findall(r'[%~^|<>{}\\[\]\\\\]', txt))
+                    conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
+                    line_results.append((txt, round(conf, 2)))
 
         return line_results
 
