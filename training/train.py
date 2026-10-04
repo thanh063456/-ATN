@@ -252,9 +252,13 @@ def build_config(
     # ── Optimizer ─────────────────────────────────────────────────────────────
     # Fine-tune: LR nhỏ, KHÔNG phải train from scratch
     config["optimizer"] = {
+        "name": "AdamW",
         "max_lr": lr,
         "pct_start": 0.1
     }
+    
+    # ── Gradient Clipping ─────────────────────────────────────────────────────
+    config["trainer"]["clip_grad_norm"] = 1.0
 
     # ── Device & Dataloader ───────────────────────────────────────────────────
     config["device"]                  = device
