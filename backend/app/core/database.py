@@ -120,6 +120,10 @@ async def init_db() -> None:
             {"table": "documents", "column": "verification_code", "type": "VARCHAR(255)"},
             {"table": "documents", "column": "qr_code_url", "type": "TEXT"},
             {"table": "processing_jobs", "column": "ocr_progress", "type": "SMALLINT DEFAULT 0"},
+            {"table": "ocr_results", "column": "status", "type": "VARCHAR(20) DEFAULT 'DONE'"},
+            {"table": "ocr_results", "column": "error_message", "type": "TEXT"},
+            {"table": "ocr_results", "column": "ocr_engine_version", "type": "VARCHAR(50)"},
+            {"table": "ocr_results", "column": "processing_time_ms", "type": "INTEGER"},
         ]
 
         is_postgres = engine.dialect.name == "postgresql"

@@ -595,10 +595,15 @@ class VietOCRService:
         image: Image.Image,
         extract_tables: bool = False,
         is_first_page: bool = True,
-    ) -> str:
+    ) -> tuple[str, str]:
         """
         OCR toàn trang bằng Line Segmentation với VietOCR.
         Pipeline: preprocess → segment_lines → VietOCR → filter → join → postprocess.
+
+        Returns:
+            (raw_text, processed_text)
+            raw_text       — văn bản thô ngay sau OCR, chưa qua post-processing
+            processed_text — đã qua hậu xử lý (sửa lỗi, chuẩn hoá NFC)
         """
         processed_img = self.preprocess_image(image)
 
@@ -606,36 +611,41 @@ class VietOCRService:
         table_markdowns = self.detect_and_extract_tables(processed_img) if extract_tables else []
 
         # 2. OCR toàn trang theo dòng
-        full_text = ""
+        raw_text = ""
         line_results = self._ocr_lines_with_engine(processed_img)
         if line_results:
             valid_lines = [t for t, _ in line_results if not self._is_noise_line(t)]
             joined = "\n".join(valid_lines)
             if len(joined.strip()) > 3:
-                full_text = unicodedata.normalize("NFC", joined.strip())
+                raw_text = unicodedata.normalize("NFC", joined.strip())
                 logger.info("OCR [vietocr] → {n} dòng, {c} ký tự",
-                            n=len(valid_lines), c=len(full_text))
+                            n=len(valid_lines), c=len(raw_text))
 
-        # 5. Ghép bảng biểu
+        # 3. Ghép bảng biểu vào raw
         if table_markdowns:
             tables_str = "\n\n### [BẢNG BIỂU DỮ LIỆU BÓC TÁCH]:\n" + "\n\n".join(table_markdowns)
-            full_text = f"{full_text}\n\n{tables_str}" if full_text else tables_str
+            raw_text = f"{raw_text}\n\n{tables_str}" if raw_text else tables_str
 
-        if full_text:
-            full_text = self._clean_ocr_text(full_text)   # lọc artifact + con dấu
-            full_text = self.post_process_vietnamese(full_text)
+        # 4. Post-processing chỉ cho processed_text, giữ raw_text nguyên vẹn
+        if raw_text:
+            cleaned        = self._clean_ocr_text(raw_text)
+            processed_text = self.post_process_vietnamese(cleaned)
+        else:
+            processed_text = ""
 
-        return full_text
+        return raw_text, processed_text
 
     # ── OCR toàn file ─────────────────────────────────────────────────────────
     def extract_text_from_file(
         self, file_bytes: bytes, file_type: str, engine: str | None = None
-    ) -> tuple[str, float]:
+    ) -> tuple[str, str, float]:
         """
         Trích xuất toàn văn từ file PDF hoặc Ảnh (JPG, PNG, TIFF).
 
         Returns:
-            (text, heuristic_quality_score)
+            (raw_text, processed_text, heuristic_quality_score)
+            raw_text       — văn bản OCR thô ngay sau model
+            processed_text — sau post-processing (sửa lỗi, chuẩn hoá NFC)
         """
         file_ext = file_type.lower().replace(".", "")
         _s = self._get_settings()
@@ -662,31 +672,36 @@ class VietOCRService:
                         pages_text = [page.get_text().strip() for page in doc]
                         pages_text = [t for t in pages_text if t]
                         if pages_text and len("\n".join(pages_text)) > 20:
-                            full = self.post_process_vietnamese("\n\n".join(pages_text))
+                            raw_full = "\n\n".join(pages_text)
+                            processed_full = self.post_process_vietnamese(raw_full)
                             logger.info("Direct text PDF: {p} trang, {c} ký tự",
-                                        p=len(doc), c=len(full))
-                            return full, self.calculate_confidence_score(full, "direct_pdf")
+                                        p=len(doc), c=len(processed_full))
+                            return raw_full, processed_full, self.calculate_confidence_score(processed_full, "direct_pdf")
 
                     # PDF scan ảnh
-                    ocr_pages: list[str] = []
+                    raw_pages: list[str]       = []
+                    processed_pages: list[str] = []
                     total = len(doc)
                     for idx, page in enumerate(doc):
                         t0 = time.time()
                         pix = page.get_pixmap(dpi=_render_dpi)
                         page_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                        page_text = self._ocr_image(
+                        page_raw, page_proc = self._ocr_image(
                             page_img,
                             extract_tables=_extract_tables,
                             is_first_page=(idx == 0),
                         )
                         logger.info("OCR trang {i}/{t} [{eng}] | {s:.1f}s",
                                     i=idx + 1, t=total, eng=selected_engine, s=time.time() - t0)
-                        if page_text:
-                            ocr_pages.append(page_text)
+                        if page_raw:
+                            raw_pages.append(page_raw)
+                        if page_proc:
+                            processed_pages.append(page_proc)
 
-                    if ocr_pages:
-                        full = self.post_process_vietnamese("\n\n".join(ocr_pages))
-                        return full, self.calculate_confidence_score(full, selected_engine)
+                    if raw_pages:
+                        raw_full       = "\n\n".join(raw_pages)
+                        processed_full = self.post_process_vietnamese("\n\n".join(processed_pages))
+                        return raw_full, processed_full, self.calculate_confidence_score(processed_full, selected_engine)
                 except Exception as exc:
                     logger.warning("PyMuPDF OCR failed: {err}", err=str(exc))
 
@@ -696,24 +711,24 @@ class VietOCRService:
                     reader = pypdf.PdfReader(io.BytesIO(file_bytes))
                     texts  = [p.extract_text() or "" for p in reader.pages if p.extract_text()]
                     if texts and len("\n".join(texts)) > 30:
-                        full = self.post_process_vietnamese("\n\n".join(texts))
-                        return full, self.calculate_confidence_score(full, "pypdf")
+                        raw_full  = "\n\n".join(texts)
+                        proc_full = self.post_process_vietnamese(raw_full)
+                        return raw_full, proc_full, self.calculate_confidence_score(proc_full, "pypdf")
                 except Exception:
                     pass
 
-            return "", 0.0
+            return "", "", 0.0
 
         # ── Ảnh (JPG / PNG / TIFF) ───────────────────────────────────────────
         try:
             image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
-            text = self._ocr_image(image)
-            if text:
-                text = self.post_process_vietnamese(text)
-                return text, self.calculate_confidence_score(text, selected_engine)
+            raw_text, processed_text = self._ocr_image(image)
+            if raw_text:
+                return raw_text, processed_text, self.calculate_confidence_score(processed_text, selected_engine)
         except Exception as exc:
             logger.warning("Image OCR failed: {err}", err=str(exc))
 
-        return "", 0.0
+        return "", "", 0.0
 
     # ── So sánh engine ────────────────────────────────────────────────────────
     def compare_ocr_engines(self, file_bytes: bytes, file_type: str) -> dict[str, Any]:
@@ -726,10 +741,21 @@ class VietOCRService:
         ]:
             t0 = time.time()
             try:
-                text, conf = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                if eng_key == "tesseract":
+                    try:
+                        from app.services.tesseract_service import tesseract_service
+                        raw_text, processed_text, conf = tesseract_service.extract_text_from_file(file_bytes, file_type)
+                    except Exception:
+                        raw_text, processed_text, conf = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                else:
+                    raw_text, processed_text, conf = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                
+                text = processed_text or raw_text
                 results[eng_key] = {
                     "engine_name": eng_name,
                     "text": text,
+                    "raw_text": raw_text,
+                    "processed_text": processed_text,
                     "confidence": conf,
                     "inference_time_seconds": round(time.time() - t0, 3),
                     "char_count": len(text),
@@ -740,6 +766,8 @@ class VietOCRService:
                 results[eng_key] = {
                     "engine_name": eng_name,
                     "text": "",
+                    "raw_text": "",
+                    "processed_text": "",
                     "confidence": 0.0,
                     "inference_time_seconds": round(time.time() - t0, 3),
                     "status": f"FAILED: {exc}",

@@ -30,8 +30,8 @@ class AppException(Exception):
 class ValidationException(AppException):
     """Dữ liệu đầu vào không hợp lệ (nghiệp vụ, không phải Pydantic)."""
 
-    def __init__(self, message: str) -> None:
-        super().__init__(message, status_code=400)
+    def __init__(self, message: str, status_code: int = 400) -> None:
+        super().__init__(message, status_code=status_code)
 
 
 class FileTooLargeException(AppException):
@@ -156,3 +156,16 @@ class SearchIndexException(AppException):
 
     def __init__(self, detail: str) -> None:
         super().__init__(f"Lỗi tìm kiếm: {detail}", status_code=500)
+
+
+# ── 503 Service Unavailable ───────────────────────────────────────────────────
+
+class EngineUnavailableError(AppException):
+    """Mô hình/Engine OCR không khả dụng, thiếu thư viện hoặc file traineddata."""
+
+    def __init__(self, engine: str, reason: str | None = None) -> None:
+        msg = f"Mô hình OCR '{engine}' không khả dụng"
+        if reason:
+            msg = f"{msg}: {reason}"
+        super().__init__(msg, status_code=503)
+

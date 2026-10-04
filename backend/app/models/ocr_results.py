@@ -49,8 +49,10 @@ class OCRResult(Base):
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     ocr_engine: Mapped[str] = mapped_column(String(50), nullable=False, default="vietocr")
     ocr_engine_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    page_texts: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     processing_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_texts: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="DONE")  # DONE | FAILED | RUNNING
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_corrected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     corrected_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),

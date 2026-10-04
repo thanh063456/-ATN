@@ -14,6 +14,7 @@ Luồng xử lý chuẩn theo .ai/AGENTS.md:
 """
 import asyncio
 from datetime import date, datetime
+import time
 from uuid import UUID
 
 from loguru import logger
@@ -88,74 +89,73 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
 
             # ── 4. Chạy OCR (progress: 45% → 85% sau khi xong) ───────────
             await _set_progress(session, 45)
-            
-            # Nếu được yêu cầu chạy riêng 1 engine (chức năng OCR lại)
-            if engine:
-                if engine == "trocr":
-                    service = trocr_service
-                else:
-                    service = vietocr_service
-                    
-                raw_text, confidence = await asyncio.to_thread(
-                    service.extract_text_from_file, file_bytes, doc.file_type, engine
-                )
-                
-                # Reset is_latest cũ cho engine này
-                await session.execute(
-                    update(OCRResult)
-                    .where(OCRResult.document_id == doc_uuid)
-                    .where(OCRResult.ocr_engine == engine)
-                    .values(is_latest=False)
-                )
-                ocr_result = OCRResult(
-                    document_id=doc_uuid,
-                    is_latest=True,
-                    raw_text=raw_text,
-                    confidence_score=confidence,
-                    ocr_engine=engine,
-                    is_corrected=False,
-                )
-                session.add(ocr_result)
-                
+
+            target_engine = engine or "vietocr"
+            if target_engine == "trocr":
+                service = trocr_service
+                engine_version = getattr(trocr_service, "VERSION", "trocr-base-printed")
+            elif target_engine == "tesseract":
+                from app.services.tesseract_service import tesseract_service
+                service = tesseract_service
+                engine_version = getattr(tesseract_service, "VERSION", "5.3.0")
             else:
-                # Nếu là upload mới, chạy SONG SONG cả 2 mô hình (VietOCR và TrOCR)
-                logger.info("Running PARALLEL OCR for VietOCR + TrOCR simultaneously...")
-                
-                # Chạy đồng thời 2 engine → tiết kiệm ~50% thời gian
-                (raw_text, confidence), (trocr_text, trocr_conf) = await asyncio.gather(
-                    asyncio.to_thread(
-                        vietocr_service.extract_text_from_file, file_bytes, doc.file_type, "vietocr"
-                    ),
-                    asyncio.to_thread(
-                        trocr_service.extract_text_from_file, file_bytes, doc.file_type, "trocr"
-                    ),
+                target_engine = "vietocr"
+                service = vietocr_service
+                engine_version = getattr(vietocr_service, "VERSION", "vgg_transformer-2.0")
+
+            t_ocr_start = time.perf_counter()
+            ocr_failed = False
+            ocr_err_msg = None
+            raw_text = ""
+            processed_text = ""
+            confidence = 0.0
+
+            try:
+                raw_text, processed_text, confidence = await asyncio.to_thread(
+                    service.extract_text_from_file, file_bytes, doc.file_type, target_engine
                 )
-                
-                ocr_result_main = OCRResult(
-                    document_id=doc_uuid,
-                    is_latest=True,
-                    raw_text=raw_text,
-                    confidence_score=confidence,
-                    ocr_engine="vietocr",
-                    is_corrected=False,
-                )
-                session.add(ocr_result_main)
-                
-                ocr_result_alt = OCRResult(
-                    document_id=doc_uuid,
-                    is_latest=True,
-                    raw_text=trocr_text,
-                    confidence_score=trocr_conf,
-                    ocr_engine="trocr",
-                    is_corrected=False,
-                )
-                session.add(ocr_result_alt)
-                
+            except Exception as exc:
+                ocr_failed = True
+                ocr_err_msg = str(exc)
+                logger.error("OCR execution failed for engine {eng} on document {id}: {err}",
+                             eng=target_engine, id=doc_uuid, err=ocr_err_msg)
+
+            processing_time_ms = int(round((time.perf_counter() - t_ocr_start) * 1000))
+
+            # Reset is_latest=False CHỈ cho các bản ghi của cùng engine này trên document này
+            await session.execute(
+                update(OCRResult)
+                .where(OCRResult.document_id == doc_uuid)
+                .where(OCRResult.ocr_engine == target_engine)
+                .values(is_latest=False)
+            )
+
+            ocr_result = OCRResult(
+                document_id=doc_uuid,
+                is_latest=True,
+                raw_text=raw_text if not ocr_failed else "",
+                corrected_text=processed_text if not ocr_failed else "",
+                confidence_score=confidence if not ocr_failed else 0.0,
+                ocr_engine=target_engine,
+                ocr_engine_version=engine_version,
+                processing_time_ms=processing_time_ms,
+                status="FAILED" if ocr_failed else "DONE",
+                error_message=ocr_err_msg,
+                is_corrected=False,
+            )
+            session.add(ocr_result)
+
+            if ocr_failed and (not engine or engine == "vietocr"):
+                # Nếu engine mặc định (VietOCR) thất bại khi upload, raise để đánh dấu Job/Document FAILED
+                raise RuntimeError(f"OCR mặc định ({target_engine}) thất bại: {ocr_err_msg}")
+
             await _set_progress(session, 85)
 
-            # ── 5. Trích xuất Metadata & AI Smart Fields (dùng text chính) ────
+            # ── 5. Trích xuất Metadata & AI Smart Fields (dùng processed_text) ──
             await _set_progress(session, 90)
-            meta_dict = await asyncio.to_thread(vietocr_service.extract_metadata, raw_text)
+            # Dùng processed_text (đã qua post-process) để cải thiện độ chính xác metadata
+            meta_text = processed_text if processed_text else raw_text
+            meta_dict = await asyncio.to_thread(vietocr_service.extract_metadata, meta_text)
             
             try:
                 ai_fields = await ai_service.extract_smart_fields(raw_text)
