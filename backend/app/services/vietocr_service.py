@@ -490,18 +490,15 @@ class VietOCRService:
     @staticmethod
     def _clean_ocr_text(text: str) -> str:
         """
-        Giữ nguyên _clean_ocr_text để đảm bảo không gãy pipeline cũ,
-        tuy nhiên phần viết hoa chữ cái đầu sẽ bị xóa theo yêu cầu Part 3.
-        (Nhưng ở đây đang ở Part 2 nên tạm giữ, sẽ xóa ở Part 3).
+        Lọc văn bản trống
         """
         lines = text.splitlines()
         result: list[str] = []
         for line in lines:
             if line:
                 line = line.strip()
-                if line and line[0].islower():
-                    line = line[0].upper() + line[1:]
-            result.append(line)
+                if line:
+                    result.append(line)
         return "\n".join(result)
 
     # ── Hậu xử lý ─────────────────────────────────────────────────────────────

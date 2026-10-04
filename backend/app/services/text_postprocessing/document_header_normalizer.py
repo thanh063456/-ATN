@@ -218,7 +218,7 @@ def _rebuild_header_block(
 ) -> str:
     lines = []
 
-    # Văn bản hành chính (theo Nghị định 30/2020/NĐ-CP, luôn có Quốc hiệu, Tiêu ngữ và Tên cơ quan)
+    left_col = []
     if is_admin_doc:
         left_col = [
             "BỘ GIÁO DỤC VÀ ĐÀO TẠO",
@@ -229,6 +229,8 @@ def _rebuild_header_block(
         else:
             left_col.append("")
 
+    right_col = []
+    if has_national_header:
         right_col = [
             "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
             "Độc lập - Tự do - Hạnh phúc",
@@ -238,6 +240,15 @@ def _rebuild_header_block(
         else:
             right_col.append("")
 
+    # Nếu chỉ có doc_no mà không có is_admin_doc
+    if doc_no and not left_col:
+        left_col = [doc_no]
+    
+    # Nếu chỉ có date_str mà không có has_national_header
+    if date_str and not right_col:
+        right_col = [date_str]
+
+    if left_col or right_col:
         col_width = 38
         max_len = max(len(left_col), len(right_col))
         while len(left_col) < max_len:
@@ -255,15 +266,6 @@ def _rebuild_header_block(
             else:
                 padding = max(6, col_width - len(l_text))
                 lines.append(f"{l_text}{' ' * padding}{r_text}")
-
-    elif has_national_header:
-        # Văn bản cá nhân / đơn từ sinh viên (chỉ có Quốc hiệu, Tiêu ngữ)
-        lines.append("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
-        lines.append("Độc lập - Tự do - Hạnh phúc")
-        if doc_no:
-            lines.append(doc_no)
-        if date_str:
-            lines.append(date_str)
 
     if lines:
         return "\n".join(lines) + "\n\n"
