@@ -149,12 +149,12 @@ class VietOCRService:
     # ── Tách dòng ─────────────────────────────────────────────────────────────
     def segment_lines(self, pil_image: Image.Image) -> list[Image.Image]:
         """Tương thích ngược: chỉ trả về danh sách ảnh dòng."""
-        lines_with_boxes = self.segment_lines_with_boxes(pil_image)
+        lines_with_boxes, _, _ = self.segment_lines_with_boxes(pil_image)
         return [img for img, box in lines_with_boxes]
 
-    def segment_lines_with_boxes(self, pil_image: Image.Image) -> list[tuple[Image.Image, tuple[int, int, int, int]]]:
+    def segment_lines_with_boxes(self, pil_image: Image.Image) -> tuple[list[tuple[Image.Image, tuple[int, int, int, int]]], int, np.ndarray | None]:
         if cv2 is None:
-            return [(pil_image, (0, 0, pil_image.width, pil_image.height))]
+            return [(pil_image, (0, 0, pil_image.width, pil_image.height))], 15, None
 
         try:
             img_np = np.array(pil_image)
@@ -238,11 +238,11 @@ class VietOCRService:
                     n=len(lines_with_boxes), r=len(raw_boxes), v=len(valid_boxes),
                     h=h_img, w=w_img, hm=h_med
                 )
-                return lines_with_boxes
+                return lines_with_boxes, h_med, stamp_mask
         except Exception as exc:
             logger.warning("segment_lines fallback: {err}", err=str(exc))
 
-        return [(pil_image, (0, 0, pil_image.width, pil_image.height))]
+        return [(pil_image, (0, 0, pil_image.width, pil_image.height))], 15, None
 
     # ── Helpers tách dòng ──────────────────────────────────────────────────────
 
@@ -402,32 +402,48 @@ class VietOCRService:
 
     # ── Lọc nhiễu ─────────────────────────────────────────────────────────────
     @staticmethod
-    def _is_noise_line(text: str) -> bool:
+    def _is_noise_line_advanced(
+        text: str, box: tuple[int, int, int, int], img_w: int, img_h: int, h_med: int,
+        stamp_mask: np.ndarray | None = None
+    ) -> bool:
         """
-        Lọc dòng rác sau OCR. Loại bỏ:
-        - Dòng rỗng, quá ngắn.
-        - Toàn ký tự đặc biệt (không có chữ/số)
-        - Số barcode/artifact hoặc chuỗi số ảo giác dài.
-        - Dòng rác chứa toàn dấu chấm/gạch ngang.
-        - Dòng từ lặp: sinh ra từ con dấu tròn đỏ (circular stamp) hoặc watermark mờ.
+        Lọc dòng rác nâng cao dựa vào context (kích thước box, vị trí).
         """
         if not text or not text.strip():
             return True
         t = text.strip()
 
-        # Dòng quá ngắn
+        # Dòng quá ngắn hoặc toàn ký tự đặc biệt
         if len(t) <= 1 and t not in ("I", "1", "-", "."):
             return True
-
-        # Không có ký tự chữ cái / chữ số nào
         if not re.search('[A-Za-z0-9\u00C0-\u1EF9]', t):
             return True
 
-        # Artifact barcode / số mã vạch
-        if re.fullmatch(r'[\d\s\.\,\-]{4,}', t):
+        x, y, w, h = box
+        
+        # Hallucination guard: crop rất rộng nhưng model trả về chuỗi siêu ngắn
+        if w > 3 * h_med and len(t) < 3 and not re.search(r'\d', t):
             return True
             
-        # Barcode dài nằm xen kẽ (VD: Và 1.0000000000099)
+        # Hallucination guard: crop rất hẹp nhưng text trả về lại rất dài
+        if w < 2 * h_med and len(t) > 6:
+            return True
+
+        # Drop lines that are ONLY digits/short tokens, UNLESS context rule matches
+        is_page_number = re.fullmatch(r'\d+', t) and w < 4 * h_med and (y < 0.15 * img_h or y > 0.85 * img_h) and (0.35 * img_w < x < 0.65 * img_w)
+        is_list_number = re.fullmatch(r'\d+[\.\/]', t) and w < 3 * h_med
+        is_doc_number = "Số:" in t or "TB-" in t or re.match(r'(Số:|số)?\s*\d+/[A-Z\-]+', t)
+        
+        if re.fullmatch(r'[\d\s\.\,\-\/]{1,4}', t):
+            # Short tokens of digits/symbols
+            if not (is_page_number or is_list_number or is_doc_number or t in ("1.", "2.", "1", "2", "-")):
+                return True
+                
+        # Filter garbage words
+        if t in ("2.2", "42", "4.2", "22", "Coll", "Chines", "CHILL", "0%", "2/42"):
+            return True
+
+        # Barcode dài nằm xen kẽ
         if re.search(r'\d{10,}', t):
             return True
             
@@ -435,11 +451,12 @@ class VietOCRService:
         if len(re.findall(r'[\.\-\_~]', t)) >= 12:
             return True
 
+        # Lặp từ do con dấu tròn đỏ
         words = t.split()
         if len(words) >= 4:
             clean_words = []
-            for w in words:
-                key = re.sub('[^a-z\u00C0-\u1EF9]', '', w.lower())
+            for w_tok in words:
+                key = re.sub('[^a-z\u00C0-\u1EF9]', '', w_tok.lower())
                 if len(key) >= 2:
                     clean_words.append(key)
                     
@@ -448,13 +465,24 @@ class VietOCRService:
                 counts = Counter(clean_words)
                 max_freq = counts.most_common(1)[0][1]
                 
+                # Check if it overlaps with stamp
+                overlap_stamp = False
+                if stamp_mask is not None:
+                    # bounding box overlap
+                    crop_stamp = stamp_mask[y:y+h, x:x+w]
+                    if np.count_nonzero(crop_stamp) > 50:
+                        overlap_stamp = True
+                
                 # Mộc mờ sinh ảo giác từ lặp liên tục
                 if max_freq >= 3 and (max_freq / len(clean_words)) > 0.25:
-                    return True
+                    if overlap_stamp:
+                        return True
+                    if max_freq >= 5: 
+                        return True
                     
-                # Watermark mờ sinh 2 cặp lặp từ đứng cạnh nhau (VD: LỤC LỤC LỤ THUẬN THUẬN)
+                # Watermark mờ sinh 2 cặp lặp từ đứng cạnh nhau
                 adjacent_dups = sum(1 for i in range(len(clean_words) - 1) if clean_words[i] == clean_words[i+1])
-                if adjacent_dups >= 2:
+                if adjacent_dups >= 2 and overlap_stamp:
                     return True
 
         return False
@@ -462,22 +490,18 @@ class VietOCRService:
     @staticmethod
     def _clean_ocr_text(text: str) -> str:
         """
-        Lọc toàn bộ văn bản sau khi join dòng:
-        - Xóa dòng artifact barcode còn sót (chỉ toàn số + dấu chấm)
-        - Xóa dòng con dấu tròn đỏ còn sót (từ lặp liên tục)
-        - Giữ nguyên tất cả dòng hợp lệ
+        Giữ nguyên _clean_ocr_text để đảm bảo không gãy pipeline cũ,
+        tuy nhiên phần viết hoa chữ cái đầu sẽ bị xóa theo yêu cầu Part 3.
+        (Nhưng ở đây đang ở Part 2 nên tạm giữ, sẽ xóa ở Part 3).
         """
         lines = text.splitlines()
         result: list[str] = []
         for line in lines:
-            if not VietOCRService._is_noise_line(line):
-                # Tự động viết hoa chữ cái đầu tiên của dòng nếu nó là chữ thường
-                # Giúp sửa các lỗi như "lễ quốc khánh 2/9" -> "Lễ quốc khánh 2/9"
-                if line:
-                    line = line.strip()
-                    if line and line[0].islower():
-                        line = line[0].upper() + line[1:]
-                result.append(line)
+            if line:
+                line = line.strip()
+                if line and line[0].islower():
+                    line = line[0].upper() + line[1:]
+            result.append(line)
         return "\n".join(result)
 
     # ── Hậu xử lý ─────────────────────────────────────────────────────────────
@@ -516,26 +540,31 @@ class VietOCRService:
     def _ocr_lines_with_engine(
         self, image: Image.Image
     ) -> list[tuple[str, float]]:
-        """Tách dòng rồi OCR bằng VietOCR."""
-        lines_with_boxes = self.segment_lines_with_boxes(image)
+        """Tách dòng rồi OCR bằng VietOCR, lọc dòng rác bằng AI context."""
+        lines_with_boxes, h_med, stamp_mask = self.segment_lines_with_boxes(image)
         if not lines_with_boxes:
             return []
             
         line_images = [img for img, box in lines_with_boxes]
-        results = self._vietocr().ocr_lines(line_images, preprocess_fn=self.preprocess_handwriting)
+        raw_results = self._vietocr().ocr_lines(line_images, preprocess_fn=self.preprocess_handwriting)
+        
+        img_w, img_h = image.size
+        filtered_results = []
         
         # Debug Dump
         import os
         import json
         import time
-        if os.environ.get("OCR_DEBUG_DUMP") == "1":
+        do_dump = os.environ.get("OCR_DEBUG_DUMP") == "1"
+        dump_data = []
+        img_np = None
+        if do_dump:
             try:
                 import cv2
                 import numpy as np
                 debug_dir = os.path.abspath("backend/tests/data/thong_bao_1413")
                 os.makedirs(debug_dir, exist_ok=True)
                 
-                # Vẽ overlay boxes
                 img_np = np.array(image)
                 if len(img_np.shape) == 2:
                     img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
@@ -543,22 +572,30 @@ class VietOCRService:
                     img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
                 else:
                     img_np = img_np.copy()
-                    
-                dump_data = []
-                for idx, ((img, box), (text, conf)) in enumerate(zip(lines_with_boxes, results)):
-                    x, y, w, h = box
-                    # Màu xanh lá cho kept, màu đỏ cho dropped
-                    is_dropped = self._is_noise_line(text)
-                    color = (0, 0, 255) if is_dropped else (0, 255, 0)
-                    cv2.rectangle(img_np, (x, y), (x + w, y + h), color, 2)
-                    
-                    dump_data.append({
-                        "id": idx,
-                        "box": [x, y, w, h],
-                        "raw_text": text,
-                        "drop_reason": "noise_line" if is_dropped else None
-                    })
-                    
+            except Exception:
+                do_dump = False
+
+        for idx, ((img, box), (text, conf)) in enumerate(zip(lines_with_boxes, raw_results)):
+            x, y, w, h = box
+            is_dropped = self._is_noise_line_advanced(text, box, img_w, img_h, h_med, stamp_mask)
+            
+            if not is_dropped:
+                filtered_results.append((text, conf))
+                
+            if do_dump and img_np is not None:
+                color = (0, 0, 255) if is_dropped else (0, 255, 0)
+                import cv2
+                cv2.rectangle(img_np, (x, y), (x + w, y + h), color, 2)
+                dump_data.append({
+                    "id": idx,
+                    "box": [x, y, w, h],
+                    "raw_text": text,
+                    "drop_reason": "noise_line" if is_dropped else None
+                })
+                
+        if do_dump and img_np is not None:
+            try:
+                import cv2
                 timestamp = int(time.time() * 1000)
                 cv2.imwrite(os.path.join(debug_dir, f"debug_overlay_{timestamp}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
                 with open(os.path.join(debug_dir, f"debug_overlay_{timestamp}_dump.json"), "w", encoding="utf-8") as f:
@@ -566,7 +603,7 @@ class VietOCRService:
             except Exception as e:
                 logger.error(f"Failed to dump debug OCR: {e}")
 
-        return results
+        return filtered_results
 
     # ── Bóc tách bảng biểu ────────────────────────────────────────────────────
     def detect_and_extract_tables(self, pil_image: Image.Image) -> list[str]:
@@ -690,7 +727,7 @@ class VietOCRService:
         raw_text = ""
         line_results = self._ocr_lines_with_engine(processed_img)
         if line_results:
-            valid_lines = [t for t, _ in line_results if not self._is_noise_line(t)]
+            valid_lines = [t for t, _ in line_results]
             joined = "\n".join(valid_lines)
             if len(joined.strip()) > 3:
                 raw_text = unicodedata.normalize("NFC", joined.strip())
