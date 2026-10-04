@@ -512,6 +512,29 @@ class TestExtractMetadataMSSV:
         meta = self.svc.extract_metadata(text)
         assert meta["student_id"] is None
 
+class TestRegexBugRegression:
+    """Test để đảm bảo các chuỗi ký tự đặc biệt không gây lỗi re.error."""
+
+    def test_heuristic_quality_score_no_re_error(self):
+        from app.services.trocr_service import trocr_service
+        # Dấu ngoặc mở không được escape đúng cách từng gây ra lỗi nothing to repeat at position 18
+        garbage = "nothing to repeat at position 18 * {} [] () % ~ ^ | < > \\"
+        score = trocr_service.heuristic_quality_score(garbage)
+        assert isinstance(score, float)
+        assert score > 0.0
+
+    def test_post_process_vietnamese_garbage(self):
+        from app.services.text_postprocessing import post_process_vietnamese
+        garbage = "**??+*{}[][]()\\|"
+        res = post_process_vietnamese(garbage)
+        assert isinstance(res, str)
+        
+    def test_extract_metadata_garbage(self):
+        from app.services.extraction_service import extraction_service
+        garbage = "Lý do: + * ? { }"
+        meta = extraction_service.extract_metadata(garbage)
+        assert meta["reason"] is None or isinstance(meta["reason"], str)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

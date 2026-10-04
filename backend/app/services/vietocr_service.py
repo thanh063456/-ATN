@@ -389,7 +389,7 @@ class VietOCRService:
             return True
 
         # Không có ký tự chữ cái / chữ số nào
-        if not re.search(r'[A-Za-z0-9\u00C0-\u1EF9]', t):
+        if not re.search('[A-Za-z0-9\u00C0-\u1EF9]', t):
             return True
 
         # Artifact barcode / số mã vạch
@@ -408,7 +408,7 @@ class VietOCRService:
         if len(words) >= 4:
             clean_words = []
             for w in words:
-                key = re.sub(r'[^a-z\u00C0-\u1EF9]', '', w.lower())
+                key = re.sub('[^a-z\u00C0-\u1EF9]', '', w.lower())
                 if len(key) >= 2:
                     clean_words.append(key)
                     
@@ -627,11 +627,14 @@ class VietOCRService:
             raw_text = f"{raw_text}\n\n{tables_str}" if raw_text else tables_str
 
         # 4. Post-processing chỉ cho processed_text, giữ raw_text nguyên vẹn
+        processed_text = ""
         if raw_text:
-            cleaned        = self._clean_ocr_text(raw_text)
-            processed_text = self.post_process_vietnamese(cleaned)
-        else:
-            processed_text = ""
+            try:
+                cleaned        = self._clean_ocr_text(raw_text)
+                processed_text = self.post_process_vietnamese(cleaned)
+            except Exception as e:
+                logger.error("VietOCR post-processing failed: {err}", err=str(e))
+                processed_text = raw_text
 
         return raw_text, processed_text
 

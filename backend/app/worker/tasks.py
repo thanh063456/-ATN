@@ -116,8 +116,8 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 )
             except Exception as exc:
                 ocr_failed = True
-                ocr_err_msg = str(exc)
-                logger.error("OCR execution failed for engine {eng} on document {id}: {err}",
+                ocr_err_msg = f"{type(exc).__name__}: {str(exc)}"
+                logger.exception("OCR execution failed for engine {eng} on document {id}: {err}",
                              eng=target_engine, id=doc_uuid, err=ocr_err_msg)
 
             processing_time_ms = int(round((time.perf_counter() - t_ocr_start) * 1000))

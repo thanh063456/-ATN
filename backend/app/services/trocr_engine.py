@@ -58,6 +58,10 @@ class TrOCREngine:
                     VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
                 )
                 self._model.eval()
+                if device == "cpu":
+                    self._model = torch.quantization.quantize_dynamic(
+                        self._model, {torch.nn.Linear}, dtype=torch.qint8
+                    )
                 self._init_error = None
                 logger.info("Initialized Microsoft TrOCR Vision Transformer successfully")
             except Exception as exc:
@@ -94,8 +98,12 @@ class TrOCREngine:
             rgb_images = [img.convert("RGB") if img.mode != "RGB" else img for img in images]
             pixel_values = proc(images=rgb_images, return_tensors="pt").pixel_values.to(device)
 
-            with torch.no_grad():
-                generated_ids = model.generate(pixel_values, max_new_tokens=64)
+            with torch.inference_mode():
+                generated_ids = model.generate(
+                    pixel_values, 
+                    max_new_tokens=40,
+                    do_sample=False
+                )
 
             generated_texts = proc.batch_decode(generated_ids, skip_special_tokens=True)
             return [str(t).strip() for t in generated_texts]
@@ -126,7 +134,7 @@ class TrOCREngine:
             return []
 
         _s = self._get_settings()
-        _max_lines  = getattr(_s, "ocr_max_lines_per_page", 300) if _s else 300
+        _max_lines  = getattr(_s, "trocr_max_lines_per_page", 60) if _s else 60
         _batch_size = getattr(_s, "trocr_batch_size", 8)         if _s else 8
 
         imgs = line_images[:_max_lines] if _max_lines > 0 else line_images
@@ -142,7 +150,7 @@ class TrOCREngine:
             for txt in texts:
                 txt = str(txt).strip() if txt else ""
                 if txt:
-                    bad  = len(re.findall(r'[%~^|<>{}\\[\]\\\\]', txt))
+                    bad  = len(re.findall(r'[%~^|<>{}\[\]\\]', txt))
                     conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
                     line_results.append((txt, round(conf, 2)))
 

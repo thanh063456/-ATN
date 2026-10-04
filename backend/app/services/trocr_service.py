@@ -102,43 +102,9 @@ class TrOCRService:
 
     # ── Tách dòng ─────────────────────────────────────────────────────────────
     def segment_lines(self, pil_image: Image.Image) -> list[Image.Image]:
-        """Tách ảnh thành danh sách ảnh dòng đơn lẻ."""
-        if cv2 is None:
-            return [pil_image]
-
-        try:
-            img_np = np.array(pil_image)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np.copy()
-            h_img, w_img = gray.shape[:2]
-
-            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-            kw = max(40, w_img // 20)
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, 1))
-            dilated = cv2.dilate(binary, kernel, iterations=1)
-
-            contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            raw_boxes = [cv2.boundingRect(c) for c in contours]
-
-            valid_boxes = [
-                (x, y, w, h) for x, y, w, h in raw_boxes
-                if w >= 15 and 6 <= h <= h_img * 0.6
-            ]
-
-            valid_boxes.sort(key=lambda b: (b[1] // 20, b[0]))
-
-            line_images: list[Image.Image] = []
-            for x, y, w, h in valid_boxes:
-                t = max(0, y - 4)
-                b = min(h_img, y + h + 4)
-                lo = max(0, x - 3)
-                ro = min(w_img, x + w + 3)
-                line_images.append(Image.fromarray(img_np[t:b, lo:ro]))
-
-            return line_images if line_images else [pil_image]
-        except Exception as exc:
-            logger.warning("TrOCR segment_lines error: {err}", err=str(exc))
-            return [pil_image]
+        """Sử dụng chung line segmenter cải tiến từ vietocr_service."""
+        from app.services.vietocr_service import vietocr_service
+        return vietocr_service.segment_lines(pil_image)
 
     # ── Lọc nhiễu ─────────────────────────────────────────────────────────────
     @staticmethod
@@ -166,7 +132,7 @@ class TrOCRService:
         if not text or len(text.strip()) < 10:
             return 0.60
         base = 0.90
-        suspicious = len(re.findall(r'[%~^|<>{}\\[\\]@#$*]', text))
+        suspicious = len(re.findall(r'[%~^|<>{}\[\]@#$*]', text))
         char_penalty = min(0.15, (suspicious / max(len(text), 1)) * 5.0)
         return round(max(0.60, min(0.98, base - char_penalty)), 2)
 
@@ -175,18 +141,38 @@ class TrOCRService:
         """
         OCR 1 ảnh trang: trả về (raw_text, processed_text).
         """
+        t_start = time.time()
+        
         processed_img = self.preprocess_image(image)
+        t_pre = time.time()
+        
         line_images = self.segment_lines(processed_img)
+        t_seg = time.time()
 
-        # Giới hạn dòng để TrOCR CPU không bị nghẽn quá lâu
-        MAX_LINES_TROCR = 60
+        _s = self._get_settings()
+        MAX_LINES_TROCR = getattr(_s, "trocr_max_lines_per_page", 60) if _s else 60
         if len(line_images) > MAX_LINES_TROCR:
             line_images = line_images[:MAX_LINES_TROCR]
 
         line_results = self._trocr().ocr_lines(line_images, preprocess_fn=self.preprocess_handwriting)
         valid_lines = [t for t, _ in line_results if not self._is_noise_line(t)]
         raw_text = "\n".join(valid_lines).strip()
-        processed_text = self.post_process_vietnamese(raw_text) if raw_text else ""
+        t_infer = time.time()
+        
+        processed_text = ""
+        if raw_text:
+            try:
+                processed_text = self.post_process_vietnamese(raw_text)
+            except Exception as e:
+                logger.error("TrOCR post-processing failed: {err}", err=str(e))
+                processed_text = raw_text
+        t_post = time.time()
+        
+        logger.info(
+            "TrOCR Timing | Preprocess: {t1:.2f}s | Segment: {t2:.2f}s | Inference: {t3:.2f}s | Postprocess: {t4:.2f}s",
+            t1=t_pre - t_start, t2=t_seg - t_pre, t3=t_infer - t_seg, t4=t_post - t_infer
+        )
+
         return raw_text, processed_text
 
     # ── OCR toàn file ─────────────────────────────────────────────────────────
@@ -205,6 +191,10 @@ class TrOCRService:
         raw_pages: list[str] = []
         proc_pages: list[str] = []
 
+        _s = self._get_settings()
+        timeout_s = getattr(_s, "ocr_trocr_timeout_s", 600) if _s else 600
+        start_time_global = time.time()
+
         if file_ext == "pdf":
             if pymupdf is None:
                 raise EngineUnavailableError("trocr", "PyMuPDF chưa được cài đặt để render PDF.")
@@ -212,6 +202,10 @@ class TrOCRService:
                 doc = pymupdf.open(stream=file_bytes, filetype="pdf")
                 total = len(doc)
                 for idx, page in enumerate(doc):
+                    if time.time() - start_time_global > timeout_s:
+                        logger.warning("TrOCR timed out after {s} seconds at page {i}/{t}", s=timeout_s, i=idx+1, t=total)
+                        break
+                    
                     t0 = time.time()
                     pix = page.get_pixmap(dpi=_render_dpi)
                     page_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)

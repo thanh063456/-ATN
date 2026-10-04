@@ -28,7 +28,10 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BACKEND   = _REPO_ROOT / "backend"
 sys.path.insert(0, str(_BACKEND))
-sys.path.insert(0, str(_REPO_ROOT))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 os.environ.setdefault("APP_ENV", "development")
 
