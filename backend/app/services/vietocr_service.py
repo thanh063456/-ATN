@@ -153,78 +153,90 @@ class VietOCRService:
         return [img for img, box in lines_with_boxes]
 
     def segment_lines_with_boxes(self, pil_image: Image.Image) -> list[tuple[Image.Image, tuple[int, int, int, int]]]:
-        """
-        Tách ảnh thành danh sách ảnh dòng đơn lẻ kèm bounding box (x, y, w, h).
-
-        Cải tiến (Bước 1):
-          1. Lọc vùng con dấu đỏ tròn trước nhị phân hóa → giảm dòng nhiễu.
-          2. Sắp xếp box theo y-center cluster thực tế (thay vì y//20 cứng).
-          3. Tách header 2 cột chuẩn văn bản hành chính Việt Nam.
-          4. Giảm padding top/bottom từ 10/8 → 4/4px để tránh cắt nhầm dòng kề nhau.
-        """
         if cv2 is None:
             return [(pil_image, (0, 0, pil_image.width, pil_image.height))]
 
         try:
             img_np = np.array(pil_image)
-            gray   = (
-                cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                if len(img_np.shape) == 3
-                else img_np.copy()
-            )
+            if len(img_np.shape) == 3 and img_np.shape[2] == 4:
+                img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
+            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np.copy()
             h_img, w_img = gray.shape[:2]
 
-            # Bước 1a: Nhị phân hóa
             _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-            # Bước 1b: Xóa vùng con dấu đỏ khỏi binary image trước khi dilate
             stamp_mask = self._get_red_stamp_mask(img_np)
             if stamp_mask is not None:
                 binary = cv2.bitwise_and(binary, cv2.bitwise_not(stamp_mask))
                 logger.debug("segment_lines: đã xóa vùng con dấu đỏ")
 
-            # Bước 1c: Dilate ngang để nối từ → dòng liên tục
-            kw     = max(40, w_img // 20)
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, 1))
+            # CCs for h_med
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+            heights = [stats[i, cv2.CC_STAT_HEIGHT] for i in range(1, num_labels) if stats[i, cv2.CC_STAT_HEIGHT] > 4 and stats[i, cv2.CC_STAT_WIDTH] > 4]
+            h_med = np.median(heights) if heights else 15
+            h_med = max(10, int(h_med))
+
+            # Dilate
+            kw = max(3, int(1.5 * h_med))
+            kh = max(1, int(0.4 * h_med))
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
             dilated = cv2.dilate(binary, kernel, iterations=1)
 
             contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             raw_boxes = [cv2.boundingRect(c) for c in contours]
 
-            # Bước 1d: Lọc nhiễu điểm và khung viền
+            # Merge overlaps
+            merged_boxes = self._merge_boxes(raw_boxes, h_med)
+
             valid_boxes = [
-                (x, y, w, h) for x, y, w, h in raw_boxes
-                if w >= 15 and 6 <= h <= h_img * 0.6
+                (x, y, w, h) for x, y, w, h in merged_boxes
+                if h >= 0.5 * h_med and w >= 5
             ]
 
-            # Bước 1e: Sắp xếp theo hàng thực tế dựa y-center cluster
-            ordered_boxes = self._sort_boxes_by_row(valid_boxes)
+            # Split tall boxes
+            split_boxes = []
+            for x, y, w, h in valid_boxes:
+                if h > 1.6 * h_med:
+                    sub_boxes = self._split_tall_box(binary, x, y, w, h, h_med)
+                    split_boxes.extend(sub_boxes)
+                else:
+                    split_boxes.append((x, y, w, h))
 
-            # Bước 1f: Tách header 2 cột
-            expanded: list[tuple[int, int, int, int]] = []
+            ordered_boxes = self._sort_boxes_by_row(split_boxes, h_med)
+
+            expanded = []
             for x, y, w, h in ordered_boxes:
                 if w > w_img * 0.65 and y < h_img * 0.20:
-                    sub = self._split_two_column(binary, x, y, w, h)
+                    sub = self._split_two_column_advanced(binary, x, y, w, h, h_med)
                     expanded.extend(sub)
                 else:
                     expanded.append((x, y, w, h))
 
-            # Bước 1g: Crop
-            PAD_TOP, PAD_BOT, PAD_LR = 4, 4, 3
-            lines_with_boxes: list[tuple[Image.Image, tuple[int, int, int, int]]] = []
+            PAD_V = max(2, int(0.3 * h_med))
+            PAD_H = max(2, int(0.3 * h_med))
+            
+            lines_with_boxes = []
             for x, y, w, h in expanded:
-                t = max(0, y - PAD_TOP)
-                b = min(h_img, y + h + PAD_BOT)
-                lo = max(0, x - PAD_LR)
-                ro = min(w_img, x + w + PAD_LR)
-                line_img = Image.fromarray(img_np[t:b, lo:ro])
+                t = max(0, y - PAD_V)
+                b = min(h_img, y + h + PAD_V)
+                lo = max(0, x - PAD_H)
+                ro = min(w_img, x + w + PAD_H)
+                
+                # Blank out stamp pixels inside crops
+                crop_np = img_np[t:b, lo:ro].copy()
+                if stamp_mask is not None:
+                    crop_stamp_mask = stamp_mask[t:b, lo:ro]
+                    # fill white where stamp mask is 255
+                    crop_np[crop_stamp_mask == 255] = [255, 255, 255]
+
+                line_img = Image.fromarray(crop_np)
                 lines_with_boxes.append((line_img, (x, y, w, h)))
 
             if lines_with_boxes:
                 logger.info(
-                    "Segmented {n} lines (raw={r}, valid={v}, {h}x{w}px)",
+                    "Segmented {n} lines (raw={r}, valid={v}, {h}x{w}px, h_med={hm})",
                     n=len(lines_with_boxes), r=len(raw_boxes), v=len(valid_boxes),
-                    h=h_img, w=w_img,
+                    h=h_img, w=w_img, hm=h_med
                 )
                 return lines_with_boxes
         except Exception as exc:
@@ -262,112 +274,129 @@ class VietOCRService:
     @staticmethod
     def _sort_boxes_by_row(
         boxes: list[tuple[int, int, int, int]],
-        tolerance_ratio: float = 0.55,
+        h_med: int
     ) -> list[tuple[int, int, int, int]]:
         """
-        Sắp xếp boxes theo hàng thực tế.
-
-        Hai box được coi là cùng hàng nếu khoảng cách y-center nhỏ hơn
-        `min(h_a, h_b) * tolerance_ratio`. Điều này chống lỗi dòng bị đảo thứ tự
-        khi y//20 quá thô (ví dụ: y=19 và y=21 bị tách thành 2 hàng khác nhau).
+        Sắp xếp boxes theo hàng thực tế bằng cách gom nhóm theo y-center.
         """
         if not boxes:
             return []
 
-        # Sắp xếp sơ bộ theo y tăng dần
-        sorted_by_y = sorted(boxes, key=lambda b: b[1])
-
+        sorted_by_y = sorted(boxes, key=lambda b: b[1] + b[3] / 2)
         rows: list[list[tuple[int, int, int, int]]] = []
         for bx in sorted_by_y:
-            bx_y, bx_h = bx[1], bx[3]
-            bx_cy = bx_y + bx_h / 2
+            bx_cy = bx[1] + bx[3] / 2
             placed = False
             for row in rows:
-                # Y-center trung bình của row hiện tại
                 row_cy = sum(b[1] + b[3] / 2 for b in row) / len(row)
-                row_h  = sum(b[3] for b in row) / len(row)
-                if abs(bx_cy - row_cy) < row_h * tolerance_ratio:
+                if abs(bx_cy - row_cy) < h_med * 0.5:
                     row.append(bx)
                     placed = True
                     break
             if not placed:
                 rows.append([bx])
 
-        # Sắp xếp hàng theo y-center tăng dần; trong hàng sắp theo x
         result: list[tuple[int, int, int, int]] = []
         for row in sorted(rows, key=lambda r: sum(b[1] + b[3] / 2 for b in r) / len(r)):
             result.extend(sorted(row, key=lambda b: b[0]))
         return result
 
     @staticmethod
-    def _split_two_column(
-        binary: "np.ndarray",
+    def _merge_boxes(boxes: list[tuple[int, int, int, int]], h_med: int) -> list[tuple[int, int, int, int]]:
+        """Gom các hộp gần nhau theo chiều ngang và có chung dòng (độ cao)."""
+        if not boxes: return []
+        boxes = sorted(boxes, key=lambda b: b[0])
+        merged = []
+        for bx in boxes:
+            x, y, w, h = bx
+            placed = False
+            for i, mb in enumerate(merged):
+                mx, my, mw, mh = mb
+                overlap_y = max(0, min(y+h, my+mh) - max(y, my))
+                if overlap_y >= 0.5 * min(h, mh):
+                    if (x - (mx + mw)) < 2 * h_med and (mx - (x + w)) < 2 * h_med:
+                        nx = min(x, mx)
+                        ny = min(y, my)
+                        nw = max(x+w, mx+mw) - nx
+                        nh = max(y+h, my+mh) - ny
+                        merged[i] = (nx, ny, nw, nh)
+                        placed = True
+                        break
+            if not placed:
+                merged.append((x, y, w, h))
+        return merged
+
+    @staticmethod
+    def _split_tall_box(binary: np.ndarray, x: int, y: int, w: int, h: int, h_med: int) -> list[tuple[int, int, int, int]]:
+        """Cắt box quá cao (thường do dính chữ giữa 2 dòng) bằng projection ngang."""
+        region = binary[y:y+h, x:x+w]
+        if region.size == 0: return [(x, y, w, h)]
+        row_hist = region.sum(axis=1)
+        split_y = []
+        in_gap = False
+        gap_start = 0
+        for r, val in enumerate(row_hist):
+            if val == 0:
+                if not in_gap:
+                    in_gap = True
+                    gap_start = r
+            else:
+                if in_gap:
+                    in_gap = False
+                    if r - gap_start >= 1:
+                        split_y.append((gap_start + r) // 2)
+        if not split_y:
+            return [(x, y, w, h)]
+        
+        boxes = []
+        last_y = 0
+        for sy in split_y:
+            if sy - last_y >= 0.5 * h_med:
+                boxes.append((x, y + last_y, w, sy - last_y))
+            last_y = sy
+        if h - last_y >= 0.5 * h_med:
+            boxes.append((x, y + last_y, w, h - last_y))
+        
+        return boxes if boxes else [(x, y, w, h)]
+
+    @staticmethod
+    def _split_two_column_advanced(
+        binary: np.ndarray,
         x: int, y: int, w: int, h: int,
+        h_med: int
     ) -> list[tuple[int, int, int, int]]:
         """
-        Tách box rộng thành 2 cột nếu có khoảng trắng liên tục ở vùng giữa.
-
-        Áp dụng cho header 2 cột chuẩn VBHC Việt Nam:
-          Cột trái: tên cơ quan chủ quản
-          Cột phải: Cộng hòa XHCN Việt Nam / Độc lập - Tự do - Hạnh phúc
-
-        Nếu không tìm được gap rõ ràng, trả về box gốc nguyên vẹn.
+        Tách box rộng thành 2 cột nếu có khoảng trắng liên tục (gap > 3*h_med) ở vùng giữa.
         """
         try:
             region = binary[max(0, y - 2): y + h + 2, max(0, x): x + w]
             if region.size == 0:
                 return [(x, y, w, h)]
 
-            # Histogram dọc: tổng pixel đen theo từng cột x
-            col_hist = region.sum(axis=0).astype(np.float32)
-            max_val  = col_hist.max()
-            if max_val == 0:
-                return [(x, y, w, h)]
-
-            # Tìm gap trong vùng 30%-70% chiều rộng box
-            center_l = int(w * 0.30)
-            center_r = int(w * 0.70)
-            if center_r <= center_l:
-                return [(x, y, w, h)]
-
-            center_zone = col_hist[center_l:center_r]
-            gap_threshold = max_val * 0.04  # < 4% max → coi là khoảng trắng
-
-            gap_mask = (center_zone < gap_threshold)
-            if not gap_mask.any():
-                return [(x, y, w, h)]
-
-            # Chọn gap liên tục dài nhất trong vùng trung tâm
-            best_start, best_len, cur_start = 0, 0, None
-            for i, is_gap in enumerate(gap_mask):
-                if is_gap and cur_start is None:
-                    cur_start = i
-                elif not is_gap and cur_start is not None:
-                    length = i - cur_start
-                    if length > best_len:
-                        best_len, best_start = length, cur_start
-                    cur_start = None
-            if cur_start is not None:
-                length = len(gap_mask) - cur_start
-                if length > best_len:
-                    best_len, best_start = length, cur_start
-
-            if best_len < 8:  # gap quá hẹp → không tách
-                return [(x, y, w, h)]
-
-            split_offset = best_start + best_len // 2  # điểm giữa gap
-            split_x = x + center_l + split_offset
-
-            w_left  = split_x - x
-            w_right = x + w - split_x
-            if w_left < 20 or w_right < 20:
-                return [(x, y, w, h)]
-
-            logger.debug(
-                "split_two_column: tách box ({x},{y},{w},{h}) tại x={sx}",
-                x=x, y=y, w=w, h=h, sx=split_x,
-            )
-            return [(x, y, w_left, h), (split_x, y, w_right, h)]
+            col_hist = region.sum(axis=0)
+            in_gap = False
+            gap_start = 0
+            best_gap = -1
+            best_gap_w = 0
+            for c, val in enumerate(col_hist):
+                if val == 0:
+                    if not in_gap:
+                        in_gap = True
+                        gap_start = c
+                else:
+                    if in_gap:
+                        in_gap = False
+                        gw = c - gap_start
+                        if gw > 3 * h_med and gw > best_gap_w:
+                            best_gap_w = gw
+                            best_gap = (gap_start + c) // 2
+            
+            if best_gap > 0 and 0.2 * w < best_gap < 0.8 * w:
+                return [
+                    (x, y, best_gap, h),
+                    (x + best_gap, y, w - best_gap, h)
+                ]
+            return [(x, y, w, h)]
         except Exception:
             return [(x, y, w, h)]
 
