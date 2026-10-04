@@ -132,14 +132,15 @@ class VietOCREngine:
         return self._predictor
 
     # ── Batch Predict ─────────────────────────────────────────────────────────
-    def predict_batch_padded(self, images: list[Image.Image]) -> list[str]:
+    def predict_batch_padded(self, images: list[Image.Image], return_prob: bool = False) -> list[str] | tuple[list[str], list[float]]:
         """
         Pad tất cả ảnh dòng về cùng h=32, w=max_w rồi predict 1 batch duy nhất.
         Tăng throughput CPU gấp 3-5x so với predict từng ảnh đơn lẻ.
+        Nếu return_prob=True, trả về (texts, probabilities).
         """
         predictor = self.get_predictor()
         if not images or predictor is None:
-            return []
+            return ([], []) if return_prob else []
 
         target_h = 32
         resized: list[Image.Image] = []
@@ -152,7 +153,7 @@ class VietOCREngine:
             resized.append(img.resize((new_w, target_h), Image.Resampling.BILINEAR))
 
         if not resized:
-            return []
+            return ([], []) if return_prob else []
 
         max_w = max(img.width for img in resized)
         padded: list[Image.Image] = []
@@ -165,16 +166,29 @@ class VietOCREngine:
                 padded.append(pad_img)
 
         try:
-            results = predictor.predict_batch(padded)
-            return [str(t).strip() for t in results]
+            if return_prob:
+                results, probs = predictor.predict_batch(padded, return_prob=True)
+                return [str(t).strip() for t in results], [float(p) for p in probs]
+            else:
+                results = predictor.predict_batch(padded)
+                return [str(t).strip() for t in results]
         except Exception:
+            # Fallback
             outs = []
+            probs_out = []
             for img in images:
                 try:
-                    outs.append(str(predictor.predict(img)).strip())
+                    if return_prob:
+                        res, prob = predictor.predict(img, return_prob=True)
+                        outs.append(str(res).strip())
+                        probs_out.append(float(prob))
+                    else:
+                        outs.append(str(predictor.predict(img)).strip())
                 except Exception:
                     outs.append("")
-            return outs
+                    if return_prob:
+                        probs_out.append(0.0)
+            return (outs, probs_out) if return_prob else outs
 
     # ── Line OCR ─────────────────────────────────────────────────────────────
     def ocr_lines(
@@ -184,11 +198,8 @@ class VietOCREngine:
     ) -> list[tuple[str, float]]:
         """
         OCR danh sách ảnh dòng bằng VietOCR.
-
-        Tối ưu (Bước 2): Sort-by-width batching — sắp xếp dòng theo chiều rộng
-        trước khi batch để giảm overhead padding trong mỗi batch.
-        Các dòng có độ rộng gần nhau sẽ cùng batch → max_w nhỏ hơn → nhanh hơn.
         Kết quả được unsort để trả về đúng thứ tự dòng gốc.
+        Lấy probability thực từ model thay vì heurustic.
 
         Args:
             line_images: Danh sách ảnh đã segment từ segment_lines().
@@ -214,13 +225,13 @@ class VietOCREngine:
         total_lines = len(cleaned)
 
         # Sort-by-width: nhóm dòng có độ rộng gần nhau vào cùng batch
-        # Lưu index gốc để unsort sau
         indexed = sorted(enumerate(cleaned), key=lambda iv: iv[1].size[0])
         orig_indices  = [i for i, _ in indexed]
         sorted_images = [img for _, img in indexed]
 
         # OCR theo batch (sorted by width)
         sorted_texts: dict[int, str] = {}
+        sorted_probs: dict[int, float] = {}
         for batch_start in range(0, total_lines, _batch_size):
             batch     = sorted_images[batch_start: batch_start + _batch_size]
             batch_idx = orig_indices[batch_start: batch_start + _batch_size]
@@ -232,18 +243,30 @@ class VietOCREngine:
                 wmin=batch[0].size[0],
                 wmax=batch[-1].size[0],
             )
-            texts = self.predict_batch_padded(batch)
-            for orig_i, txt in zip(batch_idx, texts):
+            try:
+                texts, probs = self.predict_batch_padded(batch, return_prob=True)
+            except Exception:
+                # safety fallback if something really bad happens
+                texts = self.predict_batch_padded(batch, return_prob=False)
+                probs = [0.8] * len(texts)
+                
+            for orig_i, txt, p in zip(batch_idx, texts, probs):
                 sorted_texts[orig_i] = str(txt).strip() if txt else ""
+                sorted_probs[orig_i] = float(p)
 
         # Tổng hợp kết quả theo đúng thứ tự dòng gốc
         line_results: list[tuple[str, float]] = []
         for i in range(total_lines):
             txt = sorted_texts.get(i, "")
+            prob = sorted_probs.get(i, 0.0)
             if txt:
+                # Add a small heuristic penalty for garbled lines but mostly trust real prob
                 bad  = len(re.findall(r'[%~^|<>{}\\[\]\\\\]', txt))
-                conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
-                line_results.append((txt, round(conf, 2)))
+                if bad > 0:
+                    prob = max(0.1, prob - (bad / max(len(txt), 1)))
+                line_results.append((txt, round(prob, 3)))
+            else:
+                line_results.append(("", 0.0))
 
         return line_results
 

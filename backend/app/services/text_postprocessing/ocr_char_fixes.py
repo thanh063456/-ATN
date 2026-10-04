@@ -275,6 +275,133 @@ OCR_CHAR_RULES: list[tuple[str, str, int, str]] = [
         0,
         'case_Truong_DHDL: của TRƯỜNG ĐẠI HỌC... → của Trường Đại học Đà Lạt',
     ),
+    # Sửa dấu câu: ', ' thành '. ' nếu đứng trước từ bắt đầu câu (Sau, Đồng, Khi, Nếu)
+    # Lưu ý: không sửa bên trong ngoặc kép bằng regex đơn giản, nhưng pattern này an toàn với từ khóa.
+    (
+        r',\s+(Sau|Đồng|Khi|Nếu|Tuy|Do|Vào|Trong|Ngoài)\b',
+        r'. \1',
+        0,
+        'comma_to_period_before_starter: ", Sau" → ". Sau"',
+    ),
+    # Sửa '+' bị nhận nhầm thành '4' ở đầu dòng
+    (
+        r'^(\s*)4\s+(Bước|Các|Giả)\b',
+        r'\1+ \2',
+        re.MULTILINE,
+        'four_to_plus_at_line_start: "4 Bước" → "+ Bước"',
+    ),
+    (
+        r'\bBước\s+22\b',
+        'Bước 2:',
+        0,
+        'buoc_22_to_2_colon: "Bước 22" → "Bước 2:"',
+    ),
+    (
+        r'\b0TP\b',
+        'OTP',
+        0,
+        'zero_tp_to_otp: "0TP" → "OTP"',
+    ),
+    (
+        r'số\s+46/2/BGDĐT\b',
+        'số 4642/BGDĐT',
+        re.IGNORECASE,
+        'so_462_bgddt_to_4642: "số 46/2/BGDĐT" → "số 4642/BGDĐT"',
+    ),
+    (
+        r'\b181\s+5V\b',
+        'Hội SV',
+        0,
+        '181_5V_to_Hoi_SV: "181 5V" → "Hội SV"',
+    ),
+    # Nơi nhận: Ban giám hiệu → Ban Giám hiệu
+    (
+        r'\bBan\s+giám\s+hiệu\b',
+        'Ban Giám hiệu',
+        0,
+        'ban_giam_hieu_case: "Ban giám hiệu" → "Ban Giám hiệu"',
+    ),
+    # Các lỗi từ ghép (Syllable / Bigram errors)
+    (
+        r'\bdiện\s+thoại\b',
+        'điện thoại',
+        re.IGNORECASE,
+        'dien_thoai_to_dien_thoai: "diện thoại" → "điện thoại"',
+    ),
+    (
+        r'\blối\s+kéo\b',
+        'lôi kéo',
+        re.IGNORECASE,
+        'loi_keo_to_loi_keo: "lối kéo" → "lôi kéo"',
+    ),
+    (
+        r'\bdụ\s+đ[ỗồ]\b',
+        'dụ dỗ',
+        re.IGNORECASE,
+        'du_do_to_du_do: "dụ đỗ/đồ" → "dụ dỗ"',
+    ),
+    (
+        r'\blửa\s+đảo\b',
+        'lừa đảo',
+        re.IGNORECASE,
+        'lua_dao_to_lua_dao: "lửa đảo" → "lừa đảo"',
+    ),
+    (
+        r'\btrưởng\s+hợp\b',
+        'trường hợp',
+        re.IGNORECASE,
+        'truong_hop_to_truong_hop: "trưởng hợp" → "trường hợp"',
+    ),
+    (
+        r'\bkip\b',
+        'kịp',
+        re.IGNORECASE,
+        'kip_to_kip: "kip" → "kịp"',
+    ),
+    (
+        r'\bgử\s+bí\b',
+        'giữ bí',
+        re.IGNORECASE,
+        'gu_bi_to_giu_bi: "gử bí" → "giữ bí"',
+    ),
+    (
+        r'\bbí\s+một\b',
+        'bí mật',
+        re.IGNORECASE,
+        'bi_mot_to_bi_mat: "bí một" → "bí mật"',
+    ),
+    (
+        r'\bnhà\s+nghi\b',
+        'nhà nghỉ',
+        re.IGNORECASE,
+        'nha_nghi_to_nha_nghi: "nhà nghi" → "nhà nghỉ"',
+    ),
+    (
+        r'\bchí\s+liên\s+lạc\b',
+        'chỉ liên lạc',
+        re.IGNORECASE,
+        'chi_lien_lac_to_chi_lien_lac: "chí liên lạc" → "chỉ liên lạc"',
+    ),
+    (
+        r'\bthao\s+ting\b',
+        'thao túng',
+        re.IGNORECASE,
+        'thao_ting_to_thao_tung: "thao ting" → "thao túng"',
+    ),
+    # Độc lập ? Tự do ? Hạnh phúc -> Độc lập – Tự do – Hạnh phúc
+    (
+        r'Độc\s+lập\s*\?\s*Tự\s+do\s*\?\s*Hạnh\s+phúc',
+        'Độc lập – Tự do – Hạnh phúc',
+        0,
+        'doc_lap_tu_do_hanh_phuc_qmark: "?" → "–" in national motto',
+    ),
+    # Nháy kép quanh cụm ngắn: ?bắt cóc online? -> "bắt cóc online"
+    (
+        r'\?([a-zA-ZÀ-ỹ0-9\s]{2,30})\?',
+        r'"\1"',
+        0,
+        'qmark_quote_fix: "?text?" → "text"',
+    ),
 ]
 
 

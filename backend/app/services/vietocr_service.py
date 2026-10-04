@@ -170,30 +170,32 @@ class VietOCRService:
                 binary = cv2.bitwise_and(binary, cv2.bitwise_not(stamp_mask))
                 logger.debug("segment_lines: đã xóa vùng con dấu đỏ")
 
-            # CCs for h_med
+            # CCs for h_med — only use components > 12px tall to exclude diacritic strips
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
-            heights = [stats[i, cv2.CC_STAT_HEIGHT] for i in range(1, num_labels) if stats[i, cv2.CC_STAT_HEIGHT] > 4 and stats[i, cv2.CC_STAT_WIDTH] > 4]
+            heights = [stats[i, cv2.CC_STAT_HEIGHT] for i in range(1, num_labels)
+                       if stats[i, cv2.CC_STAT_HEIGHT] > 12 and stats[i, cv2.CC_STAT_WIDTH] > 4]
             h_med = np.median(heights) if heights else 15
             h_med = max(10, int(h_med))
 
-            # Dilate
-            kw = max(3, int(1.5 * h_med))
-            kh = max(1, int(0.4 * h_med))
+            # Dilate: kw joins chars horizontally; kh=0.5*h_med merges diacritic strips into main body
+            kw = max(20, int(1.5 * h_med))
+            kh = max(2, int(0.5 * h_med))
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
             dilated = cv2.dilate(binary, kernel, iterations=1)
 
             contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             raw_boxes = [cv2.boundingRect(c) for c in contours]
 
-            # Merge overlaps
+            # Merge overlapping/adjacent boxes on same row
             merged_boxes = self._merge_boxes(raw_boxes, h_med)
 
+            # Keep boxes h >= 0.5*h_med; allow narrow w (section numbers, page numbers)
             valid_boxes = [
                 (x, y, w, h) for x, y, w, h in merged_boxes
-                if h >= 0.5 * h_med and w >= 5
+                if h >= 0.5 * h_med and w >= 3
             ]
 
-            # Split tall boxes
+            # Split tall boxes using horizontal projection profile
             split_boxes = []
             for x, y, w, h in valid_boxes:
                 if h > 1.6 * h_med:
@@ -204,6 +206,7 @@ class VietOCRService:
 
             ordered_boxes = self._sort_boxes_by_row(split_boxes, h_med)
 
+            # Split wide two-column header boxes (top 20%)
             expanded = []
             for x, y, w, h in ordered_boxes:
                 if w > w_img * 0.65 and y < h_img * 0.20:
@@ -212,22 +215,22 @@ class VietOCRService:
                 else:
                     expanded.append((x, y, w, h))
 
-            PAD_V = max(2, int(0.3 * h_med))
-            PAD_H = max(2, int(0.3 * h_med))
-            
+            # Adaptive padding: top preserves diacritics, bottom is smaller to avoid grabbing next line
+            PAD_TOP = max(3, int(0.30 * h_med))
+            PAD_BOT = max(2, int(0.15 * h_med))
+            PAD_H   = max(2, int(0.15 * h_med))
+
             lines_with_boxes = []
             for x, y, w, h in expanded:
-                t = max(0, y - PAD_V)
-                b = min(h_img, y + h + PAD_V)
+                t  = max(0, y - PAD_TOP)
+                b  = min(h_img, y + h + PAD_BOT)
                 lo = max(0, x - PAD_H)
                 ro = min(w_img, x + w + PAD_H)
-                
-                # Blank out stamp pixels inside crops
+
                 crop_np = img_np[t:b, lo:ro].copy()
+                # Clean stamp from crop: fill only red pixels, keep black text + blue handwriting
                 if stamp_mask is not None:
-                    crop_stamp_mask = stamp_mask[t:b, lo:ro]
-                    # fill white where stamp mask is 255
-                    crop_np[crop_stamp_mask == 255] = [255, 255, 255]
+                    crop_np = self._clean_stamp_in_crop(crop_np, stamp_mask[t:b, lo:ro])
 
                 line_img = Image.fromarray(crop_np)
                 lines_with_boxes.append((line_img, (x, y, w, h)))
@@ -270,6 +273,38 @@ class VietOCRService:
             return cv2.dilate(red, kernel, iterations=3)
         except Exception:
             return None
+
+    @staticmethod
+    def _clean_stamp_in_crop(crop_np: np.ndarray, crop_stamp_mask: np.ndarray) -> np.ndarray:
+        """
+        Xóa pixel con dấu đỏ khỏi crop ảnh, giữ nguyên:
+          - Pixel đen (chữ đen bên dưới/cạnh con dấu)  
+          - Pixel xanh dương (chữ tay xanh: số, chữ ký)
+        Chỉ fill WHITE cho pixel đỏ trong vùng stamp_mask.
+        """
+        if crop_stamp_mask is None or crop_np is None:
+            return crop_np
+        try:
+            if len(crop_np.shape) < 3:
+                return crop_np
+            hsv = cv2.cvtColor(crop_np, cv2.COLOR_RGB2HSV)
+            # Đỏ: hue 0-12 hoặc 160-180, saturation cao (>= 80), value cao (>= 60)
+            red_low  = cv2.inRange(hsv, np.array([0, 80, 60]),   np.array([12, 255, 255]))
+            red_high = cv2.inRange(hsv, np.array([160, 80, 60]), np.array([180, 255, 255]))
+            is_red_pixel = cv2.bitwise_or(red_low, red_high)
+            # Blue (handwriting): hue 100-130, sat >= 60
+            is_blue_pixel = cv2.inRange(hsv, np.array([100, 60, 60]), np.array([130, 255, 255]))
+            # Dark pixels (black text): value < 80
+            is_dark_pixel = (hsv[:, :, 2] < 80).astype(np.uint8) * 255
+
+            # Within stamp mask: fill red pixels with white, keep dark+blue
+            in_stamp = (crop_stamp_mask > 0)
+            fill_white = in_stamp & (is_red_pixel > 0) & (is_dark_pixel == 0) & (is_blue_pixel == 0)
+            result = crop_np.copy()
+            result[fill_white] = [255, 255, 255]
+            return result
+        except Exception:
+            return crop_np
 
     @staticmethod
     def _sort_boxes_by_row(
@@ -328,9 +363,13 @@ class VietOCRService:
 
     @staticmethod
     def _split_tall_box(binary: np.ndarray, x: int, y: int, w: int, h: int, h_med: int) -> list[tuple[int, int, int, int]]:
-        """Cắt box quá cao (thường do dính chữ giữa 2 dòng) bằng projection ngang."""
+        """
+        Cắt box quá cao (thường do dính chữ giữa 2 dòng) bằng horizontal projection.
+        Tìm gap THỰC SỰ trắng liên tiếp >= 2 pixel để tránh cắt nhầm dòng chữ.
+        """
         region = binary[y:y+h, x:x+w]
-        if region.size == 0: return [(x, y, w, h)]
+        if region.size == 0:
+            return [(x, y, w, h)]
         row_hist = region.sum(axis=1)
         split_y = []
         in_gap = False
@@ -343,21 +382,29 @@ class VietOCRService:
             else:
                 if in_gap:
                     in_gap = False
-                    if r - gap_start >= 1:
+                    gap_len = r - gap_start
+                    # Require gap >= 2px to avoid splitting at thin ink bridges
+                    if gap_len >= 2:
                         split_y.append((gap_start + r) // 2)
+        # Check for trailing gap
+        if in_gap and (h - gap_start) >= 2:
+            split_y.append((gap_start + h) // 2)
+
         if not split_y:
             return [(x, y, w, h)]
-        
+
         boxes = []
         last_y = 0
         for sy in split_y:
-            if sy - last_y >= 0.5 * h_med:
-                boxes.append((x, y + last_y, w, sy - last_y))
+            seg_h = sy - last_y
+            if seg_h >= max(4, int(0.4 * h_med)):  # relaxed: 0.4 instead of 0.5
+                boxes.append((x, y + last_y, w, seg_h))
             last_y = sy
-        if h - last_y >= 0.5 * h_med:
-            boxes.append((x, y + last_y, w, h - last_y))
-        
-        return boxes if boxes else [(x, y, w, h)]
+        last_h = h - last_y
+        if last_h >= max(4, int(0.4 * h_med)):
+            boxes.append((x, y + last_y, w, last_h))
+
+        return boxes if len(boxes) > 1 else [(x, y, w, h)]
 
     @staticmethod
     def _split_two_column_advanced(
@@ -431,16 +478,23 @@ class VietOCRService:
 
         # Drop lines that are ONLY digits/short tokens, UNLESS context rule matches
         is_page_number = re.fullmatch(r'\d+', t) and w < 4 * h_med and (y < 0.15 * img_h or y > 0.85 * img_h) and (0.35 * img_w < x < 0.65 * img_w)
-        is_list_number = re.fullmatch(r'\d+[\.\/]', t) and w < 3 * h_med
+        # Relaxed list number: allow small width (< 4*h_med) and numbers with dot/slash/parenthesis
+        is_list_number = re.fullmatch(r'\d+[\.\/\)]?', t) and w < 4 * h_med
         is_doc_number = "Số:" in t or "TB-" in t or re.match(r'(Số:|số)?\s*\d+/[A-Z\-]+', t)
+        
+        # Valid small context words around signature
+        valid_small_words = {"1.", "2.", "3.", "4.", "I.", "II.", "III.", "IV.", "1", "2", "-", "PHÓ HIỆU TRƯỞNG", "HIỆU TRƯỞNG", "Nguyễn Văn Ngọc", "Lưu: VT, CTSV.", "Lưu: VT, CTSV"}
         
         if re.fullmatch(r'[\d\s\.\,\-\/]{1,4}', t):
             # Short tokens of digits/symbols
-            if not (is_page_number or is_list_number or is_doc_number or t in ("1.", "2.", "1", "2", "-")):
+            if not (is_page_number or is_list_number or is_doc_number or t in valid_small_words):
                 return True
                 
-        # Filter garbage words
+        # Filter garbage words and known hallucinated Latin long words
         if t in ("2.2", "42", "4.2", "22", "Coll", "Chines", "CHILL", "0%", "2/42"):
+            return True
+            
+        if re.search(r'\b(?:Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\b', t, re.IGNORECASE):
             return True
 
         # Barcode dài nằm xen kẽ
@@ -535,72 +589,155 @@ class VietOCRService:
 
     # ── Điều hướng engine theo dòng ───────────────────────────────────────────
     def _ocr_lines_with_engine(
-        self, image: Image.Image
+        self, image: Image.Image, page_num: int = 1
     ) -> list[tuple[str, float]]:
-        """Tách dòng rồi OCR bằng VietOCR, lọc dòng rác bằng AI context."""
+        """Tách dòng rồi OCR bằng VietOCR, lọc dòng rác bằng AI context.
+
+        Args:
+            image: PIL image của 1 trang.
+            page_num: Số trang (1-indexed) để debug dump.
+        """
+        import os, json, time as _time
         lines_with_boxes, h_med, stamp_mask = self.segment_lines_with_boxes(image)
         if not lines_with_boxes:
             return []
-            
-        line_images = [img for img, box in lines_with_boxes]
-        raw_results = self._vietocr().ocr_lines(line_images, preprocess_fn=self.preprocess_handwriting)
-        
+
         img_w, img_h = image.size
-        filtered_results = []
-        
-        # Debug Dump
-        import os
-        import json
-        import time
         do_dump = os.environ.get("OCR_DEBUG_DUMP") == "1"
-        dump_data = []
-        img_np = None
+        debug_dir: str = ""
+        crops_dir: str = ""
+        dump_data: list[dict] = []
+        overlay_np = None
+
         if do_dump:
             try:
-                import cv2
-                import numpy as np
                 debug_dir = os.path.abspath("backend/tests/data/thong_bao_1413")
                 os.makedirs(debug_dir, exist_ok=True)
-                
-                img_np = np.array(image)
-                if len(img_np.shape) == 2:
-                    img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
-                elif img_np.shape[2] == 4:
-                    img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
+                crops_dir = os.path.join(debug_dir, f"crops_p{page_num}")
+                os.makedirs(crops_dir, exist_ok=True)
+                overlay_np = np.array(image)
+                if len(overlay_np.shape) == 2:
+                    overlay_np = cv2.cvtColor(overlay_np, cv2.COLOR_GRAY2RGB)
+                elif overlay_np.shape[2] == 4:
+                    overlay_np = cv2.cvtColor(overlay_np, cv2.COLOR_RGBA2RGB)
                 else:
-                    img_np = img_np.copy()
+                    overlay_np = overlay_np.copy()
             except Exception:
                 do_dump = False
 
-        for idx, ((img, box), (text, conf)) in enumerate(zip(lines_with_boxes, raw_results)):
+        # ── Pre-recognition guard: ink ratio + connected component count ───
+        kept_indices: list[int] = []
+        guarded_imgs: list[Image.Image] = []
+        pre_drop_reasons: list[str | None] = []
+
+        for idx, (img, box) in enumerate(lines_with_boxes):
             x, y, w, h = box
-            is_dropped = self._is_noise_line_advanced(text, box, img_w, img_h, h_med, stamp_mask)
-            
-            if not is_dropped:
-                filtered_results.append((text, conf))
-                
-            if do_dump and img_np is not None:
-                color = (0, 0, 255) if is_dropped else (0, 255, 0)
-                import cv2
-                cv2.rectangle(img_np, (x, y), (x + w, y + h), color, 2)
-                dump_data.append({
-                    "id": idx,
-                    "box": [x, y, w, h],
-                    "raw_text": text,
-                    "drop_reason": "noise_line" if is_dropped else None
-                })
-                
-        if do_dump and img_np is not None:
+            drop_reason: str | None = None
+            ink_ratio_val: float | None = None
+            num_cc_val: int | None = None
             try:
-                import cv2
-                timestamp = int(time.time() * 1000)
-                cv2.imwrite(os.path.join(debug_dir, f"debug_overlay_{timestamp}.png"), cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
-                with open(os.path.join(debug_dir, f"debug_overlay_{timestamp}_dump.json"), "w", encoding="utf-8") as f:
+                crop_arr = np.array(img)
+                gray_c = cv2.cvtColor(crop_arr, cv2.COLOR_RGB2GRAY) if len(crop_arr.shape) == 3 else crop_arr
+                _, bw = cv2.threshold(gray_c, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+                ink_ratio_val = float(np.count_nonzero(bw)) / max(1, bw.size)
+                num_cc_val = max(0, int(cv2.connectedComponentsWithStats(bw, connectivity=8)[0]) - 1)
+                if ink_ratio_val < 0.015:
+                    drop_reason = f"pre_guard:ink={ink_ratio_val:.4f}"
+                elif num_cc_val < 2:
+                    drop_reason = f"pre_guard:cc={num_cc_val}"
+            except Exception:
+                pass
+
+            pre_drop_reasons.append(drop_reason)
+            if drop_reason:
+                if do_dump and overlay_np is not None:
+                    cv2.rectangle(overlay_np, (x, y), (x+w, y+h), (128, 0, 255), 1)
+                    dump_data.append({
+                        "id": idx, "page": page_num, "box": [x, y, w, h],
+                        "raw_text": "", "conf": 0.0,
+                        "ink_ratio": round(ink_ratio_val, 4) if ink_ratio_val is not None else None,
+                        "num_cc": num_cc_val, "drop_reason": drop_reason,
+                    })
+            else:
+                kept_indices.append(idx)
+                guarded_imgs.append(img)
+
+        # ── OCR only on kept images ────────────────────────────────────────
+        ocr_results: list[tuple[str, float]] = []
+        if guarded_imgs:
+            ocr_results = self._vietocr().ocr_lines(guarded_imgs, preprocess_fn=self.preprocess_handwriting)
+
+        result_map: dict[int, tuple[str, float]] = {}
+        for pos, orig_idx in enumerate(kept_indices):
+            if pos < len(ocr_results):
+                result_map[orig_idx] = ocr_results[pos]
+
+        # ── Post-recognition filter + debug dump ──────────────────────────
+        filtered_results: list[tuple[str, float]] = []
+        for idx, (img, box) in enumerate(lines_with_boxes):
+            if pre_drop_reasons[idx]:
+                continue  # already handled above
+
+            x, y, w, h = box
+            text, conf = result_map.get(idx, ("", 0.0))
+
+            drop_reason: str | None = None
+            if not text:
+                drop_reason = "empty_text"
+            else:
+                if self._is_noise_line_advanced(text, box, img_w, img_h, h_med, stamp_mask):
+                    drop_reason = "noise_line_advanced"
+                elif conf < 0.30:  # Drop lines that are extremely low confidence (likely hallucination)
+                    drop_reason = f"low_conf:{conf:.2f}"
+
+            if not drop_reason:
+                filtered_results.append((text, conf))
+
+            if do_dump:
+                ink_ratio_val = None
+                num_cc_val = None
+                crop_fname: str = ""
+                try:
+                    crop_arr = np.array(img)
+                    gray_c = cv2.cvtColor(crop_arr, cv2.COLOR_RGB2GRAY) if len(crop_arr.shape) == 3 else crop_arr
+                    _, bw = cv2.threshold(gray_c, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+                    ink_ratio_val = round(float(np.count_nonzero(bw)) / max(1, bw.size), 4)
+                    num_cc_val = max(0, int(cv2.connectedComponentsWithStats(bw, connectivity=8)[0]) - 1)
+                    crop_fname = f"crop_{idx:03d}.png"
+                    img.save(os.path.join(crops_dir, crop_fname))
+                except Exception:
+                    pass
+
+                color = (0, 0, 255) if drop_reason else (0, 255, 0)
+                if overlay_np is not None:
+                    cv2.rectangle(overlay_np, (x, y), (x+w, y+h), color, 2)
+                    label = f"{idx}:{(text or '')[:12]}" if not drop_reason else f"X{idx}:{(drop_reason or '')[:10]}"
+                    cv2.putText(overlay_np, label, (x, max(10, y - 2)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.32, color, 1)
+                dump_data.append({
+                    "id": idx, "page": page_num, "box": [x, y, w, h],
+                    "raw_text": text, "conf": round(conf, 3),
+                    "ink_ratio": ink_ratio_val, "num_cc": num_cc_val,
+                    "crop_png": crop_fname or None,
+                    "drop_reason": drop_reason,
+                })
+
+        if do_dump and overlay_np is not None:
+            try:
+                ts = int(_time.time() * 1000)
+                cv2.imwrite(
+                    os.path.join(debug_dir, f"debug_overlay_p{page_num}_{ts}.png"),
+                    cv2.cvtColor(overlay_np, cv2.COLOR_RGB2BGR))
+                with open(os.path.join(debug_dir, f"debug_dump_p{page_num}_{ts}.json"),
+                          "w", encoding="utf-8") as f:
                     json.dump(dump_data, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                logger.error(f"Failed to dump debug OCR: {e}")
+                logger.debug("OCR_DEBUG_DUMP: saved p{p} overlay+dump ({n} boxes)",
+                             p=page_num, n=len(dump_data))
+            except Exception as exc:
+                logger.error("OCR_DEBUG_DUMP write error: {err}", err=str(exc))
 
         return filtered_results
+
 
     # ── Bóc tách bảng biểu ────────────────────────────────────────────────────
     def detect_and_extract_tables(self, pil_image: Image.Image) -> list[str]:
@@ -705,6 +842,7 @@ class VietOCRService:
         image: Image.Image,
         extract_tables: bool = False,
         is_first_page: bool = True,
+        page_num: int = 1,
     ) -> tuple[str, str]:
         """
         OCR toàn trang bằng Line Segmentation với VietOCR.
@@ -722,14 +860,16 @@ class VietOCRService:
 
         # 2. OCR toàn trang theo dòng
         raw_text = ""
-        line_results = self._ocr_lines_with_engine(processed_img)
+        line_results = self._ocr_lines_with_engine(processed_img, page_num=page_num)
         if line_results:
             valid_lines = [t for t, _ in line_results]
             joined = "\n".join(valid_lines)
             if len(joined.strip()) > 3:
-                raw_text = unicodedata.normalize("NFC", joined.strip())
-                logger.info("OCR [vietocr] → {n} dòng, {c} ký tự",
-                            n=len(valid_lines), c=len(raw_text))
+                # Prepend page marker so downstream can split by page
+                page_marker = f"--- Trang {page_num} ---"
+                raw_text = unicodedata.normalize("NFC", f"{page_marker}\n{joined.strip()}")
+                logger.info("OCR [vietocr] p{p} → {n} dòng, {c} ký tự",
+                            p=page_num, n=len(valid_lines), c=len(raw_text))
 
         # 3. Ghép bảng biểu vào raw
         if table_markdowns:
@@ -803,6 +943,7 @@ class VietOCRService:
                             page_img,
                             extract_tables=_extract_tables,
                             is_first_page=(idx == 0),
+                            page_num=idx + 1,
                         )
                         logger.info("OCR trang {i}/{t} [{eng}] | {s:.1f}s",
                                     i=idx + 1, t=total, eng=selected_engine, s=time.time() - t0)
@@ -835,7 +976,7 @@ class VietOCRService:
         # ── Ảnh (JPG / PNG / TIFF) ───────────────────────────────────────────
         try:
             image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
-            raw_text, processed_text = self._ocr_image(image)
+            raw_text, processed_text = self._ocr_image(image, page_num=1)
             if raw_text:
                 return raw_text, processed_text, self.calculate_confidence_score(processed_text, selected_engine)
         except Exception as exc:

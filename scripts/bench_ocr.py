@@ -176,7 +176,7 @@ def benchmark_pages(
         return []
 
     results = []
-    for page_path in pages:
+    for idx, page_path in enumerate(pages):
         print(f"\n  >> OCR: {page_path.name}")
         t0 = time.perf_counter()
 
@@ -188,8 +188,8 @@ def benchmark_pages(
 
         # OCR toàn trang
         processed    = svc.preprocess_image(pil_image)
-        line_results = svc._ocr_lines_with_engine(processed)
-        valid_lines  = [t for t, _ in line_results if not svc._is_noise_line(t)]
+        line_results = svc._ocr_lines_with_engine(processed, page_num=idx + 1)
+        valid_lines  = [t for t, _ in line_results if t]
         ocr_text     = "\n".join(valid_lines)
 
         elapsed = time.perf_counter() - t0
