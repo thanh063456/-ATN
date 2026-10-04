@@ -30,14 +30,61 @@ import {
   Bot,
   Check,
   BrainCircuit,
+  GitCompare,
+  AlertTriangle,
+  ChevronDown,
+  Play,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  ArrowRightLeft,
 } from "lucide-react";
+import { diffWordsWithSpace } from "diff";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
 import { OCRStatusBadge, Badge } from "../components/common/Badge";
-import { documentsApi, DocumentDetail, VerificationData, AIExtractResponse, ModelComparisonResponse } from "../api/documents";
+import { documentsApi, DocumentDetail, VerificationData, AIExtractResponse, ModelComparisonResponse, OCRResult } from "../api/documents";
 import { API_BASE_URL } from "../api/client";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useToastStore } from "../stores/useToastStore";
+
+export const OCR_ENGINES = [
+  { id: "vietocr", label: "VietOCR", name: "VietOCR v2.0", subtitle: "Seq2Seq Transformer (PyTorch)", version: "vgg_transformer-2.0" },
+  { id: "trocr", label: "TrOCR", name: "Microsoft TrOCR", subtitle: "Vision Transformer (ViT)", version: "trocr-base-printed" },
+  { id: "tesseract", label: "Tesseract", name: "Tesseract v5.3", subtitle: "LSTM Baseline v5.3", version: "5.3.0" },
+];
+
+function calculateLevenshtein(a: string[] | string, b: string[] | string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+      } else {
+        dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+  }
+  return dp[m][n];
+}
+
+function calculateCER(hypothesis: string, reference: string): number {
+  if (!reference) return 0;
+  const dist = calculateLevenshtein(hypothesis, reference);
+  return Math.min(100, Number(((dist / Math.max(1, reference.length)) * 100).toFixed(2)));
+}
+
+function calculateWER(hypothesis: string, reference: string): number {
+  const refWords = reference.trim().split(/\s+/).filter(Boolean);
+  const hypWords = hypothesis.trim().split(/\s+/).filter(Boolean);
+  if (refWords.length === 0) return 0;
+  const dist = calculateLevenshtein(hypWords, refWords);
+  return Math.min(100, Number(((dist / Math.max(1, refWords.length)) * 100).toFixed(2)));
+}
 
 export const DocumentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -60,12 +107,18 @@ export const DocumentDetailPage: React.FC = () => {
   const [isAIRefining, setIsAIRefining] = useState(false);
   const [isAIExtracting, setIsAIExtracting] = useState(false);
   const [isAutoTagging, setIsAutoTagging] = useState(false);
-  const [isHighlightTagsEnabled, setIsHighlightTagsEnabled] = useState(false); // TẮT tô nhãn tạm thời
+  const [isHighlightTagsEnabled, setIsHighlightTagsEnabled] = useState(false);
   const [newTagInput, setNewTagInput] = useState("");
   const [aiExtractData, setAiExtractData] = useState<AIExtractResponse | null>(null);
   const [benchmarkData, setBenchmarkData] = useState<ModelComparisonResponse | null>(null);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [selectedOcrEngine, setSelectedOcrEngine] = useState<string>("vietocr");
+  const [ocrTextMode, setOcrTextMode] = useState<"processed" | "raw">("processed");
+  const [runningEngine, setRunningEngine] = useState<string | null>(null);
+  const [isCompareMode, setIsCompareMode] = useState<boolean>(false);
+  const [compareEngineA, setCompareEngineA] = useState<string>("vietocr");
+  const [compareEngineB, setCompareEngineB] = useState<string>("trocr");
+  const [isRerunMenuOpen, setIsRerunMenuOpen] = useState<boolean>(false);
 
   // Document Viewer controls
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -78,10 +131,10 @@ export const DocumentDetailPage: React.FC = () => {
       const data = await documentsApi.getById(id);
       setDoc(data);
       if (data.all_ocr_results && data.all_ocr_results.length > 0) {
-        const engineResult = data.all_ocr_results.find(r => r.ocr_engine === selectedOcrEngine) || data.all_ocr_results[0];
+        const engineResult = data.all_ocr_results.find(r => r.ocr_engine === selectedOcrEngine);
         setCorrectedText(engineResult?.corrected_text || engineResult?.raw_text || "");
-      } else if (data.ocr_result?.corrected_text || data.ocr_result?.raw_text) {
-        setCorrectedText(data.ocr_result?.corrected_text || data.ocr_result?.raw_text || "");
+      } else {
+        setCorrectedText("");
       }
 
       // Load verification info
@@ -155,11 +208,9 @@ export const DocumentDetailPage: React.FC = () => {
     setIsEditingOCR(false);
     if (doc?.all_ocr_results) {
       const engineResult = doc.all_ocr_results.find((r: any) => r.ocr_engine === engine);
-      if (engineResult) {
-        setCorrectedText(engineResult.corrected_text || engineResult.raw_text || "");
-      } else {
-        setCorrectedText("");
-      }
+      setCorrectedText(engineResult?.corrected_text || engineResult?.raw_text || "");
+    } else {
+      setCorrectedText("");
     }
   };
 
@@ -167,27 +218,59 @@ export const DocumentDetailPage: React.FC = () => {
     loadDoc(true);
   }, [id]);
 
-  // Real-time polling nếu tài liệu đang trong quá trình OCR (PROCESSING hoặc PENDING)
+  // Real-time polling nếu tài liệu đang xử lý hoặc engine đang quét lại
   useEffect(() => {
-    if (!doc || (doc.ocr_status !== "PROCESSING" && doc.ocr_status !== "PENDING")) return;
+    if (!doc && !runningEngine) return;
+    const isDocProcessing = doc?.ocr_status === "PROCESSING" || doc?.ocr_status === "PENDING";
+    const isEngineRunning = runningEngine !== null;
 
-    const interval = setInterval(() => {
-      loadDoc(false);
-    }, 2500);
+    if (!isDocProcessing && !isEngineRunning) return;
+
+    const interval = setInterval(async () => {
+      if (!id) return;
+      try {
+        const data = await documentsApi.getById(id);
+        setDoc(data);
+        if (runningEngine) {
+          const eng = data.all_ocr_results?.find(r => r.ocr_engine === runningEngine);
+          if (eng && (eng.status === "DONE" || eng.status === "FAILED")) {
+            setRunningEngine(null);
+            if (eng.status === "DONE") {
+              addToast({
+                type: "success",
+                title: "Hoàn thành OCR",
+                message: `Mô hình ${runningEngine.toUpperCase()} đã quét xong.`,
+              });
+              if (selectedOcrEngine === runningEngine) {
+                setCorrectedText(eng.corrected_text || eng.raw_text || "");
+              }
+            } else {
+              addToast({
+                type: "error",
+                title: "OCR thất bại",
+                message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} gặp lỗi khi quét.`,
+              });
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 2000);
 
     return () => clearInterval(interval);
-  }, [id, doc?.ocr_status]);
+  }, [id, doc?.ocr_status, runningEngine, selectedOcrEngine]);
 
   const handleSaveCorrection = async () => {
     if (!id || !correctedText.trim()) return;
     setIsSavingCorrection(true);
     try {
-      const updated = await documentsApi.saveCorrection(id, correctedText);
+      const updated = await documentsApi.saveCorrection(id, correctedText, selectedOcrEngine);
       setDoc(updated);
       setIsEditingOCR(false);
       addToast({
         type: "success",
-        title: "Đã lưu hiệu chỉnh văn bản",
+        title: `Đã lưu hiệu chỉnh (${selectedOcrEngine.toUpperCase()})`,
         message: "Văn bản đã được cập nhật và bóc tách lại metadata tự động.",
       });
     } catch (err: any) {
@@ -203,9 +286,17 @@ export const DocumentDetailPage: React.FC = () => {
 
   const handleAIRefine = async () => {
     if (!id) return;
+    const textToRefine = getActiveText();
+    if (!textToRefine.trim()) {
+      addToast({
+        type: "warning",
+        title: "Chưa có văn bản",
+        message: `Mô hình ${selectedOcrEngine.toUpperCase()} chưa có kết quả để sửa chính tả.`,
+      });
+      return;
+    }
     setIsAIRefining(true);
     try {
-      const textToRefine = correctedText || doc?.ocr_result?.raw_text || "";
       const res = await documentsApi.aiRefine(id, textToRefine);
       if (res.refined_text) {
         setCorrectedText(res.refined_text);
@@ -563,14 +654,17 @@ export const DocumentDetailPage: React.FC = () => {
   const handleReprocessOCR = async (engine: string) => {
     if (!id) return;
     try {
+      setRunningEngine(engine);
+      setSelectedOcrEngine(engine);
       await documentsApi.reprocessOCR(id, engine);
       addToast({
         type: "info",
         title: "Đang quét lại OCR",
         message: `Hệ thống đang quét lại văn bản bằng ${engine.toUpperCase()}...`,
       });
-      loadDoc(true);
+      loadDoc(false);
     } catch (err: any) {
+      setRunningEngine(null);
       addToast({
         type: "error",
         title: "Lỗi chạy lại OCR",
@@ -579,36 +673,52 @@ export const DocumentDetailPage: React.FC = () => {
     }
   };
 
+  const getSelectedEngineResult = (): OCRResult | undefined => {
+    return doc?.all_ocr_results?.find((r: any) => r.ocr_engine === selectedOcrEngine);
+  };
+
+  const getActiveText = () => {
+    if (isEditingOCR) return correctedText;
+    const engRes = getSelectedEngineResult();
+    if (!engRes) return "";
+    const rawTxt = engRes.raw_text || "";
+    const procTxt = correctedText || engRes.corrected_text || rawTxt;
+    return ocrTextMode === "raw" ? rawTxt : procTxt;
+  };
+
   const handleDownloadTxt = () => {
-    const text = correctedText || doc?.ocr_result?.raw_text || "";
+    const text = getActiveText();
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${doc?.title || "van_ban_ocr"}.txt`;
+    link.download = `${doc?.title || "van_ban_ocr"}_${selectedOcrEngine}${ocrTextMode === "raw" ? "_raw" : ""}.txt`;
     link.click();
     URL.revokeObjectURL(url);
     addToast({ type: "success", title: "Đã tải xuống", message: "File text đã được lưu." });
   };
 
   const handleDownloadDocx = () => {
-    // Generate simple doc formatted content
-    const text = correctedText || doc?.ocr_result?.raw_text || "";
-    const content = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${doc?.title}</title></head><body><h2 style="text-align:center;">${doc?.title}</h2><pre style="font-family:'Times New Roman', Times, serif; font-size:14pt; white-space:pre-wrap;">${text}</pre></body></html>`;
+    const text = getActiveText();
+    const content = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${doc?.title}</title></head><body><h2 style="text-align:center;">${doc?.title}</h2><p style="text-align:center;font-size:10pt;color:#666;">OCR Engine: ${selectedOcrEngine.toUpperCase()}</p><pre style="font-family:'Times New Roman', Times, serif; font-size:14pt; white-space:pre-wrap;">${text}</pre></body></html>`;
     const blob = new Blob([content], { type: "application/msword;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${doc?.title || "van_ban_ocr"}.doc`;
+    link.download = `${doc?.title || "van_ban_ocr"}_${selectedOcrEngine}${ocrTextMode === "raw" ? "_raw" : ""}.doc`;
     link.click();
     URL.revokeObjectURL(url);
     addToast({ type: "success", title: "Đã xuất Word", message: "File Word (.doc) đã được tải xuống." });
   };
 
   const handleCopyText = () => {
-    const text = correctedText || doc?.ocr_result?.raw_text || "";
+    const text = getActiveText();
+    if (!text.trim()) {
+      addToast({ type: "warning", title: "Không có văn bản", message: `Mô hình ${selectedOcrEngine.toUpperCase()} chưa có kết quả để sao chép.` });
+      return;
+    }
     navigator.clipboard.writeText(text);
-    addToast({ type: "info", title: "Đã sao chép", message: "Nội dung văn bản đã được copy vào clipboard." });
+    addToast({ type: "info", title: "Đã sao chép", message: `Nội dung văn bản (${selectedOcrEngine.toUpperCase()} - ${ocrTextMode === "raw" ? "gốc OCR" : "chuẩn hóa"}) đã được copy vào clipboard.` });
   };
 
   if (isLoading || !doc) {
@@ -622,7 +732,6 @@ export const DocumentDetailPage: React.FC = () => {
 
   const isApproved = doc.ocr_status === "APPROVED";
   const isRejected = doc.ocr_status === "REJECTED";
-  const confidenceScore = doc.ocr_result?.confidence_score ? Math.round(doc.ocr_result.confidence_score * 100) : 98;
 
   const filePreviewUrl = doc?.file_url
     ? (doc.file_url.startsWith("http") ? doc.file_url : `${API_BASE_URL.replace("/api/v1", "")}${doc.file_url}`)
@@ -663,13 +772,64 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <Button variant="outline" size="sm" onClick={() => handleReprocessOCR('vietocr')} leftIcon={<RefreshCw size={14} />}>
-            OCR lại (VietOCR)
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleReprocessOCR('tesseract')} leftIcon={<RefreshCw size={14} />}>
-            OCR lại (Tesseract)
-          </Button>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          {/* Dropdown OCR lại */}
+          <div style={{ position: "relative" }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsRerunMenuOpen(!isRerunMenuOpen)}
+              leftIcon={<RefreshCw size={14} className={runningEngine ? "animate-spin" : ""} />}
+              rightIcon={<ChevronDown size={14} />}
+            >
+              {runningEngine ? `Đang chạy ${runningEngine.toUpperCase()}...` : "Chạy lại OCR..."}
+            </Button>
+            {isRerunMenuOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: "4px",
+                  backgroundColor: "#fff",
+                  borderRadius: "var(--radius-md)",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+                  border: "1px solid var(--border-color)",
+                  zIndex: 50,
+                  minWidth: "240px",
+                  padding: "4px 0",
+                }}
+              >
+                {OCR_ENGINES.map((eng) => (
+                  <button
+                    key={eng.id}
+                    onClick={() => {
+                      setIsRerunMenuOpen(false);
+                      handleReprocessOCR(eng.id);
+                    }}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 12px",
+                      fontSize: "0.8rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      backgroundColor: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      transition: "background-color 0.15s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--gray-50)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <span style={{ fontWeight: 700, color: "var(--gray-900)" }}>{eng.name}</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>{eng.subtitle}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Button variant="outline" size="sm" onClick={handleDownloadTxt} leftIcon={<FileDown size={14} />}>
             Xuất Text (.txt)
           </Button>
@@ -1147,254 +1307,642 @@ export const DocumentDetailPage: React.FC = () => {
             </div>
           </Card>
 
-          {/* RIGHT: LIVE OCR TEXT EDITOR */}
+          {/* RIGHT: LIVE OCR TEXT EDITOR & COMPARISON */}
           <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             
             {/* Tabs for OCR Engines */}
-            <div style={{ display: "flex", borderBottom: "1px solid var(--border-color)", backgroundColor: "var(--gray-50)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-color)", backgroundColor: "var(--gray-50)", paddingRight: "0.75rem" }}>
+              <div style={{ display: "flex", flex: 1, overflowX: "auto" }}>
+                {OCR_ENGINES.map((eng) => {
+                  const res = doc?.all_ocr_results?.find((r: any) => r.ocr_engine === eng.id);
+                  const isRunning = runningEngine === eng.id || (doc?.ocr_status === "PROCESSING" && eng.id === "vietocr");
+                  const isFailed = res?.status === "FAILED";
+                  const isDone = res?.status === "DONE" || (res && !isFailed);
+                  const isNotRun = !res && !isRunning;
+                  const isSelected = selectedOcrEngine === eng.id && !isCompareMode;
+
+                  return (
+                    <button
+                      key={eng.id}
+                      onClick={() => {
+                        setIsCompareMode(false);
+                        switchOcrEngine(eng.id);
+                      }}
+                      style={{
+                        padding: "0.65rem 1rem",
+                        border: "none",
+                        backgroundColor: isSelected ? "#fff" : "transparent",
+                        borderBottom: isSelected ? "2.5px solid var(--primary-600)" : "2.5px solid transparent",
+                        color: isSelected ? "var(--primary-700)" : "var(--gray-600)",
+                        fontWeight: isSelected ? 800 : 600,
+                        fontSize: "0.8125rem",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        whiteSpace: "nowrap",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <span>{eng.name}</span>
+                      {isRunning && (
+                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#dbeafe", color: "#1d4ed8", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                          <RotateCw size={10} className="animate-spin" /> Đang chạy
+                        </span>
+                      )}
+                      {isFailed && (
+                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }}>
+                          ✕ Thất bại
+                        </span>
+                      )}
+                      {isDone && !isRunning && (
+                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: 700 }}>
+                          ✓ Sẵn sàng
+                        </span>
+                      )}
+                      {isNotRun && (
+                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#f1f5f9", color: "#64748b" }}>
+                          Chưa chạy
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Compare Mode Toggle */}
               <button
-                onClick={() => switchOcrEngine("vietocr")}
+                onClick={() => setIsCompareMode(!isCompareMode)}
                 style={{
-                  flex: 1,
-                  padding: "0.6rem 1rem",
-                  border: "none",
-                  backgroundColor: selectedOcrEngine === "vietocr" ? "#fff" : "transparent",
-                  borderBottom: selectedOcrEngine === "vietocr" ? "2px solid var(--primary-600)" : "none",
-                  color: selectedOcrEngine === "vietocr" ? "var(--primary-700)" : "var(--gray-500)",
+                  padding: "0.35rem 0.75rem",
+                  borderRadius: "6px",
+                  fontSize: "0.75rem",
                   fontWeight: 700,
-                  fontSize: "0.8125rem",
+                  border: isCompareMode ? "1.5px solid #7c3aed" : "1px solid var(--border-color)",
+                  backgroundColor: isCompareMode ? "#f5f3ff" : "#fff",
+                  color: isCompareMode ? "#6d28d9" : "var(--gray-600)",
                   cursor: "pointer",
-                  transition: "all 0.2s"
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  transition: "all 0.15s ease",
+                  whiteSpace: "nowrap",
                 }}
+                title="So sánh kết quả song song giữa 2 mô hình với Word-level Diff & Chỉ số CER/WER"
               >
-                KẾT QUẢ VIETOCR
-              </button>
-              <button
-                onClick={() => switchOcrEngine("tesseract")}
-                style={{
-                  flex: 1,
-                  padding: "0.6rem 1rem",
-                  border: "none",
-                  backgroundColor: selectedOcrEngine === "tesseract" ? "#fff" : "transparent",
-                  borderBottom: selectedOcrEngine === "tesseract" ? "2px solid var(--primary-600)" : "none",
-                  color: selectedOcrEngine === "tesseract" ? "var(--primary-700)" : "var(--gray-500)",
-                  fontWeight: 700,
-                  fontSize: "0.8125rem",
-                  cursor: "pointer",
-                  transition: "all 0.2s"
-                }}
-              >
-                KẾT QUẢ TESSERACT
+                <GitCompare size={14} style={{ color: isCompareMode ? "#7c3aed" : "var(--gray-500)" }} />
+                <span>{isCompareMode ? "Đang so sánh" : "So sánh 2 Model"}</span>
               </button>
             </div>
 
-            {/* Editor Toolbar */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "0.6rem 1rem",
-                backgroundColor: "var(--gray-50)",
-                borderBottom: "1px solid var(--border-color)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--gray-900)" }}>
-                  Văn bản trích xuất OCR
-                </span>
-                {doc.ocr_result?.is_corrected && (
-                  <span
-                    style={{
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                      color: "#16a34a",
-                      backgroundColor: "#dcfce7",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    ✓ Đã hiệu chỉnh & đối chiếu
-                  </span>
-                )}
-              </div>
+            {/* COMPARE MODE VIEW */}
+            {isCompareMode ? (
+              <div style={{ flex: 1, padding: "1rem", display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+                {/* Selectors Bar */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", padding: "0.75rem", backgroundColor: "#f8fafc", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <div>
+                      <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--gray-600)", display: "block", marginBottom: "2px" }}>Model A (Gốc)</label>
+                      <select
+                        value={compareEngineA}
+                        onChange={(e) => setCompareEngineA(e.target.value)}
+                        style={{ padding: "4px 8px", fontSize: "0.8rem", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 600, backgroundColor: "#fff" }}
+                      >
+                        {OCR_ENGINES.map((e) => (
+                          <option key={e.id} value={e.id}>{e.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-              <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-                {!isEditingOCR && (
-                  <button
-                    onClick={() => setIsHighlightTagsEnabled((prev) => !prev)}
-                    style={{
-                      padding: "0.3rem 0.65rem",
-                      borderRadius: "0.375rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      cursor: "pointer",
-                      border: "1px solid",
-                      borderColor: isHighlightTagsEnabled ? "#818cf8" : "var(--border-color)",
-                      backgroundColor: isHighlightTagsEnabled ? "#e0e7ff" : "#fff",
-                      color: isHighlightTagsEnabled ? "#3730a3" : "var(--gray-600)",
-                      transition: "all 0.15s ease",
-                    }}
-                    title="Bật/Tắt tô màu trực quan các từ tương ứng với nhãn trong văn bản OCR"
-                  >
-                    <Sparkles size={13} color={isHighlightTagsEnabled ? "#4338ca" : "var(--gray-400)"} />
-                    {isHighlightTagsEnabled ? "🏷️ Đang tô nhãn (Bật)" : "📄 Văn bản thuần"}
-                  </button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAIRefine}
-                  isLoading={isAIRefining}
-                  leftIcon={<Wand2 size={13} style={{ color: "#7c3aed" }} />}
-                  style={{ borderColor: "#c4b5fd", color: "#6d28d9", backgroundColor: "#f5f3ff", fontWeight: 600 }}
-                  title="Dùng AI (Gemini / OpenAI / Ollama) sửa lỗi chính tả ngữ cảnh & chuẩn hóa văn bản hành chính"
-                >
-                  ✨ AI Sửa chính tả
-                </Button>
-                <button onClick={handleCopyText} style={viewerIconBtn} title="Sao chép văn bản">
-                  <Copy size={14} />
-                </button>
-                {isEditingOCR ? (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveCorrection}
-                    isLoading={isSavingCorrection}
-                    leftIcon={<Save size={13} />}
-                  >
-                    Lưu hiệu chỉnh
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditingOCR(true)}
-                    leftIcon={<Edit3 size={13} />}
-                  >
-                    Chỉnh sửa text
-                  </Button>
-                )}
-              </div>
-            </div>
+                    <ArrowRightLeft size={16} style={{ color: "var(--gray-400)", marginTop: "14px" }} />
 
-            {/* Textarea / Editor */}
-            <div style={{ flex: 1, padding: "1rem", display: "flex", flexDirection: "column" }}>
-              {isEditingOCR ? (
-                <textarea
-                  value={correctedText}
-                  onChange={(e) => setCorrectedText(e.target.value)}
-                  style={{
-                    width: "100%",
-                    flex: 1,
-                    minHeight: "460px",
-                    padding: "0.85rem",
-                    borderRadius: "var(--radius-md)",
-                    border: "1.5px solid var(--primary-400)",
-                    fontFamily: "monospace",
-                    fontSize: "0.85rem",
-                    lineHeight: "1.6",
-                    color: "var(--gray-900)",
-                    backgroundColor: "#f8fafc",
-                    outline: "none",
-                    resize: "none",
-                    boxSizing: "border-box",
-                  }}
-                  placeholder="Nhập nội dung chỉnh sửa..."
-                />
-              ) : (!correctedText && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING")) ? (
+                    <div>
+                      <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--gray-600)", display: "block", marginBottom: "2px" }}>Model B (Đối chiếu)</label>
+                      <select
+                        value={compareEngineB}
+                        onChange={(e) => setCompareEngineB(e.target.value)}
+                        style={{ padding: "4px 8px", fontSize: "0.8rem", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 600, backgroundColor: "#fff" }}
+                      >
+                        {OCR_ENGINES.map((e) => (
+                          <option key={e.id} value={e.id}>{e.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const resA = doc.all_ocr_results?.find((r: any) => r.ocr_engine === compareEngineA);
+                    const resB = doc.all_ocr_results?.find((r: any) => r.ocr_engine === compareEngineB);
+                    const txtA = resA?.raw_text || "";
+                    const txtB = resB?.raw_text || "";
+                    const cerVal = calculateCER(txtB, txtA);
+                    const werVal = calculateWER(txtB, txtA);
+
+                    const refText = doc.all_ocr_results?.find((r: any) => r.is_corrected)?.corrected_text || doc.ocr_result?.corrected_text || "";
+                    const cerA_ref = refText ? calculateCER(txtA, refText) : null;
+                    const cerB_ref = refText ? calculateCER(txtB, refText) : null;
+
+                    return (
+                      <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.75rem" }}>
+                        <div style={{ padding: "4px 8px", backgroundColor: "#eff6ff", borderRadius: "4px", border: "1px solid #bfdbfe", color: "#1e40af" }}>
+                          <span>CER (A vs B): <strong>{cerVal}%</strong></span>
+                        </div>
+                        <div style={{ padding: "4px 8px", backgroundColor: "#f5f3ff", borderRadius: "4px", border: "1px solid #ddd6fe", color: "#5b21b6" }}>
+                          <span>WER (A vs B): <strong>{werVal}%</strong></span>
+                        </div>
+                        {cerA_ref !== null && cerB_ref !== null && (
+                          <div style={{ padding: "4px 8px", backgroundColor: "#ecfdf5", borderRadius: "4px", border: "1px solid #a7f3d0", color: "#065f46" }}>
+                            <span>CER vs Reference: <strong>A: {cerA_ref}%</strong> | <strong>B: {cerB_ref}%</strong></span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Side-by-side or Word Diff Viewer */}
+                {(() => {
+                  const resA = doc.all_ocr_results?.find((r: any) => r.ocr_engine === compareEngineA);
+                  const resB = doc.all_ocr_results?.find((r: any) => r.ocr_engine === compareEngineB);
+                  const txtA = resA?.raw_text || "";
+                  const txtB = resB?.raw_text || "";
+
+                  if (!resA && !resB) {
+                    return (
+                      <div style={{ textAlign: "center", padding: "3rem", color: "var(--gray-400)" }}>
+                        Cả 2 mô hình {compareEngineA.toUpperCase()} và {compareEngineB.toUpperCase()} đều chưa được chạy.
+                      </div>
+                    );
+                  }
+                  if (!resA) {
+                    return (
+                      <div style={{ textAlign: "center", padding: "3rem", color: "var(--gray-400)" }}>
+                        Mô hình {compareEngineA.toUpperCase()} chưa có kết quả. Vui lòng bấm "Chạy lại OCR..." để quét trước khi so sánh.
+                      </div>
+                    );
+                  }
+                  if (!resB) {
+                    return (
+                      <div style={{ textAlign: "center", padding: "3rem", color: "var(--gray-400)" }}>
+                        Mô hình {compareEngineB.toUpperCase()} chưa có kết quả. Vui lòng bấm "Chạy lại OCR..." để quét trước khi so sánh.
+                      </div>
+                    );
+                  }
+
+                  const diff = diffWordsWithSpace(txtA, txtB);
+
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", flex: 1, minHeight: "420px" }}>
+                      {/* Left: Model A */}
+                      <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--border-color)", borderRadius: "var(--radius-md)", backgroundColor: "#fff", overflow: "hidden" }}>
+                        <div style={{ padding: "6px 12px", backgroundColor: "#f8fafc", borderBottom: "1px solid var(--border-color)", fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-700)", display: "flex", justifyContent: "space-between" }}>
+                          <span>{OCR_ENGINES.find(e => e.id === compareEngineA)?.name}</span>
+                          <span>{resA.processing_time_ms ? `${resA.processing_time_ms}ms` : ""}</span>
+                        </div>
+                        <div style={{ flex: 1, padding: "0.75rem", fontSize: "0.85rem", lineHeight: "1.7", fontFamily: "inherit", whiteSpace: "pre-wrap", overflowY: "auto" }}>
+                          {txtA}
+                        </div>
+                      </div>
+
+                      {/* Right: Word-Level Diff against Model A */}
+                      <div style={{ display: "flex", flexDirection: "column", border: "1px solid var(--border-color)", borderRadius: "var(--radius-md)", backgroundColor: "#fff", overflow: "hidden" }}>
+                        <div style={{ padding: "6px 12px", backgroundColor: "#f8fafc", borderBottom: "1px solid var(--border-color)", fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-700)", display: "flex", justifyContent: "space-between" }}>
+                          <span>{OCR_ENGINES.find(e => e.id === compareEngineB)?.name} (Word Diff vs A)</span>
+                          <span>{resB.processing_time_ms ? `${resB.processing_time_ms}ms` : ""}</span>
+                        </div>
+                        <div style={{ flex: 1, padding: "0.75rem", fontSize: "0.85rem", lineHeight: "1.7", fontFamily: "inherit", whiteSpace: "pre-wrap", overflowY: "auto" }}>
+                          {diff.map((part, index) => {
+                            if (part.added) {
+                              return (
+                                <span
+                                  key={index}
+                                  style={{
+                                    backgroundColor: "#dcfce7",
+                                    color: "#15803d",
+                                    fontWeight: 700,
+                                    borderRadius: "2px",
+                                    padding: "1px 2px",
+                                  }}
+                                  title="Từ mới xuất hiện ở Model B"
+                                >
+                                  {part.value}
+                                </span>
+                              );
+                            }
+                            if (part.removed) {
+                              return (
+                                <span
+                                  key={index}
+                                  style={{
+                                    backgroundColor: "#fee2e2",
+                                    color: "#b91c1c",
+                                    textDecoration: "line-through",
+                                    borderRadius: "2px",
+                                    padding: "1px 2px",
+                                    opacity: 0.75,
+                                  }}
+                                  title="Từ có ở Model A nhưng bị thiếu ở Model B"
+                                >
+                                  {part.value}
+                                </span>
+                              );
+                            }
+                            return <span key={index}>{part.value}</span>;
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              /* STANDARD SINGLE ENGINE OCR VIEW */
+              <>
+                {/* Editor Toolbar */}
                 <div
                   style={{
-                    flex: 1,
-                    minHeight: "460px",
-                    padding: "2rem",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "#f8fafc",
-                    border: "1.5px dashed var(--primary-300)",
                     display: "flex",
-                    flexDirection: "column",
                     alignItems: "center",
-                    justifyContent: "center",
-                    textAlign: "center",
+                    justifyContent: "space-between",
+                    padding: "0.6rem 1rem",
+                    backgroundColor: "var(--gray-50)",
+                    borderBottom: "1px solid var(--border-color)",
                   }}
                 >
-                  <div
-                    style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: "50%",
-                      backgroundColor: "#eff6ff",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: "1rem",
-                    }}
-                  >
-                    <RotateCw size={28} className="animate-spin" style={{ color: "var(--primary-600)" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--gray-900)" }}>
+                      Văn bản trích xuất OCR ({selectedOcrEngine.toUpperCase()})
+                    </span>
+                    {!isEditingOCR && getSelectedEngineResult() && (
+                      <div style={{ display: "inline-flex", padding: "2px", backgroundColor: "#e2e8f0", borderRadius: "6px" }}>
+                        <button
+                          onClick={() => setOcrTextMode("processed")}
+                          style={{
+                            padding: "2px 8px",
+                            fontSize: "0.72rem",
+                            fontWeight: ocrTextMode === "processed" ? 700 : 500,
+                            color: ocrTextMode === "processed" ? "var(--primary-700)" : "var(--gray-600)",
+                            backgroundColor: ocrTextMode === "processed" ? "#fff" : "transparent",
+                            borderRadius: "4px",
+                            border: "none",
+                            cursor: "pointer",
+                            boxShadow: ocrTextMode === "processed" ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                            transition: "all 0.15s ease"
+                          }}
+                          title="Hiển thị văn bản đã qua bộ lọc hậu xử lý từ điển và chuẩn hóa tiếng Việt"
+                        >
+                          ✨ Chuẩn hóa
+                        </button>
+                        <button
+                          onClick={() => setOcrTextMode("raw")}
+                          style={{
+                            padding: "2px 8px",
+                            fontSize: "0.72rem",
+                            fontWeight: ocrTextMode === "raw" ? 700 : 500,
+                            color: ocrTextMode === "raw" ? "#b45309" : "var(--gray-600)",
+                            backgroundColor: ocrTextMode === "raw" ? "#fff" : "transparent",
+                            borderRadius: "4px",
+                            border: "none",
+                            cursor: "pointer",
+                            boxShadow: ocrTextMode === "raw" ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                            transition: "all 0.15s ease"
+                          }}
+                          title="Hiển thị văn bản thô trực tiếp từ mô hình OCR (chưa qua chuẩn hóa từ điển)"
+                        >
+                          ⚡ Gốc (Raw OCR)
+                        </button>
+                      </div>
+                    )}
+                    {getSelectedEngineResult()?.is_corrected && (
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          fontWeight: 700,
+                          color: "#16a34a",
+                          backgroundColor: "#dcfce7",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        ✓ Đã hiệu chỉnh & đối chiếu
+                      </span>
+                    )}
                   </div>
-                  <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.5rem" }}>
-                    Hệ thống đang chạy OCR & Trích xuất Bảng biểu
-                  </h3>
-                  <p style={{ fontSize: "0.85rem", color: "var(--gray-600)", maxWidth: "440px", lineHeight: "1.6", marginBottom: "1.25rem" }}>
-                    Mô hình VietOCR Transformer và giải thuật phát hiện lưới ô đang nhận diện nội dung từng trang. Trang web sẽ <strong>tự động làm mới và hiển thị kết quả</strong> ngay khi hoàn tất.
-                  </p>
-                  <div style={{ display: "flex", gap: "0.75rem", fontSize: "0.75rem", color: "var(--gray-500)", flexWrap: "wrap", justifyContent: "center" }}>
-                    <span style={{ padding: "4px 8px", backgroundColor: "#e2e8f0", borderRadius: "4px" }}>1. Phân giải 300 DPI</span>
-                    <span style={{ padding: "4px 8px", backgroundColor: "#e2e8f0", borderRadius: "4px" }}>2. Nhận diện lưới Bảng</span>
-                    <span style={{ padding: "4px 8px", backgroundColor: "#dbeafe", color: "#1e40af", borderRadius: "4px", fontWeight: 600 }}>3. VietOCR Line-by-Line</span>
+
+                  <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+                    {!isEditingOCR && getSelectedEngineResult() && (
+                      <button
+                        onClick={() => setIsHighlightTagsEnabled((prev) => !prev)}
+                        style={{
+                          padding: "0.3rem 0.65rem",
+                          borderRadius: "0.375rem",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          cursor: "pointer",
+                          border: "1px solid",
+                          borderColor: isHighlightTagsEnabled ? "#818cf8" : "var(--border-color)",
+                          backgroundColor: isHighlightTagsEnabled ? "#e0e7ff" : "#fff",
+                          color: isHighlightTagsEnabled ? "#3730a3" : "var(--gray-600)",
+                          transition: "all 0.15s ease",
+                        }}
+                        title="Bật/Tắt tô màu trực quan các từ tương ứng với nhãn trong văn bản OCR"
+                      >
+                        <Sparkles size={13} color={isHighlightTagsEnabled ? "#4338ca" : "var(--gray-400)"} />
+                        {isHighlightTagsEnabled ? "🏷️ Đang tô nhãn (Bật)" : "📄 Văn bản thuần"}
+                      </button>
+                    )}
+                    {getSelectedEngineResult() && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAIRefine}
+                        isLoading={isAIRefining}
+                        leftIcon={<Wand2 size={13} style={{ color: "#7c3aed" }} />}
+                        style={{ borderColor: "#c4b5fd", color: "#6d28d9", backgroundColor: "#f5f3ff", fontWeight: 600 }}
+                        title="Dùng AI (Gemini / OpenAI / Ollama) sửa lỗi chính tả ngữ cảnh & chuẩn hóa văn bản hành chính"
+                      >
+                        ✨ AI Sửa chính tả
+                      </Button>
+                    )}
+                    <button onClick={handleCopyText} style={viewerIconBtn} title="Sao chép văn bản">
+                      <Copy size={14} />
+                    </button>
+                    {getSelectedEngineResult() && (
+                      isEditingOCR ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleSaveCorrection}
+                          isLoading={isSavingCorrection}
+                          leftIcon={<Save size={13} />}
+                        >
+                          Lưu hiệu chỉnh
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setOcrTextMode("processed");
+                            setIsEditingOCR(true);
+                          }}
+                          leftIcon={<Edit3 size={13} />}
+                        >
+                          Chỉnh sửa text
+                        </Button>
+                      )
+                    )}
                   </div>
                 </div>
-              ) : (
-                <div
-                  style={{
-                    flex: 1,
-                    minHeight: "460px",
-                    padding: "0.85rem",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "#f8fafc",
-                    border: "1px solid var(--border-color)",
-                    fontFamily: "inherit",
-                    fontSize: "0.85rem",
-                    lineHeight: "1.8",
-                    color: "var(--gray-900)",
-                    whiteSpace: "pre-wrap",
-                    overflowY: "auto",
-                  }}
-                >
-                  {correctedText || doc.ocr_result?.raw_text ? (
-                    renderHighlightedOCRText(correctedText || doc.ocr_result?.raw_text || "")
+
+                {/* Textarea / Editor Body */}
+                <div style={{ flex: 1, padding: "1rem", display: "flex", flexDirection: "column" }}>
+                  {isEditingOCR ? (
+                    <textarea
+                      value={correctedText}
+                      onChange={(e) => setCorrectedText(e.target.value)}
+                      style={{
+                        width: "100%",
+                        flex: 1,
+                        minHeight: "460px",
+                        padding: "0.85rem",
+                        borderRadius: "var(--radius-md)",
+                        border: "1.5px solid var(--primary-400)",
+                        fontFamily: "monospace",
+                        fontSize: "0.85rem",
+                        lineHeight: "1.6",
+                        color: "var(--gray-900)",
+                        backgroundColor: "#f8fafc",
+                        outline: "none",
+                        resize: "none",
+                        boxSizing: "border-box",
+                      }}
+                      placeholder="Nhập nội dung chỉnh sửa..."
+                    />
+                  ) : runningEngine === selectedOcrEngine || (!getSelectedEngineResult() && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && selectedOcrEngine === "vietocr") ? (
+                    <div
+                      style={{
+                        flex: 1,
+                        minHeight: "460px",
+                        padding: "2rem",
+                        borderRadius: "var(--radius-md)",
+                        backgroundColor: "#f8fafc",
+                        border: "1.5px dashed var(--primary-300)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "56px",
+                          height: "56px",
+                          borderRadius: "50%",
+                          backgroundColor: "#eff6ff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        <RotateCw size={28} className="animate-spin" style={{ color: "var(--primary-600)" }} />
+                      </div>
+                      <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.5rem" }}>
+                        Hệ thống đang chạy OCR với {selectedOcrEngine.toUpperCase()}
+                      </h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--gray-600)", maxWidth: "440px", lineHeight: "1.6" }}>
+                        Mô hình đang nhận diện ký tự và cấu trúc văn bản. Kết quả sẽ tự động hiển thị ngay khi hoàn tất.
+                      </p>
+                    </div>
+                  ) : !getSelectedEngineResult() ? (
+                    /* EMPTY STATE: Engine has not run yet */
+                    <div
+                      style={{
+                        flex: 1,
+                        minHeight: "460px",
+                        padding: "2.5rem 1.5rem",
+                        borderRadius: "var(--radius-md)",
+                        backgroundColor: "#f8fafc",
+                        border: "1.5px dashed var(--border-color)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "52px",
+                          height: "52px",
+                          borderRadius: "50%",
+                          backgroundColor: "#f1f5f9",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        <Bot size={26} style={{ color: "var(--gray-400)" }} />
+                      </div>
+                      <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.4rem" }}>
+                        Mô hình {OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.name || selectedOcrEngine.toUpperCase()} chưa được chạy
+                      </h3>
+                      <p style={{ fontSize: "0.85rem", color: "var(--gray-500)", maxWidth: "420px", lineHeight: "1.6", marginBottom: "1.25rem" }}>
+                        Tài liệu này chưa có kết quả OCR từ mô hình {selectedOcrEngine.toUpperCase()}. Bạn có thể chạy quét độc lập mô hình này để đối chiếu.
+                      </p>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleReprocessOCR(selectedOcrEngine)}
+                        isLoading={runningEngine === selectedOcrEngine}
+                        leftIcon={<Play size={14} />}
+                      >
+                        Chạy OCR ({OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.label || selectedOcrEngine.toUpperCase()})
+                      </Button>
+                    </div>
+                  ) : getSelectedEngineResult()?.status === "FAILED" ? (
+                    /* FAILED STATE */
+                    <div
+                      style={{
+                        flex: 1,
+                        minHeight: "460px",
+                        padding: "2.5rem 1.5rem",
+                        borderRadius: "var(--radius-md)",
+                        backgroundColor: "#fef2f2",
+                        border: "1.5px solid #fecaca",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "52px",
+                          height: "52px",
+                          borderRadius: "50%",
+                          backgroundColor: "#fee2e2",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        <AlertTriangle size={26} style={{ color: "#dc2626" }} />
+                      </div>
+                      <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "#991b1b", marginBottom: "0.4rem" }}>
+                        OCR với {OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.name || selectedOcrEngine.toUpperCase()} thất bại
+                      </h3>
+                      <div
+                        style={{
+                          fontSize: "0.8rem",
+                          color: "#b91c1c",
+                          backgroundColor: "#fff",
+                          padding: "0.75rem 1rem",
+                          borderRadius: "6px",
+                          border: "1px solid #fca5a5",
+                          maxWidth: "460px",
+                          lineHeight: "1.5",
+                          marginBottom: "1.25rem",
+                          textAlign: "left",
+                          fontFamily: "monospace",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {getSelectedEngineResult()?.error_message || "Mô hình gặp lỗi trong quá trình trích xuất ký tự."}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReprocessOCR(selectedOcrEngine)}
+                        isLoading={runningEngine === selectedOcrEngine}
+                        leftIcon={<RefreshCw size={14} />}
+                        style={{ borderColor: "#f87171", color: "#b91c1c", backgroundColor: "#fff" }}
+                      >
+                        Thử chạy lại với {OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.label || selectedOcrEngine.toUpperCase()}
+                      </Button>
+                    </div>
                   ) : (
-                    <div style={{ display: "flex", height: "100%", width: "100%", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ fontStyle: "italic", color: "var(--gray-400)" }}>
-                        (Vui lòng nhấn "OCR lại ({selectedOcrEngine.toUpperCase()})" để xem kết quả của mô hình này)
+                    /* DONE STATE */
+                    <div
+                      style={{
+                        flex: 1,
+                        minHeight: "460px",
+                        padding: "0.85rem",
+                        borderRadius: "var(--radius-md)",
+                        backgroundColor: ocrTextMode === "raw" ? "#fffbeb" : "#f8fafc",
+                        border: ocrTextMode === "raw" ? "1px solid #fde68a" : "1px solid var(--border-color)",
+                        fontFamily: "inherit",
+                        fontSize: "0.85rem",
+                        lineHeight: "1.8",
+                        color: "var(--gray-900)",
+                        whiteSpace: "pre-wrap",
+                        overflowY: "auto",
+                      }}
+                    >
+                      {ocrTextMode === "raw" && (
+                        <div style={{ display: "inline-block", padding: "2px 8px", backgroundColor: "#fef3c7", color: "#92400e", borderRadius: "4px", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+                          ⚡ Văn bản OCR thô trực tiếp từ Model {selectedOcrEngine.toUpperCase()} (Chưa qua lọc từ điển)
+                        </div>
+                      )}
+                      {(() => {
+                        const engRes = getSelectedEngineResult();
+                        const rawTxt = engRes?.raw_text || "";
+                        const procTxt = correctedText || engRes?.corrected_text || rawTxt;
+                        const displayTxt = ocrTextMode === "raw" ? rawTxt : procTxt;
+
+                        return displayTxt ? (
+                          renderHighlightedOCRText(displayTxt)
+                        ) : (
+                          <div style={{ display: "flex", height: "100%", width: "100%", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ fontStyle: "italic", color: "var(--gray-400)" }}>
+                              (Không có nội dung văn bản)
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Engine & Processing metadata footer */}
+                  {getSelectedEngineResult() && (
+                    <div
+                      style={{
+                        marginTop: "0.75rem",
+                        paddingTop: "0.6rem",
+                        borderTop: "1px solid var(--border-color)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: "0.72rem",
+                        color: "var(--gray-500)",
+                        flexWrap: "wrap",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <span>
+                        Engine: <strong>{OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.name}</strong> ({getSelectedEngineResult()?.ocr_engine_version || OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.version})
+                      </span>
+                      <span>
+                        Độ tin cậy (ước tính heuristic): <strong>{getSelectedEngineResult()?.confidence_score != null ? `${Math.round(getSelectedEngineResult()!.confidence_score! * 100)}%` : "N/A"}</strong>
+                      </span>
+                      <span>
+                        Thời gian OCR: <strong>{getSelectedEngineResult()?.processing_time_ms != null ? `${getSelectedEngineResult()!.processing_time_ms}ms` : "N/A"}</strong>
                       </span>
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* Engine & Processing metadata footer */}
-              <div
-                style={{
-                  marginTop: "0.75rem",
-                  paddingTop: "0.6rem",
-                  borderTop: "1px solid var(--border-color)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "0.72rem",
-                  color: "var(--gray-400)",
-                }}
-              >
-                <span>Engine: <strong>{selectedOcrEngine === "tesseract" ? "Tesseract v5.3 (LSTM Baseline)" : "VietOCR v2.0 (PyTorch Transformer) + AI Spellcheck"}</strong></span>
-                <span>Thời gian OCR: <strong>{doc.all_ocr_results?.find((r: any) => r.ocr_engine === selectedOcrEngine)?.processing_time_ms || doc.ocr_result?.processing_time_ms || 1150}ms</strong></span>
-              </div>
-            </div>
+              </>
+            )}
           </Card>
         </div>
       )}

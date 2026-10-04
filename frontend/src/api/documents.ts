@@ -47,6 +47,9 @@ export interface OCRResult {
   corrected_text?: string;
   confidence_score?: number;
   ocr_engine: string;
+  ocr_engine_version?: string;
+  status?: "DONE" | "FAILED" | "RUNNING" | string;
+  error_message?: string;
   is_corrected: boolean;
   corrected_by?: string;
   corrected_at?: string;
@@ -229,10 +232,16 @@ export const documentsApi = {
     return res.data;
   },
 
-  saveCorrection: async (id: string, correctedText: string): Promise<DocumentDetail> => {
+  saveCorrection: async (id: string, correctedText: string, engine?: string): Promise<DocumentDetail> => {
     const res = await apiClient.put<DocumentDetail>(`/documents/${id}/ocr-correction`, {
       corrected_text: correctedText,
+      engine: engine,
     });
+    return res.data;
+  },
+
+  getEngineOcrResult: async (id: string, engine: string): Promise<OCRResult> => {
+    const res = await apiClient.get<OCRResult>(`/documents/${id}/ocr-results/${engine}`);
     return res.data;
   },
 
