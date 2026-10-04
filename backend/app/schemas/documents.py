@@ -27,6 +27,8 @@ class OCRResultResponse(BaseModel):
     ocr_engine_version: str | None = None
     page_texts: list[dict] | dict | None = None
     processing_time_ms: int | None = None
+    status: str = "DONE"
+    error_message: str | None = None
     is_corrected: bool = False
     corrected_by: UUID | None = None
     corrected_at: datetime | None = None
@@ -65,6 +67,7 @@ class DocumentMetadataResponse(BaseModel):
 class OCRCorrectionRequest(BaseModel):
     """Payload gửi lên khi cán bộ hiệu chỉnh văn bản OCR."""
     corrected_text: str = Field(..., min_length=1, description="Nội dung văn bản sau khi hiệu chỉnh")
+    engine: str | None = Field(default=None, description="Tên engine đang được hiệu chỉnh (vietocr, trocr, tesseract)")
 
 
 class FieldExtractionUpdateRequest(BaseModel):

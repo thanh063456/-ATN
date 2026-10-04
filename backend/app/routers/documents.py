@@ -33,9 +33,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.constants import DEFAULT_OCR_ENGINE, OCR_ENGINES
 from app.core.database import get_db
 from app.core.dependencies import _resolve_user_from_token, get_current_user, get_current_user_optional, require_roles
-from app.core.exceptions import AppException, DocumentNotFoundException, FileTooLargeException, UnsupportedFileTypeException
+from app.core.exceptions import (
+    AppException,
+    DocumentNotFoundException,
+    FileTooLargeException,
+    NotFoundException,
+    UnsupportedFileTypeException,
+    ValidationException,
+)
 from app.core.rate_limiter import limiter
 from app.core.tickets import create_file_ticket, validate_and_consume_file_ticket
 from app.models.audit_logs import AuditLog
@@ -633,16 +641,28 @@ async def correct_ocr_text(
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    # Tìm OCRResult mới nhất
+    target_engine = req.engine or "vietocr"
+    if target_engine not in OCR_ENGINES and target_engine != "manual_correction":
+        raise ValidationException(
+            f"Engine '{target_engine}' không hợp lệ. Các engine hợp lệ: {', '.join(OCR_ENGINES)}",
+            status_code=422,
+        )
+
+    # Tìm OCRResult mới nhất của engine này
     stmt = (
         select(OCRResult)
-        .where(OCRResult.document_id == document_id, OCRResult.is_latest == True)
+        .where(
+            OCRResult.document_id == document_id,
+            OCRResult.ocr_engine == target_engine,
+            OCRResult.is_latest == True,
+        )
     )
     res = await db.execute(stmt)
     ocr_result = res.scalars().first()
 
     now = datetime.now()
     if not ocr_result:
+        # Nếu chưa có kết quả cho engine này, tìm bất kỳ bản ghi is_latest nào làm base hoặc tạo mới
         ocr_result = OCRResult(
             document_id=document_id,
             is_latest=True,
@@ -652,7 +672,8 @@ async def correct_ocr_text(
             corrected_by=current_user.id,
             corrected_at=now,
             confidence_score=1.0,
-            ocr_engine="manual_correction",
+            ocr_engine=target_engine,
+            status="DONE",
         )
         db.add(ocr_result)
     else:
@@ -695,7 +716,11 @@ async def correct_ocr_text(
         action="CORRECT_OCR_TEXT",
         resource_type="document",
         resource_id=document_id,
-        detail={"length": len(req.corrected_text), "user_role": current_user.role.name if current_user.role else "USER"},
+        detail={
+            "length": len(req.corrected_text),
+            "engine": target_engine,
+            "user_role": current_user.role.name if current_user.role else "USER",
+        },
         created_at=now,
     )
     db.add(audit)
@@ -710,28 +735,79 @@ async def correct_ocr_text(
     except Exception as exc:
         logger.warning("Failed to update corrected text in ES: {err}", err=str(exc))
 
-    logger.info("Updated corrected OCR text for doc {id} by user {user}", id=document_id, user=current_user.id)
+    logger.info("Updated corrected OCR text for doc {id} (engine={eng}) by user {user}",
+                id=document_id, eng=target_engine, user=current_user.id)
     doc_service = DocumentService(db)
     return await doc_service.get_document_by_id(document_id)
 
 
 @router.post(
     "/{document_id}/reprocess-ocr",
-    summary="Chạy lại quy trình OCR cho tài liệu (ADMIN, STAFF)",
+    summary="Chạy lại quy trình OCR cho tài liệu theo engine (ADMIN, STAFF)",
 )
 async def reprocess_document_ocr(
     document_id: UUID,
-    engine: str | None = Query(None, description="vietocr hoặc tesseract"),
+    engine: str | None = Query(None, description="vietocr, trocr, hoặc tesseract"),
     current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """Kích hoạt lại tác vụ OCR đa tầng nền cho tài liệu (bảo vệ quyền STAFF/ADMIN tránh DoS)."""
+    """Kích hoạt lại tác vụ OCR nền cho một engine cụ thể (hoặc mặc định vietocr)."""
+    if engine is not None and engine not in OCR_ENGINES:
+        raise ValidationException(
+            f"Engine '{engine}' không hợp lệ. Các engine được hỗ trợ: {', '.join(OCR_ENGINES)}",
+            status_code=422,
+        )
+
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    asyncio.create_task(async_process_ocr(str(document_id), task_id="reprocess_worker", engine=engine))
-    return {"message": "Đang chạy lại OCR cho tài liệu", "document_id": document_id, "status": "PROCESSING"}
+    target_engine = engine or DEFAULT_OCR_ENGINE
+    asyncio.create_task(async_process_ocr(str(document_id), task_id="reprocess_worker", engine=target_engine))
+    return {
+        "message": f"Đang chạy lại OCR ({target_engine}) cho tài liệu",
+        "document_id": document_id,
+        "status": "PROCESSING",
+        "engine": target_engine,
+    }
+
+
+@router.get(
+    "/{document_id}/ocr-results/{engine}",
+    response_model=OCRResultResponse,
+    summary="Lấy kết quả OCR mới nhất của một engine cụ thể (404 nếu chưa từng chạy)",
+)
+async def get_document_ocr_result_by_engine(
+    document_id: UUID,
+    engine: str,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+) -> OCRResultResponse:
+    """Trả về kết quả OCR của riêng 1 engine (vietocr | trocr | tesseract)."""
+    if engine not in OCR_ENGINES:
+        raise ValidationException(
+            f"Engine '{engine}' không hợp lệ. Các engine được hỗ trợ: {', '.join(OCR_ENGINES)}",
+            status_code=422,
+        )
+
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    stmt = (
+        select(OCRResult)
+        .where(
+            OCRResult.document_id == document_id,
+            OCRResult.ocr_engine == engine,
+            OCRResult.is_latest == True,
+        )
+    )
+    res = await db.execute(stmt)
+    ocr = res.scalars().first()
+    if not ocr:
+        raise NotFoundException(f"kết quả OCR của engine '{engine}' cho tài liệu", str(document_id))
+
+    return OCRResultResponse.model_validate(ocr)
 
 
 @router.post(

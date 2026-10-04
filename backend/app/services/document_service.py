@@ -155,12 +155,18 @@ class DocumentService:
         if not document:
             raise DocumentNotFoundException(str(document_id))
 
-        # Tìm OCR result mới nhất (is_latest == True)
-        latest_ocr = None
+        # Tìm OCR result mới nhất theo từng engine (is_latest == True)
+        engine_latest_map: dict[str, OCRResultResponse] = {}
         for ocr in document.ocr_results:
             if ocr.is_latest:
-                latest_ocr = OCRResultResponse.model_validate(ocr)
-                break
+                engine_latest_map[ocr.ocr_engine] = OCRResultResponse.model_validate(ocr)
+
+        all_ocr_results = list(engine_latest_map.values())
+
+        # ocr_result chính: ưu tiên 'vietocr' mới nhất cho backward compatibility
+        latest_ocr = engine_latest_map.get("vietocr")
+        if not latest_ocr and all_ocr_results:
+            latest_ocr = all_ocr_results[0]
 
         # Tìm ProcessingJob mới nhất
         latest_job = None
@@ -230,11 +236,7 @@ class DocumentService:
             created_at=document.created_at,
             updated_at=document.updated_at,
             ocr_result=latest_ocr,
-            all_ocr_results=sorted(
-                [OCRResultResponse.model_validate(ocr) for ocr in document.ocr_results],
-                key=lambda x: x.created_at,
-                reverse=True
-            ),
+            all_ocr_results=all_ocr_results,
             processing_job=latest_job,
             metadata=meta_response,
             tags=doc_tags,
