@@ -534,6 +534,27 @@ class TestRegexBugRegression:
         garbage = "Lý do: + * ? { }"
         meta = extraction_service.extract_metadata(garbage)
         assert meta["reason"] is None or isinstance(meta["reason"], str)
+class TestDocumentHeaderNormalizer:
+    def test_doc_number_not_extracted_from_body(self):
+        from app.services.text_postprocessing.document_header_normalizer import normalize_document_header
+        # The body has a reference to another document
+        raw_text = (
+            "TRƯỜNG ĐẠI HỌC ĐÀ LẠT\n"
+            "PHÒNG CÔNG TÁC SINH VIÊN\n"
+            "Số:Í+42 /TB-ĐHĐL\n\n\n\n\n\n\n\n\n\n" # Make sure the rest is body
+            "THÔNG BÁO\n"
+            "Về việc abc\n"
+            "Căn cứ Công văn số 4642/BGDĐT-HSSV ngày 08/8/2025 của Bộ Giáo dục và Đào tạo;\n"
+            "Tiếp theo..."
+        )
+        normalized = normalize_document_header(raw_text)
+        
+        # Should not extract 4642 from the body
+        assert "Số: 4642/BGDĐT-HSSV" not in normalized.splitlines()[0:10]
+        # Should fallback to [chưa đọc được] for the bad header
+        assert "Số: [chưa đọc được]" in normalized
+        # The body text should remain untouched
+        assert "Căn cứ Công văn số 4642/BGDĐT-HSSV ngày 08/8/2025" in normalized
 
 
 if __name__ == "__main__":

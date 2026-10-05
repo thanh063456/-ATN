@@ -87,86 +87,111 @@ _DOC_TITLE_REGEX = re.compile(
 )
 
 
-def _normalize_national_header(text: str) -> str:
+def _normalize_national_header(header_text: str) -> str:
     """Chuẩn hóa Quốc hiệu, Tiêu ngữ và tên cơ quan ban hành."""
     for pattern, replacement in _NATIONAL_HEADER_PATTERNS:
-        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
-    return text
+        header_text = re.sub(pattern, replacement, header_text, flags=re.IGNORECASE)
+    return header_text
 
 
-def _normalize_doc_number(text: str) -> tuple[str, str | None]:
+def _normalize_doc_number(header_text: str) -> tuple[str, str | None]:
     """
     Tìm và chuẩn hóa số hiệu văn bản trong text.
-
-    Returns:
-        (text_updated, normalized_doc_no) — doc_no là None nếu không tìm thấy
     """
-    m = _DOC_NO_PATTERN.search(text)
-    if not m:
-        return text, None
+    reject_words = ["công văn", "căn cứ", "theo", "của", "quyết định", "thông tư", "nghị định"]
+    
+    for m in _DOC_NO_PATTERN.finditer(header_text):
+        start_idx = m.start()
+        context_before = header_text[max(0, start_idx - 40):start_idx].lower()
+        if any(w in context_before for w in reject_words):
+            continue
+            
+        num = re.sub(r'[\s\.]+', '', m.group(1))   # "13 28" / "13.28" → "1328"
+        code = m.group(2).strip().upper()
+        normalized_code = normalize_document_code(code)
+        doc_no = f'Số: {num}/{normalized_code}'
+    
+        text = header_text[:m.start()] + doc_no + header_text[m.end():]
+        return text, doc_no
 
-    num = re.sub(r'[\s\.]+', '', m.group(1))   # "13 28" / "13.28" → "1328"
-    code = m.group(2).strip().upper()
-    normalized_code = normalize_document_code(code)
-    doc_no = f'Số: {num}/{normalized_code}'
+    fallback_m = re.search(r'S[oố]\s*[:\-]?\s*([^\n]{2,30})', header_text, re.IGNORECASE)
+    if fallback_m:
+        start_idx = fallback_m.start()
+        context_before = header_text[max(0, start_idx - 40):start_idx].lower()
+        if not any(w in context_before for w in reject_words):
+            doc_no = "Số: [chưa đọc được]"
+            return header_text, doc_no
 
-    text = text[:m.start()] + doc_no + text[m.end():]
-    return text, doc_no
+    return header_text, None
 
 
-def _normalize_date(text: str) -> tuple[str, str | None]:
+def _normalize_date(header_text: str) -> tuple[str, str | None]:
     """
     Tìm và chuẩn hóa ngày tháng trong text.
-    Hỗ trợ mọi định dạng viết liền, viết tắt hoặc phân cách slash.
-
-    Returns:
-        (text_updated, normalized_date_str) — date_str là None nếu không tìm thấy
     """
-    m = _DATE_PATTERN.search(text)
-    if not m:
-        # Fallback date dạng ngày 22/8/2025 hoặc 22-08-2025
-        m_slash = re.search(r'ng[àaá]y\s*(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{4})', text, re.IGNORECASE)
-        if m_slash:
-            d = str(int(m_slash.group(1)))
-            mo = str(int(m_slash.group(2)))
-            y = m_slash.group(3)
-            prefix = 'Lâm Đồng' if any(x in text for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
-            date_str = f'{prefix}, ngày {d} tháng {mo} năm {y}'
-            return text, date_str
-        return text, None
+    reject_words = ["công văn", "căn cứ", "theo", "của", "quyết định", "thông tư", "nghị định"]
 
-    raw_day = re.sub(r'[^\d]', '', m.group(1))
-    raw_month = re.sub(r'[^\d]', '', m.group(2))
-    raw_year = re.sub(r'[^\d]', '', m.group(3))
+    for m in _DATE_PATTERN.finditer(header_text):
+        start_idx = m.start()
+        context_before = header_text[max(0, start_idx - 40):start_idx].lower()
+        if any(w in context_before for w in reject_words):
+            continue
 
-    day = raw_day.lstrip('0') if raw_day else '22'
-    try:
-        if int(day) > 31:
-            day = day[:2] if int(day[:2]) <= 31 else day[0]
-    except (ValueError, IndexError):
-        day = '22'
+        raw_day = re.sub(r'[^\d]', '', m.group(1))
+        raw_month = re.sub(r'[^\d]', '', m.group(2))
+        raw_year = re.sub(r'[^\d]', '', m.group(3))
+    
+        day = raw_day.lstrip('0') if raw_day else '22'
+        try:
+            if int(day) > 31:
+                day = day[:2] if int(day[:2]) <= 31 else day[0]
+        except (ValueError, IndexError):
+            day = '22'
+    
+        month = raw_month.lstrip('0') if raw_month else '8'
+        try:
+            if int(month) > 12:
+                month = month[0]
+        except (ValueError, IndexError):
+            month = '8'
+    
+        if len(raw_year) == 4:
+            year = raw_year
+        elif len(raw_year) == 2:
+            year = '20' + raw_year
+        else:
+            year = '2025'
+    
+        original_segment = m.group(0)
+        prefix = 'Lâm Đồng' if any(x in original_segment for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
+    
+        date_str = f'{prefix}, ngày {day} tháng {month} năm {year}'
+        text = header_text[:m.start()] + date_str + header_text[m.end():]
+        return text, date_str
 
-    month = raw_month.lstrip('0') if raw_month else '8'
-    try:
-        if int(month) > 12:
-            month = month[0]
-    except (ValueError, IndexError):
-        month = '8'
+    for m_slash in re.finditer(r'ng[àaá]y\s*(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{4})', header_text, re.IGNORECASE):
+        start_idx = m_slash.start()
+        context_before = header_text[max(0, start_idx - 40):start_idx].lower()
+        if any(w in context_before for w in reject_words):
+            continue
+            
+        d = str(int(m_slash.group(1)))
+        mo = str(int(m_slash.group(2)))
+        y = m_slash.group(3)
+        prefix = 'Lâm Đồng' if any(x in header_text for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
+        date_str = f'{prefix}, ngày {d} tháng {mo} năm {y}'
+        return header_text, date_str
 
-    if len(raw_year) == 4:
-        year = raw_year
-    elif len(raw_year) == 2:
-        year = '20' + raw_year
-    else:
-        year = '2025'
+    fallback_m = re.search(r'(?:Lâm Đồng|Đà Lạt)?[\s,]*ng[àaá]y\s+[^\n]{2,30}', header_text, re.IGNORECASE)
+    if fallback_m:
+        start_idx = fallback_m.start()
+        context_before = header_text[max(0, start_idx - 40):start_idx].lower()
+        if not any(w in context_before for w in reject_words):
+            prefix = 'Lâm Đồng' if any(x in header_text for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
+            date_str = f'{prefix}, ngày [chưa đọc được]'
+            return header_text, date_str
 
-    # Xác định địa danh
-    original_segment = m.group(0)
-    prefix = 'Lâm Đồng' if any(x in original_segment for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
-
-    date_str = f'{prefix}, ngày {day} tháng {month} năm {year}'
-    text = text[:m.start()] + date_str + text[m.end():]
-    return text, date_str
+    return header_text, None
 
 
 def _is_header_fragment(line: str, doc_no: str | None, date_str: str | None) -> bool:
@@ -213,17 +238,20 @@ def _is_header_fragment(line: str, doc_no: str | None, date_str: str | None) -> 
 def _rebuild_header_block(
     doc_no: str | None,
     date_str: str | None,
-    is_admin_doc: bool,
-    has_national_header: bool,
+    is_admin_doc: list,
+    has_national_header: list,
 ) -> str:
     lines = []
 
     left_col = []
     if is_admin_doc:
-        left_col = [
-            "BỘ GIÁO DỤC VÀ ĐÀO TẠO",
-            "TRƯỜNG ĐẠI HỌC ĐÀ LẠT",
-        ]
+        if "BỘ GIÁO DỤC VÀ ĐÀO TẠO" in is_admin_doc:
+            left_col.append("BỘ GIÁO DỤC VÀ ĐÀO TẠO")
+        if "TRƯỜNG ĐẠI HỌC ĐÀ LẠT" in is_admin_doc:
+            left_col.append("TRƯỜNG ĐẠI HỌC ĐÀ LẠT")
+        elif "PHÒNG CÔNG TÁC SINH VIÊN" in is_admin_doc:
+            left_col.append("PHÒNG CÔNG TÁC SINH VIÊN")
+        
         if doc_no:
             left_col.append(doc_no)
         else:
@@ -231,10 +259,10 @@ def _rebuild_header_block(
 
     right_col = []
     if has_national_header:
-        right_col = [
-            "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM",
-            "Độc lập - Tự do - Hạnh phúc",
-        ]
+        if "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM" in has_national_header:
+            right_col.append("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
+        if "Độc lập - Tự do - Hạnh phúc" in has_national_header:
+            right_col.append("Độc lập - Tự do - Hạnh phúc")
         if date_str:
             right_col.append(date_str)
         else:
@@ -282,33 +310,34 @@ def normalize_document_header(text: str) -> str:
     if not text:
         return text
 
-    # Bước 1: Chuẩn hóa Quốc hiệu / Tiêu ngữ và lấy thông tin
-    text = _normalize_national_header(text)
-    text, doc_no = _normalize_doc_number(text)
-    text, date_str = _normalize_date(text)
+    lines = text.split('\n')
+    header_lines = lines[:12]
+    body_lines = lines[12:]
+    header_text = '\n'.join(header_lines)
 
-    upper_text = text.upper()
-    is_admin_doc = (
-        "ĐẠI HỌC ĐÀ LẠT" in upper_text
-        or "ĐẠI HỌC ĐA LẠT" in upper_text
-        or "BỘ GIÁO DỤC" in upper_text
-        or "BO GIAO DUC" in upper_text
-        or "PHÒNG CÔNG TÁC SINH VIÊN" in upper_text
-        or "PHONG CONG TAC SINH VIEN" in upper_text
-    )
-    has_national_header = (
-        "CỘNG HÒA" in upper_text
-        or "CỘNG HOÀ" in upper_text
-        or "CÔNG HÒA" in upper_text
-        or "CÔNG HOÀ" in upper_text
-        or "CONG HOA" in upper_text
-        or "CHỦ NGHĨA VIỆT NAM" in upper_text
-        or "ĐỘC LẬP" in upper_text
-        or "DOC LAP" in upper_text
-        or "HẠNH PHÚC" in upper_text
-        or "HANH PHUC" in upper_text
-        or "TỰ DO" in upper_text
-    )
+    # Bước 1: Chuẩn hóa Quốc hiệu / Tiêu ngữ và lấy thông tin
+    header_text = _normalize_national_header(header_text)
+    header_text, doc_no = _normalize_doc_number(header_text)
+    header_text, date_str = _normalize_date(header_text)
+    
+    text = '\n'.join([header_text] + body_lines) if body_lines else header_text
+
+    # Get header region text (first 12 lines) for checking presence
+    header_text_upper = header_text.upper()
+    
+    is_admin_doc = []
+    if "BỘ GIÁO DỤC VÀ ĐÀO TẠO" in header_text_upper or "BO GIAO DUC VA DAO TAO" in header_text_upper:
+        is_admin_doc.append("BỘ GIÁO DỤC VÀ ĐÀO TẠO")
+    if "TRƯỜNG ĐẠI HỌC ĐÀ LẠT" in header_text_upper or "ĐẠI HỌC ĐÀ LẠT" in header_text_upper or "ĐẠI HỌC ĐA LẠT" in header_text_upper:
+        is_admin_doc.append("TRƯỜNG ĐẠI HỌC ĐÀ LẠT")
+    elif "PHÒNG CÔNG TÁC SINH VIÊN" in header_text_upper or "PHONG CONG TAC SINH VIEN" in header_text_upper:
+        is_admin_doc.append("PHÒNG CÔNG TÁC SINH VIÊN")
+        
+    has_national_header = []
+    if "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM" in header_text_upper or "CỘNG HOÀ" in header_text_upper or "CÔNG HÒA" in header_text_upper or "CONG HOA" in header_text_upper or "CHỦ NGHĨA VIỆT NAM" in header_text_upper:
+        has_national_header.append("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
+    if "Độc lập - Tự do - Hạnh phúc".upper() in header_text_upper or "ĐỘC LẬP" in header_text_upper or "DOC LAP" in header_text_upper or "HẠNH PHÚC" in header_text_upper or "HANH PHUC" in header_text_upper or "TỰ DO" in header_text_upper:
+        has_national_header.append("Độc lập - Tự do - Hạnh phúc")
 
     if not (is_admin_doc or has_national_header):
         # Không có header cơ quan / quốc hiệu để tái cấu trúc → giữ nguyên text đã chuẩn hóa inline
