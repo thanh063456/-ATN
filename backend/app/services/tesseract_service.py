@@ -78,7 +78,7 @@ class TesseractService:
     """
 
     LANG    = "vie"
-    PSM     = 4   # Assume a single column of text of variable sizes
+    PSM     = 3   # Fully automatic page segmentation (handles multiple columns like headers better)
     OEM     = 1   # Neural nets LSTM only
     CONFIG  = f"--psm {PSM} --oem {OEM}"
     VERSION = "5.3.0"
@@ -201,18 +201,94 @@ class TesseractService:
     # ── OCR 1 ảnh (dùng Tesseract) ────────────────────────────────────────────
     def _ocr_image(self, pil_image: Image.Image) -> str:
         """
-        OCR toàn bộ một trang ảnh bằng Tesseract PSM 4, OEM 1.
-        Trả về văn bản thô (chưa qua post-process).
+        OCR toàn bộ một trang ảnh bằng Tesseract PSM 3, OEM 1.
+        Sử dụng image_to_data để lấy thông tin block/par/line/word và confidence.
+        Lọc nhiễu và giữ nguyên cấu trúc đoạn văn.
         """
         self.check_availability()
         processed = self.preprocess_for_tesseract(pil_image)
-        raw = pytesseract.image_to_string(
+        
+        # Step 3: TSV data
+        data = pytesseract.image_to_data(
             processed,
             lang=self.LANG,
             config=self.CONFIG,
-            output_type=pytesseract.Output.STRING,
+            output_type=pytesseract.Output.DICT,
         )
-        return unicodedata.normalize("NFC", raw).strip()
+        
+        lines = []
+        current_block = -1
+        current_par = -1
+        current_line = -1
+        
+        current_line_words = []
+        current_line_confs = []
+        
+        import re
+        
+        def flush_line():
+            if not current_line_words:
+                return
+            
+            line_text = " ".join(current_line_words)
+            mean_conf = sum(current_line_confs) / len(current_line_confs)
+            
+            # Step 4: Noise filtering on line level
+            letters = sum(1 for c in line_text if c.isalpha())
+            non_letters = sum(1 for c in line_text if not c.isalpha() and not c.isspace())
+            ratio = non_letters / max(len(line_text), 1)
+            
+            # Drop lines with low mean conf (< 40) or high non-letter ratio (> 0.5) if not a very short bullet
+            if len(line_text) >= 5 and ratio > 0.5:
+                return
+            if mean_conf < 40:
+                return
+                
+            # Step 5: normalize bullet points: "—" to "–"
+            line_text = line_text.replace("—", "–")
+            
+            # Ensure paragraph breaks before "+", "–", "-", "1."
+            if re.match(r'^(\+|–|-|\d+\.)\s', line_text):
+                if lines and lines[-1] != "":
+                    lines.append("")
+                    
+            lines.append(line_text)
+
+        for i in range(len(data['level'])):
+            level = data['level'][i]
+            if level == 5: # Word level
+                text = data['text'][i].strip()
+                try:
+                    conf = float(data['conf'][i])
+                except:
+                    conf = 0.0
+                    
+                block_num = data['block_num'][i]
+                par_num = data['par_num'][i]
+                line_num = data['line_num'][i]
+                
+                if (block_num != current_block or par_num != current_par or line_num != current_line):
+                    flush_line()
+                    
+                    if (block_num != current_block or par_num != current_par) and current_line != -1:
+                        if lines and lines[-1] != "":
+                            lines.append("") # paragraph break
+                            
+                    current_block = block_num
+                    current_par = par_num
+                    current_line = line_num
+                    current_line_words = []
+                    current_line_confs = []
+                
+                # Step 4: Drop words with conf < 40
+                if text and conf >= 40:
+                    current_line_words.append(text)
+                    current_line_confs.append(conf)
+                    
+        flush_line()
+        
+        raw_text = "\n".join(lines)
+        return unicodedata.normalize("NFC", raw_text).strip()
 
     # ── Hậu xử lý ─────────────────────────────────────────────────────────────
     def post_process_vietnamese(self, text: str) -> str:
