@@ -50,8 +50,8 @@ import { useToastStore } from "../stores/useToastStore";
 
 export const OCR_ENGINES = [
   { id: "vietocr", label: "VietOCR", name: "VietOCR v2.0", subtitle: "Seq2Seq Transformer (PyTorch)", version: "vgg_transformer-2.0" },
-  { id: "trocr", label: "TrOCR", name: "Microsoft TrOCR", subtitle: "Vision Transformer (ViT)", version: "trocr-base-printed" },
-  { id: "tesseract", label: "Tesseract", name: "Tesseract v5.3", subtitle: "LSTM Baseline v5.3", version: "5.3.0" },
+  { id: "trocr", label: "TrOCR", name: "TrOCR (English baseline, not fine-tuned for Vietnamese)", subtitle: "Vision Transformer (ViT)", version: "trocr-base-printed" },
+  { id: "tesseract", label: "Tesseract", name: "Tesseract", subtitle: "LSTM Baseline", version: "dynamic" },
 ];
 
 function calculateLevenshtein(a: string[] | string, b: string[] | string): number {
@@ -1703,6 +1703,15 @@ export const DocumentDetailPage: React.FC = () => {
 
                 {/* Textarea / Editor Body */}
                 <div style={{ flex: 1, padding: "1rem", display: "flex", flexDirection: "column" }}>
+                  {selectedOcrEngine === "trocr" && (
+                    <div style={{ backgroundColor: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", padding: "0.75rem", borderRadius: "0.375rem", marginBottom: "1rem", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                      <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px" }} />
+                      <div style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
+                        <strong>Cảnh báo:</strong> Mô hình Microsoft TrOCR này chỉ là baseline tiếng Anh, chưa được fine-tune cho tiếng Việt. 
+                        Do đó, kết quả nhận diện sẽ bị mất dấu và có thể gặp lỗi lặp từ.
+                      </div>
+                    </div>
+                  )}
                   {isEditingOCR ? (
                     <textarea
                       value={correctedText}
@@ -1891,7 +1900,7 @@ export const DocumentDetailPage: React.FC = () => {
                       }}
                     >
                       {ocrTextMode === "raw" && (
-                        <div style={{ display: "inline-block", padding: "2px 8px", backgroundColor: "#fef3c7", color: "#92400e", borderRadius: "4px", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+                        <div style={{ display: "block", padding: "4px 8px", backgroundColor: "#fef3c7", color: "#92400e", borderRadius: "4px", fontSize: "0.72rem", fontWeight: 700, marginBottom: "0.75rem" }}>
                           ⚡ Văn bản OCR thô trực tiếp từ Model {selectedOcrEngine.toUpperCase()} (Chưa qua lọc từ điển)
                         </div>
                       )}
