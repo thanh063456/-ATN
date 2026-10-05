@@ -68,6 +68,8 @@ class VietOCREngine:
             _beam_size  = getattr(_s, "ocr_beam_size", 4)             if _s else 4
             _fast_mode  = getattr(_s, "ocr_fast_mode", False)         if _s else False
 
+            _fast_mode  = getattr(_s, "ocr_fast_mode", False)         if _s else False
+
             if _fast_mode:
                 _beamsearch = False
 
@@ -80,22 +82,50 @@ class VietOCREngine:
                 logger.info("VietOCR beamsearch=False (greedy, faster)")
 
             # Tìm model fine-tune tốt nhất
-            candidate_patterns = [
-                "/app/models/*_best.pth",
-                "models/*_best.pth",
-                "../models/*_best.pth",
-                os.path.join(os.path.dirname(__file__), "../../../models/*_best.pth"),
-                os.path.join(os.path.dirname(__file__), "../../models/*_best.pth"),
-            ]
-            custom_models: list[str] = []
-            for pat in candidate_patterns:
-                custom_models.extend(glob.glob(pat))
-            custom_models = sorted(set(custom_models))
+            best_weights = None
+            if os.environ.get("VIETOCR_WEIGHTS"):
+                best_weights = os.environ.get("VIETOCR_WEIGHTS")
+            else:
+                candidate_patterns = [
+                    "/app/models/*_best.pth",
+                    "models/*_best.pth",
+                    "../models/*_best.pth",
+                    os.path.join(os.path.dirname(__file__), "../../../models/*_best.pth"),
+                    os.path.join(os.path.dirname(__file__), "../../models/*_best.pth"),
+                ]
+                custom_models: list[str] = []
+                for pat in candidate_patterns:
+                    custom_models.extend(glob.glob(pat))
+                custom_models = sorted(set(custom_models))
 
-            if custom_models:
-                best_weights = custom_models[-1]
+                if custom_models:
+                    best_weights = custom_models[-1]
+
+            if best_weights and os.path.exists(best_weights):
                 logger.info("Loading fine-tuned VietOCR weights: {path}", path=best_weights)
                 config["weights"] = best_weights
+                
+                # Check for sidecar JSON
+                import json
+                sidecar_path = best_weights.replace(".pth", ".json")
+                if os.path.exists(sidecar_path):
+                    try:
+                        with open(sidecar_path, "r", encoding="utf-8") as f:
+                            sidecar = json.load(f)
+                        if "vocab" in sidecar:
+                            config["vocab"] = sidecar["vocab"]
+                        if "image_height" in sidecar:
+                            config["dataset"]["image_height"] = sidecar["image_height"]
+                        if "image_min_width" in sidecar:
+                            config["dataset"]["image_min_width"] = sidecar["image_min_width"]
+                        if "image_max_width" in sidecar:
+                            config["dataset"]["image_max_width"] = sidecar["image_max_width"]
+                        logger.info(f"Loaded sidecar JSON for VietOCR with vocab length {len(config.get('vocab', ''))}")
+                    except Exception as e:
+                        logger.error(f"Error loading sidecar {sidecar_path}: {e}")
+                        raise ValueError(f"Sidecar found but invalid: {e}")
+                else:
+                    logger.warning(f"No sidecar JSON found for custom weights {best_weights}")
 
             self._predictor = Predictor(config)
 
