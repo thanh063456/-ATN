@@ -35,10 +35,21 @@ try:
                 break
     # Trỏ TESSDATA_PREFIX về thư mục chứa model ngôn ngữ cục bộ
     _local_tessdata = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../tessdata")
+        os.path.join(os.path.dirname(__file__), "../../tessdata")
     )
     if os.path.exists(_local_tessdata):
-        os.environ.setdefault("TESSDATA_PREFIX", _local_tessdata)
+        if platform.system() == "Windows" and any(ord(c) > 127 for c in _local_tessdata):
+            import subprocess
+            import tempfile
+            _temp_tessdata = os.path.join(tempfile.gettempdir(), "DocuCTSV_tessdata_link")
+            if not os.path.exists(_temp_tessdata):
+                try:
+                    subprocess.run(f'cmd /c mklink /J "{_temp_tessdata}" "{_local_tessdata}"', shell=True, check=True)
+                except Exception:
+                    pass
+            os.environ["TESSDATA_PREFIX"] = _temp_tessdata
+        else:
+            os.environ.setdefault("TESSDATA_PREFIX", _local_tessdata)
 except ImportError:
     pytesseract = None  # type: ignore[assignment]
 
@@ -75,7 +86,7 @@ class TesseractService:
     def __init__(self) -> None:
         self._settings = None
 
-    def _get_settings(self):
+    def _get_settings(self) -> Any:
         if self._settings is None:
             try:
                 from app.core.config import settings
@@ -126,20 +137,47 @@ class TesseractService:
     def preprocess_for_tesseract(self, pil_image: Image.Image) -> Image.Image:
         """
         Tiền xử lý ảnh trước khi đưa vào Tesseract:
+        - Inpaint red stamps
+        - Mask out blue handwriting (prevent guessing digits)
         - Grayscale
         - CLAHE (tăng tương phản cục bộ)
-        - Otsu threshold
-        - Upscale nếu < 300 DPI-equivalent
         """
         if cv2 is None or np is None:
             return pil_image
         try:
             img_np = np.array(pil_image)
-            gray = (
-                cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                if len(img_np.shape) == 3
-                else img_np.copy()
-            )
+            if len(img_np.shape) == 3:
+                hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
+                
+                # Red mask (stamps)
+                lower_red1 = np.array([0, 50, 50])
+                upper_red1 = np.array([10, 255, 255])
+                mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
+                
+                lower_red2 = np.array([170, 50, 50])
+                upper_red2 = np.array([180, 255, 255])
+                mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
+                
+                mask_red = cv2.bitwise_or(mask_red1, mask_red2)
+                kernel = np.ones((3,3), np.uint8)
+                mask_red = cv2.dilate(mask_red, kernel, iterations=1)
+                
+                if cv2.countNonZero(mask_red) > 0:
+                    img_np = cv2.inpaint(img_np, mask_red, 3, cv2.INPAINT_TELEA)
+                
+                # Blue mask (handwriting)
+                lower_blue = np.array([90, 50, 50])
+                upper_blue = np.array([140, 255, 255])
+                mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
+                mask_blue = cv2.dilate(mask_blue, kernel, iterations=2)
+                
+                # Erase blue ink to prevent Tesseract from hallucinating digits
+                img_np[mask_blue > 0] = [255, 255, 255]
+                
+                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = img_np.copy()
+                
             h, w = gray.shape[:2]
 
             # Upscale nếu ảnh quá nhỏ (Tesseract cần ~300 DPI)
@@ -154,11 +192,8 @@ class TesseractService:
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             enhanced = clahe.apply(gray)
 
-            # Ngưỡng Otsu (Tesseract thích ảnh đen-trắng rõ ràng)
-            _, binary = cv2.threshold(
-                enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-            )
-            return Image.fromarray(binary)
+            # Do not pre-binarise with global Otsu, use Tesseract's own binarisation
+            return Image.fromarray(enhanced)
         except Exception as exc:
             logger.debug("preprocess_for_tesseract fallback: {err}", err=str(exc))
             return pil_image
@@ -195,7 +230,7 @@ class TesseractService:
         if not text or len(text.strip()) < 10:
             return 0.60
         base = 0.82  # Baseline Tesseract
-        suspicious  = len(re.findall(r'[%~^|<>{}\\[\\]@#$*]', text))
+        suspicious  = len(re.findall(r'[%~^|<>{}\\\[\]@#$*]', text))
         char_penalty = min(0.15, (suspicious / max(len(text), 1)) * 5.0)
         return round(max(0.60, min(0.95, base - char_penalty)), 2)
 
@@ -219,7 +254,7 @@ class TesseractService:
 
         file_ext = file_type.lower().replace(".", "")
         _s = self._get_settings()
-        _dpi = getattr(_s, "ocr_pdf_dpi_default", 200) if _s else 200
+        _dpi = getattr(_s, "ocr_pdf_dpi_default", 300) if _s else 300
 
         # ── PDF ─────────────────────────────────────────────────────────────
         if file_ext == "pdf":
