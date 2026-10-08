@@ -24,6 +24,7 @@ class DocTypeResult:
 def clean_text(text: str) -> str:
     """Loại bỏ dấu, lowercase để fuzzy match."""
     import unicodedata
+    text = text.replace('Đ', 'D').replace('đ', 'd')
     text = unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('utf-8')
     return text.lower().strip()
 
@@ -40,12 +41,13 @@ class DocTypeService:
 
     def _extract_document_number(self, header_lines: list[str]) -> tuple[str | None, str | None]:
         """
-        Tìm số hiệu văn bản. VD: "Số: 123/TB-ĐHĐL"
+        Tìm số hiệu văn bản. VD: "Số: 123/TB-ĐHĐL" hoặc "Số 123?TB-ĐHĐL"
         Returns (full_number, suffix)
         """
         for line in header_lines[:15]:
-            # Match "Số: 123/TB-ĐHĐL" or "Số 123 / TB - ĐHĐL"
-            match = re.search(r'(?:[sS][oốOỐ][: ]*)\s*(\d+(?:\.\d+)?\s*/\s*([A-Za-zĐđ]+(?:\-[A-Za-zĐđ]+)*))', line)
+            # Chuẩn hóa các lỗi OCR thường gặp ở dòng số hiệu
+            clean_l = line.replace('?', '-').replace('—', '-').replace('–', '-')
+            match = re.search(r'(?:[sS][oốOỐôÔ0][: ]*)\s*([0-9lIoO]+(?:\.[0-9lIoO]+)?\s*[\/\-]\s*([A-Za-zĐđ]+(?:\-[A-Za-zĐđ]+)*))', clean_l)
             if match:
                 full = match.group(1).replace(' ', '')
                 suffix = match.group(2).replace(' ', '').upper()
@@ -55,18 +57,19 @@ class DocTypeService:
     def _find_title_line(self, header_lines: list[str]) -> tuple[str | None, int]:
         """Tìm dòng tiêu đề viết hoa (standalone)."""
         for i, line in enumerate(header_lines):
-            # Skip first few lines that are likely quốc hiệu / tên trường
-            if i < 2:
-                continue
-            
-            # Title is usually UPPERCASE, short-ish, not containing "Số:"
-            if line.isupper() and 5 <= len(line) <= 50 and not line.startswith("SỐ:"):
-                # Clean and check if it resembles known titles
-                cl = clean_text(line)
-                # Ignore common header noise
-                if "cong hoa xa hoi" in cl or "doc lap tu do" in cl or "truong dai hoc" in cl:
+            line_str = line.strip()
+            # Title is usually UPPERCASE, 4 <= len <= 70, not starting with "Số:" / "SO:"
+            is_up = line_str.isupper() or clean_text(line_str).upper() == line_str.upper()
+            if is_up and 4 <= len(line_str) <= 70:
+                if line_str.upper().startswith("SỐ:") or line_str.upper().startswith("SO:"):
                     continue
-                return line, i
+                cl = clean_text(line_str)
+                # Ignore common header noise (kể cả TRUNG ĐẠI HỌC, UBND)
+                if any(noise in cl for noise in ["cong hoa xa hoi", "doc lap tu do", "truong dai hoc", "trung dai hoc", "bo giao duc", "ubnd"]):
+                    continue
+                if cl.startswith("phong ") or cl.startswith("khoa ") or cl.startswith("ban ") or cl.startswith("trung tam ") or "ctsv" in cl:
+                    continue
+                return line_str, i
         return None, -1
 
     def _extract_subject(self, header_lines: list[str], title_idx: int) -> str | None:
@@ -88,7 +91,7 @@ class DocTypeService:
         """Trích xuất đơn vị ban hành (thường ở top left)."""
         for line in header_lines[:5]:
             cl = clean_text(line)
-            if "truong" in cl or "khoa" in cl or "phong" in cl or "trung tam" in cl:
+            if "truong" in cl or "khoa" in cl or "phong" in cl or "trung tam" in cl or "ubnd" in cl:
                 if "cong hoa" not in cl and "doc lap" not in cl:
                     return line
         return None
@@ -123,19 +126,27 @@ class DocTypeService:
             # Suffix match
             if suffix and t.so_hieu_patterns:
                 for p in t.so_hieu_patterns:
-                    if suffix == p or suffix == p.strip('-'):
+                    clean_p = p.strip('-').upper()
+                    if suffix == clean_p or suffix.startswith(clean_p) or suffix.endswith(clean_p):
                         scores[t.code] += 0.6
                         signals.append(f"matched_suffix:{t.code}")
                         break
             
-            # Title match (fuzzy)
+            # Title match (substring + fuzzy)
             if title_line and t.title_patterns:
                 cl_title = clean_text(title_line)
+                title_words = set(cl_title.split())
                 for p in t.title_patterns:
-                    if fuzz.partial_ratio(p, cl_title) >= 85:
-                        scores[t.code] += 0.5
-                        signals.append(f"matched_title:{t.code}")
-                        break
+                    if " " not in p:
+                        if p in title_words:
+                            scores[t.code] += 0.8
+                            signals.append(f"matched_title:{t.code}")
+                            break
+                    else:
+                        if p in cl_title or fuzz.partial_ratio(p, cl_title) >= 85:
+                            scores[t.code] += 0.8
+                            signals.append(f"matched_title:{t.code}")
+                            break
                         
             # Body hints (weak signals)
             if t.body_hints:
@@ -152,10 +163,19 @@ class DocTypeService:
             signals.append("rule:cong_van_kinhgui_vv")
             
         # 4. Special rule: ĐƠN TỪ
-        if has_kinh_gui and ("don xin" in header_text_clean or "don de nghi" in header_text_clean or "giay de nghi" in header_text_clean):
-            if "em ten la" in header_text_clean or "ho va ten" in header_text_clean:
-                scores["DON_TU"] += 0.8
-                signals.append("rule:don_tu_structure")
+        has_don = any(k in header_text_clean for k in ["don xin", "don de nghi", "giay de nghi", "don de dat"])
+        has_identity = any(k in header_text_clean for k in ["em ten la", "ten em la", "ho va ten", "sinh vien:", "mssv"])
+        if has_kinh_gui and has_don:
+            scores["DON_TU"] += 0.8
+            signals.append("rule:don_tu_structure")
+        elif has_don and has_identity:
+            scores["DON_TU"] += 0.75
+            signals.append("rule:don_tu_identity")
+            
+        # 5. Special rule: DANH SÁCH
+        if "danh sach" in header_text_clean and any(k in header_text_clean for k in ["stt", "mssv", "ma sinh vien", "ho va ten", "ho ten"]):
+            scores["DANH_SACH"] += 0.8
+            signals.append("rule:danh_sach_table")
                 
         # Determine best
         best_code = max(scores, key=scores.get)
