@@ -21,10 +21,7 @@ from PIL import Image
 
 from app.core.exceptions import EngineUnavailableError
 
-try:
-    import cv2
-except ImportError:
-    cv2 = None
+import cv2
 
 try:
     import pymupdf
@@ -117,6 +114,44 @@ class TrOCRService:
             return True
         return False
 
+    @staticmethod
+    def _is_degenerate(text: str) -> tuple[bool, str]:
+        """Detect degenerate TrOCR outputs."""
+        if not text:
+            return False, ""
+        
+        words = text.split()
+        if not words: 
+            return False, ""
+        
+        # Repeat ratio
+        unique_words = set(words)
+        repeat_ratio = 1.0 - (len(unique_words) / len(words))
+        
+        # ASCII-only ratio
+        ascii_chars = sum(1 for c in text if ord(c) < 128)
+        ascii_ratio = ascii_chars / len(text) if len(text) > 0 else 0
+        
+        # English-word ratio
+        english_words = {"receipt", "invoice", "cashier", "refund", "total", "pay", "date", "time"}
+        eng_count = sum(1 for w in words if w.lower() in english_words)
+        eng_ratio = eng_count / len(words)
+        
+        # Bracket spam
+        bracket_count = sum(1 for c in text if c in "()[]{}<>*")
+        bracket_ratio = bracket_count / len(text) if len(text) > 0 else 0
+        
+        if repeat_ratio > 0.5 and len(words) > 10:
+            return True, "Lặp từ quá nhiều (repeat ratio > 0.5)"
+        if eng_ratio > 0.2:
+            return True, "Nhiễu tiếng Anh (không được fine-tune cho tiếng Việt)"
+        if bracket_ratio > 0.1:
+            return True, "Nhiễu ký tự đặc biệt (bracket spam)"
+        if ascii_ratio > 0.95 and len(text) > 20:
+            return True, "Văn bản chủ yếu là ASCII, mất dấu tiếng Việt"
+            
+        return False, ""
+
     # ── Hậu xử lý ─────────────────────────────────────────────────────────────
     def post_process_vietnamese(self, text: str) -> str:
         """Gọi pipeline hậu xử lý tiếng Việt dùng chung."""
@@ -177,13 +212,17 @@ class TrOCRService:
 
     # ── OCR toàn file ─────────────────────────────────────────────────────────
     def extract_text_from_file(
-        self, file_bytes: bytes, file_type: str, engine: str | None = None
-    ) -> tuple[str, str, float]:
+        self,
+        file_bytes: bytes,
+        file_type: str,
+        engine: str | None = None,
+        pages: list[int] | int | None = None,
+    ) -> tuple[str, str, float, int]:
         """
         Trích xuất toàn văn từ file PDF hoặc Ảnh bằng Microsoft TrOCR.
 
         Returns:
-            (raw_text, processed_text, confidence_score)
+            (raw_text, processed_text, confidence_score, page_count)
         """
         file_ext = file_type.lower().replace(".", "")
         _render_dpi = 150
@@ -194,23 +233,35 @@ class TrOCRService:
         _s = self._get_settings()
         timeout_s = getattr(_s, "ocr_trocr_timeout_s", 600) if _s else 600
         start_time_global = time.time()
+        
+        page_count = 1
 
         if file_ext == "pdf":
             if pymupdf is None:
                 raise EngineUnavailableError("trocr", "PyMuPDF chưa được cài đặt để render PDF.")
             try:
                 doc = pymupdf.open(stream=file_bytes, filetype="pdf")
-                total = len(doc)
-                for idx, page in enumerate(doc):
+                page_count = len(doc)
+                
+                target_pages = []
+                if isinstance(pages, int):
+                    target_pages = list(range(min(pages, page_count)))
+                elif isinstance(pages, list):
+                    target_pages = [p for p in pages if 0 <= p < page_count]
+                else:
+                    target_pages = list(range(page_count))
+
+                for idx in target_pages:
                     if time.time() - start_time_global > timeout_s:
-                        logger.warning("TrOCR timed out after {s} seconds at page {i}/{t}", s=timeout_s, i=idx+1, t=total)
+                        logger.warning("TrOCR timed out after {s} seconds at page {i}/{t}", s=timeout_s, i=idx+1, t=page_count)
                         break
                     
+                    page = doc[idx]
                     t0 = time.time()
                     pix = page.get_pixmap(dpi=_render_dpi)
                     page_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                     p_raw, p_proc = self._ocr_image(page_img)
-                    logger.info("TrOCR trang {i}/{t} | {s:.1f}s", i=idx + 1, t=total, s=time.time() - t0)
+                    logger.info("TrOCR trang {i}/{t} | {s:.1f}s", i=idx + 1, t=page_count, s=time.time() - t0)
                     if p_raw:
                         raw_pages.append(p_raw)
                     if p_proc:
@@ -236,9 +287,14 @@ class TrOCRService:
 
         raw_text = "\n\n".join(raw_pages)
         processed_text = "\n\n".join(proc_pages)
+        
+        is_degen, reason = self._is_degenerate(raw_text)
+        if is_degen:
+            raise Exception(f"LOW_QUALITY: {reason}")
+            
         confidence = self.heuristic_quality_score(processed_text) if processed_text else 0.0
 
-        return raw_text, processed_text, confidence
+        return raw_text, processed_text, confidence, page_count
 
     # ── So sánh engine ────────────────────────────────────────────────────────
     def compare_ocr_engines(self, file_bytes: bytes, file_type: str) -> dict[str, Any]:
@@ -249,17 +305,17 @@ class TrOCRService:
         results: dict[str, Any] = {}
         for eng_key, eng_name in [
             ("vietocr", "VietOCR (vgg_transformer)"),
-            ("trocr", "Microsoft TrOCR (Vision Transformer)"),
+            ("trocr", "TrOCR (English baseline, not fine-tuned for Vietnamese)"),
             ("tesseract", "Tesseract 5 (LSTM Baseline)"),
         ]:
             t0 = time.time()
             try:
                 if eng_key == "tesseract":
-                    raw, proc, conf = tesseract_service.extract_text_from_file(file_bytes, file_type)
+                    raw, proc, conf, pc = tesseract_service.extract_text_from_file(file_bytes, file_type)
                 elif eng_key == "trocr":
-                    raw, proc, conf = self.extract_text_from_file(file_bytes, file_type)
+                    raw, proc, conf, pc = self.extract_text_from_file(file_bytes, file_type)
                 else:
-                    raw, proc, conf = vietocr_service.extract_text_from_file(file_bytes, file_type, "vietocr")
+                    raw, proc, conf, pc = vietocr_service.extract_text_from_file(file_bytes, file_type, "vietocr")
 
                 text = proc or raw
                 results[eng_key] = {

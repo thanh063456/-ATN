@@ -30,10 +30,7 @@ import numpy as np
 from loguru import logger
 from PIL import Image
 
-try:
-    import cv2
-except ImportError:
-    cv2 = None
+import cv2
 
 try:
     import pymupdf  # PyMuPDF
