@@ -53,12 +53,8 @@ try:
 except ImportError:
     pytesseract = None  # type: ignore[assignment]
 
-try:
-    import cv2
-    import numpy as np
-except ImportError:
-    cv2 = None  # type: ignore[assignment]
-    np = None   # type: ignore[assignment]
+import cv2
+import numpy as np
 
 try:
     import pymupdf
@@ -206,6 +202,7 @@ class TesseractService:
         Lọc nhiễu và giữ nguyên cấu trúc đoạn văn.
         """
         self.check_availability()
+        assert pytesseract is not None
         processed = self.preprocess_for_tesseract(pil_image)
         
         # Step 3: TSV data

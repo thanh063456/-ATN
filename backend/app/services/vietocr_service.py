@@ -730,7 +730,7 @@ class VietOCRService:
                 gray_c = cv2.cvtColor(crop_arr, cv2.COLOR_RGB2GRAY) if len(crop_arr.shape) == 3 else crop_arr
                 _, bw = cv2.threshold(gray_c, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
                 ink_ratio_val = float(np.count_nonzero(bw)) / max(1, bw.size)
-                num_cc_val = max(0, int(cv2.connectedComponentsWithStats(bw, connectivity=8)[0]) - 1)
+                num_cc_val = max(0, cv2.connectedComponentsWithStats(bw, connectivity=8)[0] - 1)
                 if ink_ratio_val < 0.015:
                     drop_reason = f"pre_guard:ink={ink_ratio_val:.4f}"
                 elif num_cc_val < 2:
@@ -792,7 +792,7 @@ class VietOCRService:
                     gray_c = cv2.cvtColor(crop_arr, cv2.COLOR_RGB2GRAY) if len(crop_arr.shape) == 3 else crop_arr
                     _, bw = cv2.threshold(gray_c, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
                     ink_ratio_val = round(float(np.count_nonzero(bw)) / max(1, bw.size), 4)
-                    num_cc_val = max(0, int(cv2.connectedComponentsWithStats(bw, connectivity=8)[0]) - 1)
+                    num_cc_val = max(0, cv2.connectedComponentsWithStats(bw, connectivity=8)[0] - 1)
                     crop_fname = f"crop_{idx:03d}.png"
                     img.save(os.path.join(crops_dir, crop_fname))
                 except Exception:
