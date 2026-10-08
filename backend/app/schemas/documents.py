@@ -223,3 +223,6 @@ class DocumentDetailResponse(DocumentResponse):
     tags: list[str] = Field(default_factory=list)
     priority_score: int = 0
     file_url: str | None = None
+
+class TypeOverrideReq(BaseModel):
+    category_code: str = Field(..., description="Mã loại tài liệu (category code)")

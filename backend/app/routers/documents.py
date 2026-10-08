@@ -68,6 +68,7 @@ from app.schemas.documents import (
     TagSummaryResponse,
     UpdateTagsRequest,
     VerificationResponse,
+    TypeOverrideReq,
 )
 from app.services.ai_service import ai_service
 from app.services.document_service import DocumentService
@@ -771,6 +772,85 @@ async def reprocess_document_ocr(
         "engine": target_engine,
     }
 
+
+@router.post(
+    "/{document_id}/ocr-full",
+    summary="Thực hiện OCR các trang còn lại của tài liệu (Stage 2)",
+)
+async def process_document_ocr_full(
+    document_id: UUID,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Kích hoạt tác vụ OCR cho các trang còn lại (từ trang 2 trở đi)."""
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    from app.worker.tasks import process_ocr_full_task
+    process_ocr_full_task.delay(str(document_id))
+    
+    return {
+        "message": "Đang chạy OCR cho các trang còn lại của tài liệu",
+        "document_id": document_id,
+        "status": "PROCESSING"
+    }
+
+@router.patch(
+    "/{document_id}/type",
+    summary="Thay đổi loại tài liệu thủ công (STAFF, ADMIN)",
+)
+async def override_document_type(
+    document_id: UUID,
+    req: TypeOverrideReq,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ghi đè thủ công phân loại tài liệu."""
+    doc = await db.get(Document, document_id, options=[selectinload(Document.metadata_)])
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    cat_res = await db.execute(select(DocumentCategory).where(DocumentCategory.code == req.category_code))
+    category = cat_res.scalars().first()
+    if not category:
+        raise ValidationException(f"Không tìm thấy category code: {req.category_code}")
+
+    doc.category_id = category.id
+    if doc.metadata_:
+        if not doc.metadata_.extra:
+            doc.metadata_.extra = {}
+        doc.metadata_.extra["document_type"] = category.name
+        doc.metadata_.updated_at = datetime.now()
+        
+    doc.updated_at = datetime.now()
+    await db.commit()
+
+    # Re-index in ES
+    from app.services.search_index_service import search_index_service
+    from app.core.elasticsearch import get_es_client, is_es_available
+    if is_es_available():
+        es = get_es_client()
+        try:
+            await es.update(
+                index=search_index_service.index_name,
+                id=str(document_id),
+                doc={
+                    "category_code": category.code,
+                    "category_name": category.name,
+                    "document_type": category.code,
+                    "updated_at": datetime.now().isoformat(),
+                },
+                refresh="wait_for"
+            )
+        except Exception as exc:
+            logger.warning("ES update type failed: {}", str(exc))
+
+    return {
+        "message": "Cập nhật loại tài liệu thành công",
+        "category_code": category.code,
+        "category_name": category.name
+    }
 
 @router.get(
     "/{document_id}/ocr-results/{engine}",
