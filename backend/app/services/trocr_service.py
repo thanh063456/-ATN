@@ -259,7 +259,7 @@ class TrOCRService:
                     page = doc[idx]
                     t0 = time.time()
                     pix = page.get_pixmap(dpi=_render_dpi)
-                    page_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    page_img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                     p_raw, p_proc = self._ocr_image(page_img)
                     logger.info("TrOCR trang {i}/{t} | {s:.1f}s", i=idx + 1, t=page_count, s=time.time() - t0)
                     if p_raw:

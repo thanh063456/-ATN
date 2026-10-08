@@ -1039,7 +1039,7 @@ class VietOCRService:
                         page = doc[idx]
                         t0 = time.time()
                         pix = page.get_pixmap(dpi=_render_dpi)
-                        page_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        page_img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                         page_raw, page_proc = self._ocr_image(
                             page_img,
                             extract_tables=_extract_tables,

@@ -316,15 +316,13 @@ class TesseractService:
         file_bytes: bytes,
         file_type: str,
         engine: str | None = None,  # kept for interface compatibility
-    ) -> tuple[str, str, float]:
+        pages: list[int] | int | None = None,
+    ) -> tuple[str, str, float, int]:
         """
         Trích xuất văn bản từ file PDF hoặc Ảnh bằng Tesseract.
 
         Returns:
-            (raw_text, processed_text, confidence_score)
-            raw_text       — văn bản OCR thô trực tiếp từ Tesseract
-            processed_text — đã qua hậu xử lý tiếng Việt
-            confidence_score — heuristic [0.60, 0.95]
+            (raw_text, processed_text, confidence_score, page_count)
         """
         self.check_availability()
 
@@ -332,24 +330,36 @@ class TesseractService:
         _s = self._get_settings()
         _dpi = getattr(_s, "ocr_pdf_dpi_default", 300) if _s else 300
 
+        page_count = 1
+
         # ── PDF ─────────────────────────────────────────────────────────────
         if file_ext == "pdf":
             if pymupdf is None:
                 raise EngineUnavailableError("tesseract", "PyMuPDF chưa được cài đặt để render PDF.")
             try:
                 doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+                page_count = len(doc)
+                
+                target_pages = []
+                if isinstance(pages, int):
+                    target_pages = list(range(min(pages, page_count)))
+                elif isinstance(pages, list):
+                    target_pages = [p for p in pages if 0 <= p < page_count]
+                else:
+                    target_pages = list(range(page_count))
+
                 page_raws: list[str] = []
-                total = len(doc)
-                for idx, page in enumerate(doc):
+                for idx in target_pages:
+                    page = doc[idx]
                     t0 = time.time()
                     pix = page.get_pixmap(dpi=_dpi)
-                    page_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    page_img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                     raw = self._ocr_image(page_img)
                     if raw:
                         page_raws.append(raw)
                     logger.info(
                         "Tesseract OCR trang {i}/{t} | {s:.1f}s",
-                        i=idx + 1, t=total, s=time.time() - t0,
+                        i=idx + 1, t=page_count, s=time.time() - t0,
                     )
                 raw_text = "\n\n".join(page_raws)
             except Exception as exc:
@@ -369,15 +379,15 @@ class TesseractService:
                 raise EngineUnavailableError("tesseract", f"Lỗi OCR ảnh: {exc}") from exc
 
         if not raw_text:
-            return "", "", 0.0
+            return "", "", 0.0, page_count
 
         processed_text = self.post_process_vietnamese(raw_text)
         confidence     = self.heuristic_quality_score(processed_text)
         logger.info(
-            "Tesseract hoàn thành: {c} ký tự raw, {cp} ký tự processed, conf={cf}",
-            c=len(raw_text), cp=len(processed_text), cf=confidence,
+            "Tesseract hoàn thành: {c} ký tự raw, {cp} ký tự processed, conf={cf}, pages={p}",
+            c=len(raw_text), cp=len(processed_text), cf=confidence, p=page_count
         )
-        return raw_text, processed_text, confidence
+        return raw_text, processed_text, confidence, page_count
 
     # ── Metadata extract ─────────────────────────────────────────────────────
     def extract_metadata(self, text: str) -> dict[str, Any]:
