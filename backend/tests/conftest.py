@@ -9,6 +9,17 @@ from app.core.security import create_access_token
 
 from httpx import ASGITransport
 from app.main import create_app
+from app.core.elasticsearch import is_es_available
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "es: mark test as requiring a running Elasticsearch cluster")
+
+
+def pytest_runtest_setup(item):
+    if item.get_closest_marker("es"):
+        if not is_es_available():
+            pytest.skip("Elasticsearch cluster is offline or unavailable")
 
 
 @pytest_asyncio.fixture

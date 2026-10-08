@@ -117,6 +117,43 @@ INDEX_MAPPINGS: dict[str, Any] = {
                 "keyword": {"type": "keyword"},
             },
         },
+        "doc_type_code": {"type": "keyword"},
+        "doc_type_name": {
+            "type": "text",
+            "analyzer": "vietnamese_exact",
+            "fields": {
+                "ascii": {
+                    "type": "text",
+                    "analyzer": "vietnamese_ascii",
+                },
+                "keyword": {"type": "keyword"},
+            },
+        },
+        "doc_group": {"type": "keyword"},
+        "doc_subtype": {"type": "keyword"},
+        "doc_type_confidence": {"type": "float"},
+        "doc_type_source": {"type": "keyword"},
+        "subject": {
+            "type": "text",
+            "analyzer": "vietnamese_exact",
+            "fields": {
+                "ascii": {
+                    "type": "text",
+                    "analyzer": "vietnamese_ascii",
+                },
+            },
+        },
+        "issuing_unit": {"type": "keyword"},
+        "ocr_scope": {"type": "keyword"},
+        "page_count": {"type": "integer"},
+        "pages_ocr": {"type": "integer"},
+        "needs_review": {"type": "boolean"},
+        "document_type": {
+            "type": "keyword"
+        },
+        "document_subtype": {
+            "type": "keyword"
+        },
         "student_id": {"type": "keyword"},
         "student_name": {
             "type": "text",
@@ -170,7 +207,12 @@ async def init_elasticsearch_index() -> None:
             )
             logger.info("Successfully created Elasticsearch index '{idx}' with Vietnamese analyzers.", idx=INDEX_NAME)
         else:
-            logger.info("Elasticsearch index '{idx}' already exists.", idx=INDEX_NAME)
+            logger.info("Elasticsearch index '{idx}' already exists. Updating mapping...", idx=INDEX_NAME)
+            await es.indices.put_mapping(
+                index=INDEX_NAME,
+                properties=INDEX_MAPPINGS["properties"]
+            )
+            logger.info("Successfully updated mapping for Elasticsearch index '{idx}'.", idx=INDEX_NAME)
     except Exception as exc:
         logger.warning(
             "Could not connect to Elasticsearch index '{idx}': {err}. Full-text search will use PostgreSQL fallback.",

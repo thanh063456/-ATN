@@ -18,6 +18,21 @@ class SearchHit(BaseModel):
     content_snippet: str | None = None
     category_code: str | None = None
     category_name: str | None = None
+    
+    # New document_type fields
+    doc_type_code: str | None = None
+    doc_type_name: str | None = None
+    doc_group: str | None = None
+    doc_subtype: str | None = None
+    doc_type_confidence: float | None = None
+    doc_type_source: str | None = None
+    subject: str | None = None
+    issuing_unit: str | None = None
+    ocr_scope: str | None = None
+    page_count: int | None = None
+    pages_ocr: int | None = None
+    needs_review: bool | None = None
+
     student_id: str | None = None
     student_name: str | None = None
     document_date: str | None = None
@@ -44,4 +59,5 @@ class SearchResponse(BaseModel):
     page_size: int
     total_pages: int
     took_ms: int
+    facets: dict[str, dict[str, int]] | None = None
     results: list[SearchHit]

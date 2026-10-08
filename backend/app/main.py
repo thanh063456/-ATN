@@ -190,6 +190,20 @@ def create_app() -> FastAPI:
     app.include_router(stats.router, prefix=API_PREFIX)      # /api/v1/stats
     app.include_router(verify.router, prefix=API_PREFIX)     # /api/v1/verify
 
+    @app.get("/api/v1/doc-types", tags=["documents"], summary="Lấy danh mục các loại văn bản và nhóm văn bản")
+    @app.get("/doc-types", tags=["documents"], summary="Lấy danh mục các loại văn bản và nhóm văn bản")
+    async def get_doc_types():
+        from app.core.doc_types_config import DOC_TYPES_CONFIG
+        return [
+            {
+                "code": t.code,
+                "name": t.name,
+                "group": t.group,
+                "subtypes": [{"code": s.code} for s in t.subtypes] if t.subtypes else [],
+            }
+            for t in DOC_TYPES_CONFIG.types
+        ]
+
     # ── Root ──────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)
     async def root() -> dict:

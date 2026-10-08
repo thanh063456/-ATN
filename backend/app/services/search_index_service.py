@@ -39,6 +39,20 @@ class SearchIndexService:
         is_deleted: bool = False,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
+        document_type: str | None = None,
+        document_subtype: str | None = None,
+        doc_type_code: str | None = None,
+        doc_type_name: str | None = None,
+        doc_group: str | None = None,
+        doc_subtype: str | None = None,
+        doc_type_confidence: float | None = None,
+        doc_type_source: str | None = None,
+        subject: str | None = None,
+        issuing_unit: str | None = None,
+        ocr_scope: str = "first_page",
+        page_count: int | None = None,
+        pages_ocr: int | None = None,
+        needs_review: bool = False,
     ) -> dict | None:
         """
         Index hoặc update toàn bộ document vào Elasticsearch.
@@ -51,22 +65,41 @@ class SearchIndexService:
         doc_id_str = str(document_id)
         now_iso = datetime.now().isoformat()
 
+        effective_code = doc_type_code or category_code or document_type
+        effective_name = doc_type_name or category_name
+        effective_subtype = doc_subtype or document_subtype
+
         body = {
             "document_id": doc_id_str,
             "title": title,
             "content": content,
-            "category_code": category_code,
-            "category_name": category_name,
+            "category_code": effective_code,
+            "category_name": effective_name,
             "student_id": student_id,
             "student_name": student_name,
             "document_date": document_date,
             "document_number": document_number,
+            "document_type": effective_code,
+            "document_subtype": effective_subtype,
             "uploaded_by": str(uploaded_by) if uploaded_by else None,
             "ocr_status": ocr_status,
             "ocr_confidence": ocr_confidence,
             "is_deleted": is_deleted,
             "created_at": created_at.isoformat() if created_at else now_iso,
             "updated_at": updated_at.isoformat() if updated_at else now_iso,
+            # Specified Elasticsearch fields
+            "doc_type_code": effective_code,
+            "doc_type_name": effective_name,
+            "doc_group": doc_group,
+            "doc_subtype": effective_subtype,
+            "doc_type_confidence": doc_type_confidence if doc_type_confidence is not None else ocr_confidence,
+            "doc_type_source": doc_type_source or "rules",
+            "subject": subject,
+            "issuing_unit": issuing_unit,
+            "ocr_scope": ocr_scope,
+            "page_count": page_count,
+            "pages_ocr": pages_ocr,
+            "needs_review": needs_review,
         }
 
         try:

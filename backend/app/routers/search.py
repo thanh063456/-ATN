@@ -198,6 +198,8 @@ def _extract_highlight_snippet(content: str, target_terms: list[str], max_length
 async def search_documents(
     q: str = Query(..., min_length=1, description="Từ khóa tìm kiếm (tiếng Việt có dấu hoặc không dấu)"),
     category_code: str | None = Query(None, description="Lọc theo mã danh mục (vd: DON_NGHI_HOC)"),
+    doc_type_code: str | None = Query(None, description="Lọc theo loại văn bản (vd: DON_TU)"),
+    doc_group: str | None = Query(None, description="Lọc theo nhóm văn bản (vd: VAN_BAN_HANH_CHINH)"),
     ocr_status: str | None = Query(None, description="Lọc theo trạng thái OCR (vd: DONE, APPROVED)"),
     date_from: str | None = Query(None, description="Ngày tạo từ (định dạng YYYY-MM-DD)"),
     date_to: str | None = Query(None, description="Ngày tạo đến (định dạng YYYY-MM-DD)"),
@@ -211,8 +213,7 @@ async def search_documents(
     Tìm kiếm toàn văn tài liệu với:
     - Phân quyền RBAC: STUDENT/Vãng lai chỉ tìm hồ sơ của mình hoặc đã APPROVED; STAFF/ADMIN tìm toàn bộ.
     - Đa trường: tiêu đề, nội dung OCR, tên sinh viên, MSSV, số hiệu công văn.
-    - Tìm tiếng Việt có dấu và không dấu thông minh.
-    - Fallback tự động sang PostgreSQL khi Elasticsearch rỗng hoặc chưa sync.
+    - Tích hợp facets cho Loại văn bản và Nhóm văn bản.
     """
     t0 = time.monotonic()
     query_str = q.strip()
@@ -240,6 +241,10 @@ async def search_documents(
                 "student_id^3",
                 "document_number^2",
                 "category_name^1.5",
+                "doc_type_name^3",
+                "doc_type_name.ascii^2.5",
+                "subject^2",
+                "subject.ascii^1.5"
             ]
 
             must_clause: list[dict[str, Any]] = [
@@ -272,6 +277,10 @@ async def search_documents(
 
             if category_code:
                 filter_clause.append({"term": {"category_code": category_code}})
+            if doc_type_code:
+                filter_clause.append({"term": {"doc_type_code": doc_type_code}})
+            if doc_group:
+                filter_clause.append({"term": {"doc_group": doc_group}})
             if ocr_status:
                 filter_clause.append({"term": {"ocr_status": ocr_status.upper()}})
             if date_from or date_to:
@@ -282,6 +291,25 @@ async def search_documents(
                     range_query["lte"] = date_to
                 filter_clause.append({"range": {"created_at": range_query}})
 
+            should_clause: list[dict[str, Any]] = [
+                {
+                    "match": {
+                        "document_type": {
+                            "query": query_str,
+                            "boost": 200.0
+                        }
+                    }
+                },
+                {
+                    "match": {
+                        "category_name": {
+                            "query": query_str,
+                            "boost": 100.0
+                        }
+                    }
+                }
+            ]
+
             body: dict[str, Any] = {
                 "from": from_offset,
                 "size": page_size,
@@ -289,7 +317,16 @@ async def search_documents(
                 "query": {
                     "bool": {
                         "must": must_clause,
+                        "should": should_clause,
                         "filter": filter_clause,
+                    }
+                },
+                "aggs": {
+                    "doc_type_code_count": {
+                        "terms": {"field": "doc_type_code", "size": 50}
+                    },
+                    "doc_group_count": {
+                        "terms": {"field": "doc_group", "size": 20}
                     }
                 },
                 "highlight": {
@@ -307,6 +344,14 @@ async def search_documents(
             es_res = await es.search(index=INDEX_NAME, body=body)
             total_hits = es_res["hits"]["total"]["value"]
             hits_raw = es_res["hits"]["hits"]
+
+            facets = None
+            if "aggregations" in es_res:
+                aggs = es_res["aggregations"]
+                facets = {
+                    "doc_type_code": {b["key"]: b["doc_count"] for b in aggs.get("doc_type_code_count", {}).get("buckets", [])},
+                    "doc_group": {b["key"]: b["doc_count"] for b in aggs.get("doc_group_count", {}).get("buckets", [])},
+                }
 
             if total_hits > 0:
                 used_es = True
@@ -330,6 +375,18 @@ async def search_documents(
                             content_snippet=snippet,
                             category_code=source.get("category_code"),
                             category_name=source.get("category_name"),
+                            doc_type_code=source.get("doc_type_code"),
+                            doc_type_name=source.get("doc_type_name"),
+                            doc_group=source.get("doc_group"),
+                            doc_subtype=source.get("doc_subtype"),
+                            doc_type_confidence=source.get("doc_type_confidence"),
+                            doc_type_source=source.get("doc_type_source"),
+                            subject=source.get("subject"),
+                            issuing_unit=source.get("issuing_unit"),
+                            ocr_scope=source.get("ocr_scope"),
+                            page_count=source.get("page_count"),
+                            pages_ocr=source.get("pages_ocr"),
+                            needs_review=source.get("needs_review"),
                             student_id=source.get("student_id"),
                             student_name=source.get("student_name"),
                             document_date=source.get("document_date"),
@@ -345,9 +402,11 @@ async def search_documents(
             logger.warning("Elasticsearch search failed: {err}, falling back to DB", err=str(exc))
             total_hits = 0
             results = []
+            facets = None
 
     # ── 2. Fallback Tìm kiếm trên PostgreSQL nếu ES chưa chạy hoặc rỗng ────────
     if total_hits == 0 or len(results) == 0:
+        facets = None
         q_ascii = _strip_accents(query_str)
         raw_words = [w.strip() for w in query_str.split() if w.strip()]
         raw_words_ascii = [_strip_accents(w) for w in raw_words]
@@ -389,6 +448,15 @@ async def search_documents(
 
         if category_code:
             stmt = stmt.join(Document.category).where(DocumentCategory.code == category_code)
+        elif doc_type_code:
+            stmt = stmt.join(Document.category).where(DocumentCategory.code == doc_type_code)
+        if doc_group:
+            from app.core.doc_types_config import DOC_TYPES_CONFIG
+            group_codes = [t.code for t in DOC_TYPES_CONFIG.types if t.group == doc_group]
+            if group_codes:
+                if not (category_code or doc_type_code):
+                    stmt = stmt.join(Document.category)
+                stmt = stmt.where(DocumentCategory.code.in_(group_codes))
         if ocr_status:
             stmt = stmt.where(Document.ocr_status == ocr_status.upper())
         if date_from:
@@ -489,6 +557,22 @@ async def search_documents(
         # Cắt phân trang
         paged_items = matched_items[from_offset:from_offset + page_size]
 
+        # Tính toán facets cho PostgreSQL fallback
+        from collections import defaultdict
+        from app.core.doc_types_config import DOC_TYPES_MAP
+        type_counts = defaultdict(int)
+        group_counts = defaultdict(int)
+        for _, m_doc, _, _ in matched_items:
+            c_code = m_doc.category.code if m_doc.category else "KHAC"
+            type_counts[c_code] += 1
+            t_cfg = DOC_TYPES_MAP.get(c_code)
+            g_code = t_cfg.group if t_cfg else "KHAC"
+            group_counts[g_code] += 1
+        facets = {
+            "doc_type_code": dict(type_counts),
+            "doc_group": dict(group_counts),
+        }
+
         for score, doc, snippet, hls in paged_items:
             confidence = None
             for ocr in doc.ocr_results:
@@ -499,13 +583,30 @@ async def search_documents(
             st_name = (doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else None))
             st_id = (doc.metadata_.student_id if doc.metadata_ and doc.metadata_.student_id else (doc.uploader.mssv if doc.uploader else None))
 
+            cat_code = doc.category.code if doc.category else None
+            cat_name = doc.category.name if doc.category else None
+            t_cfg = DOC_TYPES_MAP.get(cat_code) if cat_code else None
+            extra = (doc.metadata_.extra or {}) if doc.metadata_ else {}
+
             results.append(
                 SearchHit(
                     document_id=doc.id,
                     title=doc.title,
                     content_snippet=snippet,
-                    category_code=doc.category.code if doc.category else None,
-                    category_name=doc.category.name if doc.category else None,
+                    category_code=cat_code,
+                    category_name=cat_name,
+                    doc_type_code=cat_code,
+                    doc_type_name=cat_name,
+                    doc_group=t_cfg.group if t_cfg else None,
+                    doc_subtype=extra.get("subtype"),
+                    doc_type_confidence=extra.get("confidence", confidence),
+                    doc_type_source=extra.get("doc_type_source", "auto"),
+                    subject=extra.get("subject"),
+                    issuing_unit=extra.get("issuing_unit"),
+                    ocr_scope=extra.get("ocr_scope", "first_page"),
+                    page_count=extra.get("page_count", 1),
+                    pages_ocr=extra.get("pages_ocr", 1),
+                    needs_review=extra.get("needs_review", False),
                     student_id=st_id,
                     student_name=st_name,
                     document_date=doc.metadata_.document_date.isoformat() if doc.metadata_ and doc.metadata_.document_date else None,
@@ -558,6 +659,6 @@ async def search_documents(
         page_size=page_size,
         total_pages=total_pages,
         took_ms=took_ms,
+        facets=facets,
         results=results,
     )
-

@@ -127,6 +127,8 @@ async def list_documents(
     page_size: int = Query(10, ge=1, le=100, description="Số mục trên mỗi trang"),
     ocr_status: str | None = Query(None, description="Lọc theo trạng thái OCR"),
     category_id: UUID | None = Query(None, description="Lọc theo danh mục"),
+    doc_type_code: str | None = Query(None, description="Lọc theo mã loại văn bản (vd: THONG_BAO, DON_TU)"),
+    doc_group: str | None = Query(None, description="Lọc theo nhóm văn bản (vd: VAN_BAN_HANH_CHINH)"),
     tag: str | None = Query(None, description="Lọc theo thẻ nhãn phân loại (vd: #K44, #MienGiamHocPhi, #HoNgheo)"),
     search: str | None = Query(None, description="Tìm kiếm theo tiêu đề, tên file, MSSV, số hiệu"),
     token: str | None = Query(None, description="JWT Access Token"),
@@ -164,6 +166,13 @@ async def list_documents(
         stmt = stmt.where(Document.ocr_status == ocr_status.upper())
     if category_id:
         stmt = stmt.where(Document.category_id == category_id)
+    if doc_type_code:
+        stmt = stmt.join(Document.category).where(DocumentCategory.code == doc_type_code)
+    if doc_group:
+        from app.core.doc_types_config import DOC_TYPES_CONFIG
+        group_codes = [t.code for t in DOC_TYPES_CONFIG.types if t.group == doc_group]
+        if group_codes:
+            stmt = stmt.join(Document.category).where(DocumentCategory.code.in_(group_codes))
     if search:
         search_pattern = f"%{search.strip()}%"
         stmt = stmt.outerjoin(Document.metadata_).outerjoin(Document.ocr_results).outerjoin(Document.uploader)
