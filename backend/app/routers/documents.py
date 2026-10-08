@@ -575,6 +575,7 @@ async def get_document_file_url(
 async def view_document_file(
     document_id: UUID,
     ticket: str | None = Query(None, description="Single-use file ticket ngắn hạn"),
+    token: str | None = Query(None, description="Auth Bearer token (hỗ trợ cho iframe/img preview từ trình duyệt)"),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
@@ -582,6 +583,11 @@ async def view_document_file(
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
+
+    # Nếu truy cập qua thẻ <img> hoặc <iframe> không gửi được Authorization header, giải mã token từ Query
+    if not current_user and token:
+        from app.core.dependencies import _resolve_user_from_token
+        current_user = await _resolve_user_from_token(token, db)
 
     # Quyền xem tệp tài liệu (P0 Rule 9):
     # 1. Vé dùng một lần (ticket) hợp lệ và chưa hết hạn (TTL 60-300s)

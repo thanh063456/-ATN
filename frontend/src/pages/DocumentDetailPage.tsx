@@ -38,6 +38,7 @@ import {
   AlertCircle,
   Clock,
   ArrowRightLeft,
+  Info,
 } from "lucide-react";
 import { diffWordsWithSpace } from "diff";
 import { Card } from "../components/common/Card";
@@ -757,9 +758,16 @@ export const DocumentDetailPage: React.FC = () => {
   const isApproved = doc.ocr_status === "APPROVED";
   const isRejected = doc.ocr_status === "REJECTED";
 
-  const filePreviewUrl = doc?.file_url
-    ? (doc.file_url.startsWith("http") ? doc.file_url : `${API_BASE_URL.replace("/api/v1", "")}${doc.file_url}`)
-    : (doc ? `${API_BASE_URL}/documents/${doc.id}/file` : "");
+  const filePreviewUrl = useMemo(() => {
+    if (!doc) return "";
+    let base = doc.file_url
+      ? (doc.file_url.startsWith("http") ? doc.file_url : `${API_BASE_URL.replace("/api/v1", "")}${doc.file_url}`)
+      : `${API_BASE_URL}/documents/${doc.id}/file`;
+    if (token && !base.includes("token=") && !base.includes("ticket=")) {
+      base += (base.includes("?") ? "&" : "?") + `token=${encodeURIComponent(token)}`;
+    }
+    return base;
+  }, [doc, token]);
 
   return (
     <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
