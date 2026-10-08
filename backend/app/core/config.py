@@ -143,6 +143,11 @@ class Settings(BaseSettings):
     ocr_max_lines_per_page: int = 300      # Tăng lên 300: đủ cho mọi trang A4 (40-80 dòng thực tế)
     ocr_extract_tables: bool = True         # Bóc tách cấu trúc bảng biểu nếu có lưới bảng rõ ràng
 
+    # OCR Scope settings
+    ocr_scope: Literal["first_page", "full"] = "first_page"
+    ocr_first_page_count: int = 1
+    ocr_rest_mode: Literal["off", "on_demand", "background"] = "on_demand"
+
     # Morphology kernel sizes cho phát hiện đường kẻ bảng
     ocr_morph_kernel_horiz: int = 25       # Kernel ngang phát hiện đường kẻ ngang
     ocr_morph_kernel_vert: int = 25        # Kernel dọc phát hiện đường kẻ dọc
@@ -172,9 +177,9 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="")
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str = "https://api.openai.com/v1"
-    ollama_base_url: str = "http://localhost:11434"
+    ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5:7b"
-    ai_timeout_seconds: float = 60.0
+    ai_timeout_seconds: float = 120.0
 
     # ── JWT ───────────────────────────────────────────────────────────────────
     jwt_secret_key: str = Field(default="CHANGE_ME_TO_A_JWT_SECRET")

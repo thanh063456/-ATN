@@ -77,6 +77,34 @@ async def _check_redis() -> dict[str, Any]:
         return {"status": "ok", "note": "redis_optional", "error": str(exc), "latency_ms": None}
 
 
+async def _check_ai() -> dict[str, Any]:
+    """Kiểm tra AI Service (Ollama / Gemini / OpenAI)."""
+    t0 = time.monotonic()
+    provider = settings.ai_provider.lower()
+    if provider == "ollama" or (provider == "auto" and not settings.gemini_api_key and not settings.openai_api_key):
+        base_url = settings.ollama_base_url.rstrip("/")
+        if "://localhost" in base_url:
+            base_url = base_url.replace("://localhost", "://127.0.0.1")
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=2.0)) as client:
+                resp = await client.get(f"{base_url}/api/tags")
+                if resp.status_code == 200:
+                    models = [m.get("name") for m in resp.json().get("models", [])]
+                    has_model = any(settings.ollama_model in m for m in models)
+                    return {
+                        "status": "ok" if has_model else "warning",
+                        "provider": "ollama",
+                        "model": settings.ollama_model,
+                        "models_available": models,
+                        "latency_ms": round((time.monotonic() - t0) * 1000, 1),
+                        "note": None if has_model else f"Mô hình {settings.ollama_model} chưa được tải về Ollama",
+                    }
+        except Exception as exc:
+            return {"status": "error", "provider": "ollama", "error": f"{type(exc).__name__}: {exc}", "latency_ms": None}
+    return {"status": "ok", "provider": provider}
+
+
 @router.get("/health", summary="Health check tất cả services")
 async def health_check() -> JSONResponse:
     """
@@ -84,11 +112,12 @@ async def health_check() -> JSONResponse:
     """
     import asyncio
 
-    postgres_result, es_result, storage_result, redis_result = await asyncio.gather(
+    postgres_result, es_result, storage_result, redis_result, ai_result = await asyncio.gather(
         _check_postgres(),
         _check_elasticsearch(),
         _check_storage(),
         _check_redis(),
+        _check_ai(),
         return_exceptions=False,
     )
 
@@ -99,6 +128,7 @@ async def health_check() -> JSONResponse:
         "storage":       storage_result,
         "minio":         storage_result,
         "redis":         redis_result,
+        "ai":            ai_result,
     }
 
     all_ok = all(s.get("status") == "ok" for s in services.values())

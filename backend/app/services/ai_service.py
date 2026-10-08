@@ -27,7 +27,7 @@ class AIService:
     """Service tích hợp AI hỗ trợ nhận diện và bóc tách dữ liệu thông minh."""
 
     def __init__(self) -> None:
-        self.timeout = httpx.Timeout(settings.ai_timeout_seconds, connect=2.0)
+        self.timeout = httpx.Timeout(settings.ai_timeout_seconds, connect=10.0)
 
     def _determine_provider(self) -> str:
         """Xác định provider khả dụng dựa trên cấu hình."""
@@ -99,7 +99,8 @@ class AIService:
                         "success": True,
                     }
         except Exception as exc:
-            logger.warning(f"AI text refinement with provider '{provider}' unavailable ({exc}). Using Admin Dictionary fallback.")
+            err_detail = f"{type(exc).__name__}: {str(exc) or repr(exc)}"
+            logger.warning(f"AI text refinement with provider '{provider}' unavailable ({err_detail}). Using Admin Dictionary fallback.")
 
         # Fallback khi không gọi được LLM: Sử dụng pipeline hậu xử lý tiếng Việt & từ điển hành chính
         fallback_refined = post_process_vietnamese(raw_text)
@@ -173,7 +174,8 @@ class AIService:
             if raw_response:
                 ai_res = self._clean_and_parse_json(raw_response)
         except Exception as exc:
-            logger.warning(f"AI entity extraction failed with {provider}: {exc}. Falling back to regex.")
+            err_detail = f"{type(exc).__name__}: {str(exc) or repr(exc)}"
+            logger.warning(f"AI entity extraction failed with {provider}: {err_detail}. Falling back to regex.")
 
         # Nếu AI trả về kết quả hợp lệ
         if ai_res and isinstance(ai_res, dict):
@@ -292,8 +294,11 @@ class AIService:
         return ""
 
     async def _call_ollama(self, prompt: str) -> str:
-        """Gọi Local Ollama API (http://localhost:11434/api/generate)."""
-        url = f"{settings.ollama_base_url.rstrip('/')}/api/generate"
+        """Gọi Local Ollama API (http://127.0.0.1:11434/api/generate)."""
+        base_url = settings.ollama_base_url.rstrip("/")
+        if "://localhost" in base_url:
+            base_url = base_url.replace("://localhost", "://127.0.0.1")
+        url = f"{base_url}/api/generate"
         payload = {
             "model": settings.ollama_model,
             "prompt": prompt,
