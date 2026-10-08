@@ -927,6 +927,46 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       )}
 
+      {/* Notice when only first page was OCRed */}
+      {doc.ocr_status === "DONE" && (doc.metadata?.extra?.ocr_scope === "first_page" || ((doc.page_count ?? 1) > 1 && doc.metadata?.extra?.ocr_scope !== "full")) && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0.85rem 1.25rem",
+            borderRadius: "var(--radius-md)",
+            backgroundColor: "#fffbeb",
+            border: "1px solid #fde68a",
+            color: "#92400e",
+            marginTop: "1rem",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Info size={20} style={{ color: "#d97706" }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "0.875rem" }}>
+                Mới OCR trang 1: nội dung các trang sau chưa được tìm kiếm
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "#b45309" }}>
+                Tài liệu có {doc.page_count || "nhiều"} trang. Bấm Quét OCR Toàn Bộ để tìm kiếm đầy đủ mọi trang.
+              </div>
+            </div>
+          </div>
+          {isStaffOrAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTriggerOcrFull}
+              leftIcon={<RefreshCw size={14} />}
+              style={{ backgroundColor: "white", borderColor: "#d97706", color: "#b45309" }}
+            >
+              Quét OCR Toàn Bộ
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* 🏷️ Smart Tags & Priority Ranking Card */}
       <Card padding="md">
         <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
@@ -2075,13 +2115,13 @@ export const DocumentDetailPage: React.FC = () => {
               </div>
 
               <div style={fieldBoxStyle}>
-                <span style={fieldLabelStyle}>Loại đơn từ:</span>
+                <span style={fieldLabelStyle}>Loại văn bản:</span>
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   <span style={{ ...fieldValueStyle, fontWeight: 600, color: "#0284c7" }}>
-                    {aiExtractData?.document_type || doc.metadata?.extra?.document_type || "Hồ sơ / Đơn từ CTSV"}
+                    {aiExtractData?.document_type || doc.metadata?.extra?.document_type || doc.category?.name || "Hồ sơ / Văn bản CTSV"}
                   </span>
                   {isStaffOrAdmin && (
-                    <button onClick={handleOverrideType} style={{ fontSize: "10px", padding: "2px 5px", cursor: "pointer", border: "1px solid #0284c7", background: "white", borderRadius: "3px", color: "#0284c7" }}>Sửa</button>
+                    <button onClick={handleOverrideType} style={{ fontSize: "11px", padding: "3px 8px", cursor: "pointer", border: "1px solid #0284c7", background: "white", borderRadius: "4px", color: "#0284c7", fontWeight: 600 }}>Sửa loại văn bản</button>
                   )}
                 </div>
               </div>

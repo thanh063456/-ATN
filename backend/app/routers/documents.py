@@ -796,14 +796,58 @@ async def process_document_ocr_full(
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    from app.worker.tasks import process_ocr_full_task
-    process_ocr_full_task.delay(str(document_id))
+    # Ghi nhận AuditLog
+    audit_entry = AuditLog(
+        resource_id=doc.id,
+        resource_type="document",
+        user_id=current_user.id,
+        action="TRIGGER_OCR_FULL",
+        detail={"message": "Kích hoạt nhận diện toàn bộ các trang còn lại"},
+    )
+    db.add(audit_entry)
+    await db.commit()
+
+    from app.worker.tasks import process_ocr_full_task, async_process_ocr_full
+    if _is_redis_available():
+        process_ocr_full_task.delay(str(document_id))
+    else:
+        asyncio.create_task(async_process_ocr_full(str(document_id)))
     
     return {
         "message": "Đang chạy OCR cho các trang còn lại của tài liệu",
         "document_id": document_id,
         "status": "PROCESSING"
     }
+
+
+@router.get(
+    "/{document_id}/ocr-full/status",
+    summary="Kiểm tra trạng thái tác vụ OCR toàn văn bản (Stage 2)",
+)
+async def get_document_ocr_full_status(
+    document_id: UUID,
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+):
+    doc = await db.get(Document, document_id, options=[selectinload(Document.metadata_)])
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    extra = (doc.metadata_.extra or {}) if doc.metadata_ else {}
+    ocr_scope = extra.get("ocr_scope", "first_page")
+    pages_ocr = extra.get("pages_ocr", 1)
+    page_count = doc.page_count or 1
+
+    status_str = "COMPLETED" if ocr_scope == "full" else ("PROCESSING" if doc.ocr_status == "PROCESSING" else "PENDING")
+
+    return {
+        "document_id": str(document_id),
+        "ocr_scope": ocr_scope,
+        "pages_ocr": pages_ocr,
+        "page_count": page_count,
+        "status": status_str,
+    }
+
 
 @router.patch(
     "/{document_id}/type",
@@ -815,8 +859,8 @@ async def override_document_type(
     current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """Ghi đè thủ công phân loại tài liệu."""
-    doc = await db.get(Document, document_id, options=[selectinload(Document.metadata_)])
+    """Ghi đè thủ công phân loại tài liệu (Sửa loại văn bản)."""
+    doc = await db.get(Document, document_id, options=[selectinload(Document.category), selectinload(Document.metadata_)])
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
@@ -825,14 +869,34 @@ async def override_document_type(
     if not category:
         raise ValidationException(f"Không tìm thấy category code: {req.category_code}")
 
+    old_cat_code = doc.category.code if doc.category else None
     doc.category_id = category.id
     if doc.metadata_:
-        if not doc.metadata_.extra:
-            doc.metadata_.extra = {}
-        doc.metadata_.extra["document_type"] = category.name
+        from sqlalchemy.orm.attributes import flag_modified
+        current_extra = dict(doc.metadata_.extra or {})
+        current_extra["document_type"] = category.name
+        current_extra["doc_type_code"] = category.code
+        current_extra["doc_type_source"] = "manual"
+        current_extra["source"] = "manual"
+        doc.metadata_.extra = current_extra
         doc.metadata_.updated_at = datetime.now()
+        flag_modified(doc.metadata_, "extra")
         
     doc.updated_at = datetime.now()
+
+    # Ghi nhận AuditLog hành động sửa loại văn bản
+    audit_entry = AuditLog(
+        resource_id=doc.id,
+        resource_type="document",
+        user_id=current_user.id,
+        action="OVERRIDE_TYPE",
+        detail={
+            "old_type": old_cat_code,
+            "new_type": category.code,
+            "message": f"Sửa loại văn bản từ {old_cat_code} thành {category.code}",
+        },
+    )
+    db.add(audit_entry)
     await db.commit()
 
     # Re-index in ES
@@ -847,6 +911,9 @@ async def override_document_type(
                 doc={
                     "category_code": category.code,
                     "category_name": category.name,
+                    "doc_type_code": category.code,
+                    "doc_type_name": category.name,
+                    "doc_type_source": "manual",
                     "document_type": category.code,
                     "updated_at": datetime.now().isoformat(),
                 },
@@ -856,7 +923,7 @@ async def override_document_type(
             logger.warning("ES update type failed: {}", str(exc))
 
     return {
-        "message": "Cập nhật loại tài liệu thành công",
+        "message": "Sửa loại văn bản thành công",
         "category_code": category.code,
         "category_name": category.name
     }

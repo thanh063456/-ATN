@@ -47,6 +47,8 @@ export const SearchPage: React.FC = () => {
 
   const [query, setQuery] = useState(initialQuery);
   const [categoryCode, setCategoryCode] = useState(searchParams.get("category") || "");
+  const [docTypeCode, setDocTypeCode] = useState(searchParams.get("doc_type") || "");
+  const [ocrScope, setOcrScope] = useState(searchParams.get("ocr_scope") || "");
   const [ocrStatus, setOcrStatus] = useState(searchParams.get("status") || "");
   const [dateFrom, setDateFrom] = useState(searchParams.get("date_from") || "");
   const [dateTo, setDateTo] = useState(searchParams.get("date_to") || "");
@@ -70,6 +72,8 @@ export const SearchPage: React.FC = () => {
       const res = await searchApi.search({
         q: trimmed,
         category_code: categoryCode || undefined,
+        doc_type_code: docTypeCode || undefined,
+        ocr_scope: ocrScope || undefined,
         ocr_status: ocrStatus || undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
@@ -82,6 +86,8 @@ export const SearchPage: React.FC = () => {
       // Đồng bộ URL params
       const newParams: Record<string, string> = { q: trimmed, page: String(pageNumber) };
       if (categoryCode) newParams.category = categoryCode;
+      if (docTypeCode) newParams.doc_type = docTypeCode;
+      if (ocrScope) newParams.ocr_scope = ocrScope;
       if (ocrStatus) newParams.status = ocrStatus;
       if (dateFrom) newParams.date_from = dateFrom;
       if (dateTo) newParams.date_to = dateTo;
@@ -115,6 +121,8 @@ export const SearchPage: React.FC = () => {
 
   const handleResetFilters = () => {
     setCategoryCode("");
+    setDocTypeCode("");
+    setOcrScope("");
     setOcrStatus("");
     setDateFrom("");
     setDateTo("");
@@ -304,6 +312,21 @@ export const SearchPage: React.FC = () => {
               />
             </div>
 
+            <div>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)", marginBottom: "0.3rem" }}>
+                Phạm vi quét OCR
+              </label>
+              <select
+                value={ocrScope}
+                onChange={(e) => setOcrScope(e.target.value)}
+                style={{ width: "100%", padding: "0.45rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
+              >
+                <option value="">-- Tất cả phạm vi --</option>
+                <option value="first_page">Mới OCR trang 1</option>
+                <option value="full">Đã OCR toàn bộ</option>
+              </select>
+            </div>
+
             <div style={{ display: "flex", alignItems: "center", gap: "1rem", gridColumn: "1 / -1", marginTop: "0.5rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <input
@@ -348,6 +371,54 @@ export const SearchPage: React.FC = () => {
             )}
           </div>
 
+          {/* Facets Chips */}
+          {searchResponse.facets?.doc_type_code && Object.keys(searchResponse.facets.doc_type_code).length > 0 && (
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.25rem 0" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Lọc theo loại:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setDocTypeCode("");
+                  performSearch(query, 1);
+                }}
+                style={{
+                  padding: "0.2rem 0.6rem",
+                  borderRadius: "9999px",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  backgroundColor: !docTypeCode ? "var(--primary-600)" : "var(--gray-100)",
+                  color: !docTypeCode ? "white" : "var(--gray-700)",
+                  border: "1px solid var(--border-color)",
+                  cursor: "pointer",
+                }}
+              >
+                Tất cả ({searchResponse.total_hits})
+              </button>
+              {Object.entries(searchResponse.facets.doc_type_code).map(([code, count]) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => {
+                    setDocTypeCode(code);
+                    performSearch(query, 1);
+                  }}
+                  style={{
+                    padding: "0.2rem 0.6rem",
+                    borderRadius: "9999px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    backgroundColor: docTypeCode === code ? "var(--primary-600)" : "var(--gray-100)",
+                    color: docTypeCode === code ? "white" : "var(--gray-700)",
+                    border: "1px solid var(--border-color)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {code} ({count})
+                </button>
+              ))}
+            </div>
+          )}
+
           {searchResponse.results.length === 0 ? (
             /* Empty state */
             <Card padding="lg" style={{ textAlign: "center" }}>
@@ -368,11 +439,41 @@ export const SearchPage: React.FC = () => {
                 <Card key={hit.document_id} padding="md" hoverable>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem", flexWrap: "wrap" }}>
                         <OCRStatusBadge status={hit.ocr_status} />
-                        {hit.category_name && (
+                        {(hit.doc_type_name || hit.category_name) && (
                           <span style={{ fontSize: "0.75rem", color: "var(--primary-700)", backgroundColor: "var(--primary-50)", padding: "0.15rem 0.5rem", borderRadius: "4px", fontWeight: 600 }}>
-                            {hit.category_name}
+                            {hit.doc_type_name || hit.category_name}
+                          </span>
+                        )}
+                        {(hit.needs_review || hit.doc_type_code === "KHAC" || (hit.doc_type_confidence !== undefined && hit.doc_type_confidence < 0.6)) && (
+                          <span
+                            className="badge-needs-review"
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#b91c1c",
+                              backgroundColor: "#fee2e2",
+                              padding: "0.15rem 0.5rem",
+                              borderRadius: "4px",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Cần kiểm tra
+                          </span>
+                        )}
+                        {hit.ocr_scope === "first_page" && (hit.page_count ?? 1) > 1 && (
+                          <span
+                            className="badge-ocr-scope"
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#b45309",
+                              backgroundColor: "#fef3c7",
+                              padding: "0.15rem 0.5rem",
+                              borderRadius: "4px",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Mới OCR trang 1: nội dung các trang sau chưa được tìm kiếm
                           </span>
                         )}
                         <span style={{ fontSize: "0.75rem", color: "var(--gray-400)", marginLeft: "auto" }}>

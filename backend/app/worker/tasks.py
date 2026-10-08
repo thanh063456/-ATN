@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.models.audit_logs import AuditLog
 from app.models.document_metadata import DocumentMetadata
 from app.models.documents import Document
 from app.models.ocr_results import OCRResult
@@ -111,14 +112,40 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             confidence = 0.0
 
             try:
-                raw_text, processed_text, confidence = await asyncio.to_thread(
-                    service.extract_text_from_file, file_bytes, doc.file_type, target_engine
+                # Read settings
+                ocr_scope = getattr(settings, "ocr_scope", "first_page")
+                ocr_first_page_count = getattr(settings, "ocr_first_page_count", 1)
+                
+                target_pages = None
+                if ocr_scope == "first_page":
+                    target_pages = list(range(ocr_first_page_count))
+                    
+                raw_text, processed_text, confidence, page_count = await asyncio.to_thread(
+                    service.extract_text_from_file, file_bytes, doc.file_type, target_engine, target_pages
                 )
             except Exception as exc:
-                ocr_failed = True
-                ocr_err_msg = f"{type(exc).__name__}: {str(exc)}"
-                logger.exception("OCR execution failed for engine {eng} on document {id}: {err}",
-                             eng=target_engine, id=doc_uuid, err=ocr_err_msg)
+                exc_str = str(exc)
+                if exc_str.startswith("LOW_QUALITY:"):
+                    ocr_failed = False # Treat as successful OCR but low quality output
+                    ocr_err_msg = exc_str.replace("LOW_QUALITY:", "").strip()
+                    status_val = "LOW_QUALITY"
+                else:
+                    ocr_failed = True
+                    ocr_err_msg = f"{type(exc).__name__}: {str(exc)}"
+                    status_val = "FAILED"
+                    logger.exception("OCR execution failed for engine {eng} on document {id}: {err}",
+                                 eng=target_engine, id=doc_uuid, err=ocr_err_msg)
+
+            if "status_val" not in locals():
+                status_val = "DONE"
+                
+            if not ocr_failed:
+                # Save page count to document
+                await session.execute(
+                    update(Document)
+                    .where(Document.id == doc_uuid)
+                    .values(page_count=page_count)
+                )
 
             processing_time_ms = int(round((time.perf_counter() - t_ocr_start) * 1000))
 
@@ -139,7 +166,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 ocr_engine=target_engine,
                 ocr_engine_version=engine_version,
                 processing_time_ms=processing_time_ms,
-                status="FAILED" if ocr_failed else "DONE",
+                status=status_val,
                 error_message=ocr_err_msg,
                 is_corrected=False,
             )
@@ -157,6 +184,10 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             meta_text = processed_text if processed_text else raw_text
             meta_dict = await asyncio.to_thread(vietocr_service.extract_metadata, meta_text)
             
+            # Document Type Classification
+            from app.services.doctype_service import doctype_service
+            doctype_result = doctype_service.classify(meta_text, page_count=page_count if not ocr_failed else 1)
+            
             try:
                 ai_fields = await ai_service.extract_smart_fields(raw_text)
             except Exception as ai_err:
@@ -166,9 +197,20 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             # Hợp nhất thông tin AI bóc tách và Metadata chuẩn
             final_student_id = ai_fields.get("student_id") or meta_dict.get("student_id")
             final_student_name = ai_fields.get("student_name") or meta_dict.get("student_name")
-            final_doc_no = ai_fields.get("document_number") or meta_dict.get("document_number")
+            final_doc_no = ai_fields.get("document_number") or doctype_result.document_number or meta_dict.get("document_number")
             auto_tags = ai_fields.get("tags") or tag_service.generate_auto_tags(raw_text, metadata=meta_dict)
             priority_score = ai_fields.get("priority_score") or tag_service.calculate_priority_score(auto_tags)
+
+            # Update Document Category if not manually set
+            cat_code = doctype_result.code
+            cat_name = doctype_result.name
+            if not doc.category_id and cat_code:
+                from app.models.document_categories import DocumentCategory
+                cat_res = await session.execute(select(DocumentCategory).where(DocumentCategory.code == cat_code))
+                category = cat_res.scalars().first()
+                if category:
+                    doc.category_id = category.id
+                    cat_name = category.name
 
             # ── 6. Lưu / Cập nhật DocumentMetadata ────────────────────────────
             doc_date = None
@@ -184,8 +226,14 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 "priority_score": priority_score,
                 "faculty": ai_fields.get("faculty"),
                 "class_name": ai_fields.get("class_name"),
-                "document_type": ai_fields.get("document_type"),
-                "ai_summary": ai_fields.get("summary"),
+                "document_type": doctype_result.name,
+                "document_subtype": doctype_result.subtype,
+                "ai_summary": doctype_result.subject or ai_fields.get("summary"),
+                "ocr_scope": "full" if (len(target_pages) == page_count if target_pages else True) else getattr(settings, "ocr_scope", "first_page"),
+                "pages_ocr": page_count if (len(target_pages) == page_count if target_pages else True) else (len(target_pages) if target_pages else 1),
+                "page_count": page_count if not ocr_failed else 0,
+                "classification_confidence": doctype_result.confidence,
+                "classification_signals": doctype_result.signals,
             }
 
             if doc.metadata_:
@@ -227,24 +275,39 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                     document_id=doc.id,
                     title=doc.title,
                     content=raw_text,
-                    category_code=doc.category.code if doc.category else meta_dict.get("detected_category"),
-                    category_name=doc.category.name if doc.category else None,
-                    student_id=meta_dict.get("student_id"),
-                    student_name=meta_dict.get("student_name"),
-                    document_date=meta_dict.get("document_date"),
-                    document_number=meta_dict.get("document_number"),
+                    category_code=cat_code if cat_code else (doc.category.code if doc.category else None),
+                    category_name=cat_name if cat_name else (doc.category.name if doc.category else None),
+                    student_id=final_student_id,
+                    student_name=final_student_name,
+                    document_date=doc_date.isoformat() if doc_date else None,
+                    document_number=final_doc_no,
                     uploaded_by=doc.uploaded_by,
                     ocr_status="DONE",
                     ocr_confidence=confidence,
                     is_deleted=doc.is_deleted,
                     created_at=doc.created_at,
                     updated_at=doc.updated_at,
+                    document_type=cat_code if cat_code else (doc.category.code if doc.category else None),
+                    document_subtype=doctype_result.subtype,
                 )
                 logger.info("Indexed document {id} into Elasticsearch successfully", id=document_id)
             except Exception as es_err:
                 logger.warning("Elasticsearch indexing failed: {err}", err=str(es_err))
 
             logger.info("OCR task completed successfully for document_id={id}", id=document_id)
+            
+            # Policy by type: DANH_SACH and DON_TU (or student_id present on page 1)
+            ocr_rest_enabled = getattr(settings, "ocr_rest_by_group", True)
+            has_student = bool(final_student_id)
+            is_priority_group = cat_code in ["DANH_SACH", "DON_TU"]
+            if (is_priority_group or has_student) and ocr_rest_enabled and target_pages and len(target_pages) < page_count:
+                logger.info("Queueing full OCR task for {doc_type} document {id}", doc_type=cat_code, id=document_id)
+                from app.routers.documents import _is_redis_available
+                if _is_redis_available():
+                    process_ocr_full_task.delay(str(doc_uuid))
+                else:
+                    asyncio.create_task(async_process_ocr_full(str(doc_uuid)))
+                
             return {
                 "status": "SUCCESS",
                 "document_id": document_id,
@@ -275,5 +338,156 @@ def process_ocr_task(self, document_id: str) -> dict:
     """Celery task entry point."""
     try:
         return asyncio.run(async_process_ocr(document_id, task_id=self.request.id))
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+async def async_process_ocr_full(document_id: str, task_id: str | None = None) -> dict:
+    """Stage 2 OCR: Process remaining pages."""
+    doc_uuid = UUID(document_id)
+    now = datetime.now()
+    logger.info("Starting FULL OCR processing for document_id={doc_id}", doc_id=document_id)
+
+    async with AsyncSessionLocal() as session:
+        try:
+            stmt = select(Document).where(Document.id == doc_uuid).options(selectinload(Document.category), selectinload(Document.metadata_))
+            res = await session.execute(stmt)
+            doc = res.scalars().first()
+            if not doc:
+                raise ValueError(f"Document {document_id} không tồn tại")
+
+            if doc.metadata_ and doc.metadata_.extra and doc.metadata_.extra.get("ocr_scope") == "full":
+                logger.info(f"Document {document_id} is already fully OCRed. Skipping.")
+                return {"status": "SUCCESS", "message": "Document already fully OCRed", "document_id": document_id}
+
+            ocr_first_page_count = getattr(settings, "ocr_first_page_count", 1)
+            page_count = doc.page_count or 1
+            if page_count <= ocr_first_page_count:
+                if doc.metadata_:
+                    if not doc.metadata_.extra:
+                        doc.metadata_.extra = {}
+                    doc.metadata_.extra["ocr_scope"] = "full"
+                    doc.metadata_.extra["pages_ocr"] = page_count
+                    await session.commit()
+                return {"status": "SUCCESS", "message": "No remaining pages to OCR", "document_id": document_id}
+
+            remaining_pages = list(range(ocr_first_page_count, page_count))
+
+            # Set status to PROCESSING
+            await session.execute(update(Document).where(Document.id == doc_uuid).values(ocr_status="PROCESSING", updated_at=now))
+            await session.commit()
+
+            # Read file
+            file_bytes = await asyncio.to_thread(storage_service.get_file, doc.minio_object_key)
+
+            # Extract remaining pages with exact per-page markers
+            target_engine = getattr(settings, "ocr_engine", "vietocr")
+            service = vietocr_service
+
+            per_page_raw = []
+            per_page_proc = []
+            conf_list = []
+            for p_idx in remaining_pages:
+                raw_p, proc_p, conf_p, _ = await asyncio.to_thread(
+                    service.extract_text_from_file, file_bytes, doc.file_type, target_engine, [p_idx]
+                )
+                per_page_raw.append(f"--- Trang {p_idx + 1} ---\n{raw_p}")
+                per_page_proc.append(f"--- Trang {p_idx + 1} ---\n{proc_p}")
+                conf_list.append(conf_p)
+
+            raw_text = "\n\n".join(per_page_raw)
+            processed_text = "\n\n".join(per_page_proc)
+            confidence = sum(conf_list) / len(conf_list) if conf_list else 0.8
+
+            # Get latest OCR result
+            ocr_res = await session.execute(select(OCRResult).where(OCRResult.document_id == doc_uuid, OCRResult.is_latest == True))
+            latest_ocr = ocr_res.scalars().first()
+
+            if latest_ocr:
+                new_raw = latest_ocr.raw_text + "\n\n" + raw_text
+                new_proc = latest_ocr.corrected_text + "\n\n" + processed_text
+                
+                # Update existing or create new
+                latest_ocr.is_latest = False
+                
+                new_ocr = OCRResult(
+                    document_id=doc_uuid,
+                    is_latest=True,
+                    raw_text=new_raw,
+                    corrected_text=new_proc,
+                    confidence_score=(latest_ocr.confidence_score + confidence) / 2,
+                    ocr_engine=latest_ocr.ocr_engine,
+                    ocr_engine_version=latest_ocr.ocr_engine_version,
+                    status="DONE",
+                    is_corrected=latest_ocr.is_corrected,
+                )
+                session.add(new_ocr)
+            else:
+                new_raw = raw_text
+                new_proc = processed_text
+
+            if doc.metadata_:
+                if not doc.metadata_.extra:
+                    doc.metadata_.extra = {}
+                doc.metadata_.extra["ocr_scope"] = "full"
+                doc.metadata_.extra["pages_ocr"] = page_count
+
+            await session.execute(update(Document).where(Document.id == doc_uuid).values(ocr_status="DONE", updated_at=now))
+            await session.commit()
+
+            # Audit log for full OCR
+            audit_full = AuditLog(
+                user_id=doc.uploaded_by,
+                action="OCR_FULL_COMPLETED",
+                resource_type="document",
+                resource_id=doc_uuid,
+                detail={
+                    "engine": target_engine,
+                    "pages_extracted": len(remaining_pages),
+                    "page_count": page_count,
+                },
+                created_at=now,
+            )
+            session.add(audit_full)
+            await session.commit()
+
+            # Re-index
+            cat_code = doc.category.code if doc.category else None
+            cat_name = doc.category.name if doc.category else None
+            
+            try:
+                await search_index_service.index_document(
+                    document_id=doc.id,
+                    title=doc.title,
+                    content=new_raw,
+                    category_code=cat_code,
+                    category_name=cat_name,
+                    student_id=doc.metadata_.student_id if doc.metadata_ else None,
+                    student_name=doc.metadata_.student_name if doc.metadata_ else None,
+                    document_date=doc.metadata_.document_date.isoformat() if doc.metadata_ and doc.metadata_.document_date else None,
+                    document_number=doc.metadata_.document_number if doc.metadata_ else None,
+                    uploaded_by=doc.uploaded_by,
+                    ocr_status="DONE",
+                    ocr_confidence=(latest_ocr.confidence_score + confidence) / 2 if latest_ocr else confidence,
+                    is_deleted=doc.is_deleted,
+                    created_at=doc.created_at,
+                    updated_at=doc.updated_at,
+                    document_type=cat_code,
+                    document_subtype=doc.metadata_.extra.get("document_subtype") if doc.metadata_ and doc.metadata_.extra else None,
+                )
+            except Exception as es_err:
+                logger.warning("ES indexing failed: {err}", err=str(es_err))
+
+            return {"status": "SUCCESS", "document_id": document_id}
+
+        except Exception as exc:
+            logger.error("OCR FULL task failed for document_id={id}: {err}", id=document_id, err=str(exc))
+            await session.execute(update(Document).where(Document.id == doc_uuid).values(ocr_status="FAILED", updated_at=datetime.now()))
+            await session.commit()
+            raise exc
+
+@celery_app.task(bind=True, name="tasks.process_ocr_full", max_retries=3, default_retry_delay=10)
+def process_ocr_full_task(self, document_id: str) -> dict:
+    try:
+        return asyncio.run(async_process_ocr_full(document_id, task_id=self.request.id))
     except Exception as exc:
         raise self.retry(exc=exc)

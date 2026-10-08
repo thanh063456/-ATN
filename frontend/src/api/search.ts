@@ -6,6 +6,18 @@ export interface SearchHit {
   content_snippet?: string;
   category_code?: string;
   category_name?: string;
+  doc_type_code?: string;
+  doc_type_name?: string;
+  doc_group?: string;
+  doc_subtype?: string;
+  doc_type_confidence?: number;
+  doc_type_source?: string;
+  subject?: string;
+  issuing_unit?: string;
+  ocr_scope?: string;
+  page_count?: number;
+  pages_ocr?: number;
+  needs_review?: boolean;
   student_id?: string;
   student_name?: string;
   document_date?: string;
@@ -24,12 +36,16 @@ export interface SearchResponse {
   page_size: number;
   total_pages: number;
   took_ms: number;
+  facets?: Record<string, Record<string, number>>;
   results: SearchHit[];
 }
 
 export interface SearchParams {
   q: string;
   category_code?: string;
+  doc_type_code?: string;
+  doc_group?: string;
+  ocr_scope?: string;
   ocr_status?: string;
   date_from?: string;
   date_to?: string;
