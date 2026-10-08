@@ -49,7 +49,7 @@ _NATIONAL_HEADER_PATTERNS = [
         'BỘ GIÁO DỤC VÀ ĐÀO TẠO',
     ),
     (
-        r'TR[UƯỜ]NG\s*[ĐD][AẠ]I\s*H[OỌ]C\s*[ĐD][AÀ]\s*L[AẠ]T',
+        r'TR[UƯuư][OƠỜOoơờ]*NG\s*[ĐDđd][AẠaạ]I\s*H[OỌoọ]C\s*[ĐDđd][AÀÃÁẢẠaàãáảạ]\s*L[AẠÂẬaạâậ]T',
         'TRƯỜNG ĐẠI HỌC ĐÀ LẠT',
     ),
     (
@@ -129,7 +129,10 @@ def _normalize_date(header_text: str) -> tuple[str, str | None]:
     """
     Tìm và chuẩn hóa ngày tháng trong text.
     """
-    reject_words = ["công văn", "căn cứ", "theo", "của", "quyết định", "thông tư", "nghị định"]
+    reject_words = [
+        "công văn", "căn cứ", "theo", "của", "quyết định", "thông tư", "nghị định",
+        "thời gian", "từ", "đến", "giao quân", "gặp mặt", "tổ chức", "khoá", "khóa"
+    ]
 
     for m in _DATE_PATTERN.finditer(header_text):
         start_idx = m.start()
@@ -163,9 +166,22 @@ def _normalize_date(header_text: str) -> tuple[str, str | None]:
             year = '2025'
     
         original_segment = m.group(0)
-        prefix = 'Lâm Đồng' if any(x in original_segment for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
+        clean_seg = original_segment.lower()
+        if any(x in clean_seg for x in ["lâm", "lam", "đồng", "dong"]):
+            prefix = "Lâm Đồng"
+        elif any(x in clean_seg for x in ["đà lạt", "da lat"]):
+            prefix = "Đà Lạt"
+        else:
+            m_city = re.search(r'([A-ZÀ-Ỹa-zà-ỹ\s]{2,20})[\s,]*(?=ng[àaá]y)', original_segment)
+            if m_city and len(m_city.group(1).strip()) >= 2:
+                prefix = m_city.group(1).strip()
+            else:
+                prefix = "Lâm Đồng" if any(x in header_text.lower() for x in ["lâm", "lam", "đồng"]) else ("Đà Lạt" if any(x in header_text.lower() for x in ["đà lạt", "da lat"]) else "")
     
-        date_str = f'{prefix}, ngày {day} tháng {month} năm {year}'
+        if prefix:
+            date_str = f'{prefix}, ngày {day} tháng {month} năm {year}'
+        else:
+            date_str = f'ngày {day} tháng {month} năm {year}'
         text = header_text[:m.start()] + date_str + header_text[m.end():]
         return text, date_str
 
@@ -178,8 +194,11 @@ def _normalize_date(header_text: str) -> tuple[str, str | None]:
         d = str(int(m_slash.group(1)))
         mo = str(int(m_slash.group(2)))
         y = m_slash.group(3)
-        prefix = 'Lâm Đồng' if any(x in header_text for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
-        date_str = f'{prefix}, ngày {d} tháng {mo} năm {y}'
+        prefix = "Lâm Đồng" if any(x in header_text.lower() for x in ["lâm", "lam", "đồng"]) else ("Đà Lạt" if any(x in header_text.lower() for x in ["đà lạt", "da lat"]) else "")
+        if prefix:
+            date_str = f'{prefix}, ngày {d} tháng {mo} năm {y}'
+        else:
+            date_str = f'ngày {d} tháng {mo} năm {y}'
         return header_text, date_str
 
     fallback_m = re.search(r'(?:Lâm Đồng|Đà Lạt)?[\s,]*ng[àaá]y\s+[^\n]{2,30}', header_text, re.IGNORECASE)
@@ -187,8 +206,11 @@ def _normalize_date(header_text: str) -> tuple[str, str | None]:
         start_idx = fallback_m.start()
         context_before = header_text[max(0, start_idx - 40):start_idx].lower()
         if not any(w in context_before for w in reject_words):
-            prefix = 'Lâm Đồng' if any(x in header_text for x in ['Lâm', 'lâm', 'LÂM']) else 'Đà Lạt'
-            date_str = f'{prefix}, ngày [chưa đọc được]'
+            prefix = "Lâm Đồng" if any(x in header_text.lower() for x in ["lâm", "lam", "đồng"]) else ("Đà Lạt" if any(x in header_text.lower() for x in ["đà lạt", "da lat"]) else "")
+            if prefix:
+                date_str = f'{prefix}, ngày [chưa đọc được]'
+            else:
+                date_str = 'ngày [chưa đọc được]'
             return header_text, date_str
 
     return header_text, None
@@ -311,8 +333,21 @@ def normalize_document_header(text: str) -> str:
         return text
 
     lines = text.split('\n')
-    header_lines = lines[:12]
-    body_lines = lines[12:]
+    
+    # Giới hạn phạm vi Header: chỉ lấy các dòng TRƯỚC tiêu đề văn bản chính (KẾ HOẠCH, QUYẾT ĐỊNH, THÔNG BÁO...)
+    title_idx = -1
+    for i, line in enumerate(lines[:18]):
+        if _DOC_TITLE_REGEX.search(line.strip()):
+            title_idx = i
+            break
+            
+    if title_idx != -1:
+        header_lines = lines[:title_idx]
+        body_lines = lines[title_idx:]
+    else:
+        header_lines = lines[:10]
+        body_lines = lines[10:]
+        
     header_text = '\n'.join(header_lines)
 
     # Bước 1: Chuẩn hóa Quốc hiệu / Tiêu ngữ và lấy thông tin

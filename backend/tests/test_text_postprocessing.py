@@ -556,6 +556,46 @@ class TestDocumentHeaderNormalizer:
         # The body text should remain untouched
         assert "Căn cứ Công văn số 4642/BGDĐT-HSSV ngày 08/8/2025" in normalized
 
+    def test_two_column_header_and_date_preserved(self):
+        from app.services.text_postprocessing.document_header_normalizer import normalize_document_header
+        sample = (
+            "BỘ GIÁO DỤC VÀ ĐÀO TẠO                CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
+            "TRƯỜNG ĐẠI HỌC ĐÀ LẠT                 Độc lập - Tự do - Hạnh phúc\n"
+            "Số: 1432/KH-ĐHĐL                      Lâm Đồng, ngày 29 tháng 8 năm 2025\n\n"
+            "KẾ HOẠCH\n"
+            "Tổ chức buổi gặp mặt nam sinh viên khoá 45 đi đào tạo sĩ quan dự bị năm 2025\n"
+            "2.1. Thời gian, địa điểm\n"
+            "- Thời gian: 08 giờ 00 ngày 04/9/2025 (thứ Năm)"
+        )
+        res = normalize_document_header(sample)
+        # Verify Lâm Đồng is preserved in header and not replaced by Đà Lạt
+        assert "Lâm Đồng, ngày 29 tháng 8 năm 2025" in res
+        # Verify body date is NOT stolen into the header
+        lines = [line.strip() for line in res.splitlines() if line.strip()]
+        header_date_lines = [l for l in lines[:5] if "ngày" in l]
+        assert any("29 tháng 8 năm 2025" in l for l in header_date_lines)
+        assert not any("04/9/2025" in l for l in header_date_lines)
+
+    def test_rejoin_paragraphs_preserves_structure(self):
+        from app.services.text_postprocessing import rejoin_paragraphs
+        text = (
+            "BỘ GIÁO DỤC VÀ ĐÀO TẠO                CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
+            "TRƯỜNG ĐẠI HỌC ĐÀ LẠT                 Độc lập - Tự do - Hạnh phúc\n"
+            "Số: 1432/KH-ĐHĐL                      Lâm Đồng, ngày 29 tháng 8 năm 2025\n"
+            "KẾ HOẠCH\n"
+            "Tổ chức buổi gặp mặt nam sinh viên khoá 45\n"
+            "1. MỤC ĐÍCH, YÊU CẦU\n"
+            "- Nhằm động viên sinh viên\n"
+            "hoàn thành tốt nhiệm vụ."
+        )
+        joined = rejoin_paragraphs(text)
+        lines = joined.splitlines()
+        # Headings and 2-column header lines should not be glued
+        assert any("KẾ HOẠCH" == l.strip() for l in lines)
+        assert any("1. MỤC ĐÍCH, YÊU CẦU" == l.strip() for l in lines)
+        assert any("- Nhằm động viên sinh viên hoàn thành tốt nhiệm vụ." == l.strip() for l in lines)
+
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

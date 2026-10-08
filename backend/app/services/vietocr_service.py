@@ -153,99 +153,153 @@ class VietOCRService:
         return [img for img, box in lines_with_boxes]
 
     def segment_lines_with_boxes(self, pil_image: Image.Image) -> tuple[list[tuple[Image.Image, tuple[int, int, int, int]]], int, np.ndarray | None]:
-        if cv2 is None:
-            return [(pil_image, (0, 0, pil_image.width, pil_image.height))], 15, None
-
         try:
             img_np = np.array(pil_image)
             if len(img_np.shape) == 3 and img_np.shape[2] == 4:
                 img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np.copy()
-            h_img, w_img = gray.shape[:2]
-
-            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
+                
             stamp_mask = self._get_red_stamp_mask(img_np)
-            if stamp_mask is not None:
-                binary = cv2.bitwise_and(binary, cv2.bitwise_not(stamp_mask))
-                logger.debug("segment_lines: đã xóa vùng con dấu đỏ")
+            
+            # Load EasyOCR only when needed
+            import easyocr
+            if not hasattr(self, '_easy_ocr'):
+                logger.info("Initializing EasyOCR...")
+                self._easy_ocr = easyocr.Reader(['vi'], gpu=False, verbose=False)
+                
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR) if len(img_np.shape) == 3 else img_np
+            # Detect returns (horizontal_list, free_list)
+            # horizontal_list format: [[[x_min, x_max, y_min, y_max], ...]]
+            horizontal_list, free_list = self._easy_ocr.detect(img_bgr)
+            
+            boxes = []
+            if horizontal_list and len(horizontal_list[0]) > 0:
+                boxes.extend(horizontal_list[0])
+            if free_list and len(free_list[0]) > 0:
+                # convert polygon to bounding box
+                for poly in free_list[0]:
+                    xs = [pt[0] for pt in poly]
+                    ys = [pt[1] for pt in poly]
+                    boxes.append([min(xs), max(xs), min(ys), max(ys)])
+                    
+            if not boxes:
+                return [], 15, stamp_mask
+                
+            img_w = img_np.shape[1] if len(img_np.shape) >= 2 else pil_image.width
+            img_h = img_np.shape[0] if len(img_np.shape) >= 2 else pil_image.height
 
-            # CCs for h_med — only use components > 12px tall to exclude diacritic strips
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
-            heights = [stats[i, cv2.CC_STAT_HEIGHT] for i in range(1, num_labels)
-                       if stats[i, cv2.CC_STAT_HEIGHT] > 12 and stats[i, cv2.CC_STAT_WIDTH] > 4]
-            h_med = np.median(heights) if heights else 15
-            h_med = max(10, int(h_med))
-
-            # Dilate: kw joins chars horizontally; kh=0.5*h_med merges diacritic strips into main body
-            kw = max(20, int(1.5 * h_med))
-            kh = max(2, int(0.5 * h_med))
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
-            dilated = cv2.dilate(binary, kernel, iterations=1)
-
-            contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            raw_boxes = [cv2.boundingRect(c) for c in contours]
-
-            # Merge overlapping/adjacent boxes on same row
-            merged_boxes = self._merge_boxes(raw_boxes, h_med)
-
-            # Keep boxes h >= 0.5*h_med; allow narrow w (section numbers, page numbers)
-            valid_boxes = [
-                (x, y, w, h) for x, y, w, h in merged_boxes
-                if h >= 0.5 * h_med and w >= 3
-            ]
-
-            # Split tall boxes using horizontal projection profile
-            split_boxes = []
-            for x, y, w, h in valid_boxes:
-                if h > 1.6 * h_med:
-                    sub_boxes = self._split_tall_box(binary, x, y, w, h, h_med)
-                    split_boxes.extend(sub_boxes)
+            # Merge boxes that belong to the same line (to fix "Độc lập - Tự do" being split)
+            def merge_boxes(boxes_list):
+                while True:
+                    merged = False
+                    new_boxes = []
+                    while boxes_list:
+                        box = boxes_list.pop(0)
+                        x1, x2, y1, y2 = box
+                        h = y2 - y1
+                        cx = (x1 + x2) / 2.0
+                        cy = (y1 + y2) / 2.0
+                        
+                        found_merge = False
+                        for i, m_box in enumerate(new_boxes):
+                            mx1, mx2, my1, my2 = m_box
+                            mh = my2 - my1
+                            mcx = (mx1 + mx2) / 2.0
+                            mcy = (my1 + my2) / 2.0
+                            
+                            # Ranh giới 2 cột ở phần Header (top 20% trang):
+                            # Cột trái (Cơ quan / Số hiệu) và Cột phải (Quốc hiệu / Ngày tháng)
+                            # TUYỆT ĐỐI KHÔNG GỘP NGANG XUYÊN QUA HAI CỘT
+                            is_header_zone = (cy < 0.20 * img_h and mcy < 0.20 * img_h)
+                            if is_header_zone:
+                                split_x = 0.46 * img_w
+                                if (cx < split_x and mcx > split_x) or (cx > split_x and mcx < split_x):
+                                    continue
+                            
+                            overlap_y = max(0, min(y2, my2) - max(y1, my1))
+                            if overlap_y > 0.4 * min(h, mh):
+                                gap = max(0, x1 - mx2 if x1 > mx2 else mx1 - x2)
+                                max_allowed_gap = 1.8 * max(h, mh)
+                                if gap <= max_allowed_gap:
+                                    new_boxes[i] = [min(x1, mx1), max(x2, mx2), min(y1, my1), max(y2, my2)]
+                                    found_merge = True
+                                    merged = True
+                                    break
+                                    
+                        if not found_merge:
+                            new_boxes.append(box)
+                            
+                    boxes_list = new_boxes
+                    if not merged:
+                        break
+                return boxes_list
+                
+            boxes = merge_boxes(boxes)
+                
+            # Sắp xếp thứ tự đọc (Reading Order):
+            # Phần Header (top 16% trang): Cột trái trước (từ trên xuống dưới),
+            # sau đó Cột phải (từ trên xuống dưới).
+            # Phần Thân: tuần tự theo trục Y từ trên xuống dưới.
+            header_threshold_y = 0.12 * img_h
+            split_x = 0.46 * img_w
+            
+            header_left = []
+            header_right = []
+            body_boxes = []
+            
+            for b in boxes:
+                cy = (b[2] + b[3]) / 2.0
+                cx = (b[0] + b[1]) / 2.0
+                bw = b[1] - b[0]
+                if cy < header_threshold_y and bw < 0.55 * img_w:
+                    if cx < split_x:
+                        header_left.append(b)
+                    else:
+                        header_right.append(b)
                 else:
-                    split_boxes.append((x, y, w, h))
-
-            ordered_boxes = self._sort_boxes_by_row(split_boxes, h_med)
-
-            # Split wide two-column header boxes (top 20%)
-            expanded = []
-            for x, y, w, h in ordered_boxes:
-                if w > w_img * 0.65 and y < h_img * 0.20:
-                    sub = self._split_two_column_advanced(binary, x, y, w, h, h_med)
-                    expanded.extend(sub)
-                else:
-                    expanded.append((x, y, w, h))
-
-            # Adaptive padding: top preserves diacritics, bottom is smaller to avoid grabbing next line
-            PAD_TOP = max(3, int(0.30 * h_med))
-            PAD_BOT = max(2, int(0.15 * h_med))
-            PAD_H   = max(2, int(0.15 * h_med))
-
+                    body_boxes.append(b)
+                    
+            header_left = sorted(header_left, key=lambda b: (b[2] + b[3]) / 2.0)
+            header_right = sorted(header_right, key=lambda b: (b[2] + b[3]) / 2.0)
+            body_boxes = sorted(body_boxes, key=lambda b: (b[2] + b[3]) / 2.0)
+            
+            boxes = header_left + header_right + body_boxes
+            
             lines_with_boxes = []
-            for x, y, w, h in expanded:
-                t  = max(0, y - PAD_TOP)
-                b  = min(h_img, y + h + PAD_BOT)
-                lo = max(0, x - PAD_H)
-                ro = min(w_img, x + w + PAD_H)
-
+            heights = []
+            
+            for box in boxes:
+                x_min, x_max, y_min, y_max = [int(v) for v in box]
+                x, y = x_min, y_min
+                w, h = x_max - x_min, y_max - y_min
+                
+                if w < 5 or h < 5:
+                    continue
+                
+                # Căn lề nhẹ thêm vì detector cắt rất khít
+                pad_top = max(2, int(0.15 * h))
+                pad_bot = max(2, int(0.10 * h))
+                pad_h   = max(3, int(0.15 * h))
+                
+                t  = max(0, y - pad_top)
+                b  = min(img_np.shape[0], y + h + pad_bot)
+                lo = max(0, x - pad_h)
+                ro = min(img_np.shape[1], x + w + pad_h)
+                
                 crop_np = img_np[t:b, lo:ro].copy()
-                # Clean stamp from crop: fill only red pixels, keep black text + blue handwriting
                 if stamp_mask is not None:
                     crop_np = self._clean_stamp_in_crop(crop_np, stamp_mask[t:b, lo:ro])
-
+                    
                 line_img = Image.fromarray(crop_np)
                 lines_with_boxes.append((line_img, (x, y, w, h)))
-
-            if lines_with_boxes:
-                logger.info(
-                    "Segmented {n} lines (raw={r}, valid={v}, {h}x{w}px, h_med={hm})",
-                    n=len(lines_with_boxes), r=len(raw_boxes), v=len(valid_boxes),
-                    h=h_img, w=w_img, hm=h_med
-                )
-                return lines_with_boxes, h_med, stamp_mask
+                heights.append(h)
+                
+            h_med = int(np.median(heights)) if heights else 15
+            logger.info("Segmented {n} lines using EasyOCR", n=len(lines_with_boxes))
+            return lines_with_boxes, h_med, stamp_mask
+            
         except Exception as exc:
-            logger.warning("segment_lines fallback: {err}", err=str(exc))
-
-        return [(pil_image, (0, 0, pil_image.width, pil_image.height))], 15, None
+            logger.warning("segment_lines_with_boxes fallback (EasyOCR error): {err}", err=str(exc))
+            return [(pil_image, (0, 0, pil_image.width, pil_image.height))], 15, None
 
     # ── Helpers tách dòng ──────────────────────────────────────────────────────
 
@@ -374,8 +428,9 @@ class VietOCRService:
         split_y = []
         in_gap = False
         gap_start = 0
+        noise_thresh = 255 * max(2, int(w * 0.005))
         for r, val in enumerate(row_hist):
-            if val == 0:
+            if val <= noise_thresh:
                 if not in_gap:
                     in_gap = True
                     gap_start = r
@@ -389,6 +444,14 @@ class VietOCRService:
         # Check for trailing gap
         if in_gap and (h - gap_start) >= 2:
             split_y.append((gap_start + h) // 2)
+
+        # Fallback: if no gap found but box is very tall (likely touching lines), split at argmin in middle 60%
+        if not split_y and h > 2.2 * h_med:
+            mid_start = int(0.2 * h)
+            mid_end = int(0.8 * h)
+            min_val = min(row_hist[mid_start:mid_end])
+            min_idx = mid_start + list(row_hist[mid_start:mid_end]).index(min_val)
+            split_y.append(min_idx)
 
         if not split_y:
             return [(x, y, w, h)]
@@ -404,7 +467,20 @@ class VietOCRService:
         if last_h >= max(4, int(0.4 * h_med)):
             boxes.append((x, y + last_y, w, last_h))
 
-        return boxes if len(boxes) > 1 else [(x, y, w, h)]
+        # Check if any box is STILL too tall. If so, split by argmin.
+        final_boxes = []
+        for bx, by, bw, bh in boxes:
+            if bh > 2.2 * h_med:
+                mid_start = int(0.3 * bh)
+                mid_end = int(0.7 * bh)
+                min_val = min(row_hist[by-y+mid_start:by-y+mid_end])
+                min_idx = mid_start + list(row_hist[by-y+mid_start:by-y+mid_end]).index(min_val)
+                final_boxes.append((bx, by, bw, min_idx))
+                final_boxes.append((bx, by + min_idx, bw, bh - min_idx))
+            else:
+                final_boxes.append((bx, by, bw, bh))
+
+        return final_boxes if len(final_boxes) > 1 else [(x, y, w, h)]
 
     @staticmethod
     def _split_two_column_advanced(
@@ -472,9 +548,33 @@ class VietOCRService:
         if w > 3 * h_med and len(t) < 3 and not re.search(r'\d', t):
             return True
             
+        # Drop lines that are clearly diacritic strips (height very small)
+        if h <= max(12, int(0.6 * h_med)) and w > 100:
+            # Exception for page numbers, document numbers, or standard valid words
+            if t not in {"THÔNG BÁO", "KẾ HOẠCH", "BÁO CÁO"} and not re.search(r'Số:\s*\d+', t) and not re.fullmatch(r'\d+', t):
+                return True
+
         # Hallucination guard: crop rất hẹp nhưng text trả về lại rất dài
         if w < 2 * h_med and len(t) > 6:
             return True
+
+        # Text/crop width mismatch guard:
+        # Standard character width is roughly h_med * 0.4 to 0.7.
+        # If crop is very wide, but text is very short, or vice versa
+        if w > 15 * h_med and len(t) < w / (h_med * 1.8) and not re.search(r'\d{8,}', t):
+            # Exception for a few spaced characters, but usually it's noise
+            if len(t) > 3:
+                return True
+
+        # Vowel-consonant / Syllable validity ratio
+        words = t.split()
+        if len(words) > 2:
+            vowels = "aeiouyáàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ"
+            valid_syllables = sum(1 for w_tok in words if any(v in w_tok.lower() for v in vowels) and re.search(r'[A-Za-z\u00C0-\u1EF9]', w_tok))
+            # If less than 30% of alphabetical words are valid syllables (have vowels)
+            alpha_words = [w_tok for w_tok in words if re.search(r'[A-Za-z\u00C0-\u1EF9]', w_tok)]
+            if len(alpha_words) >= 3 and (valid_syllables / len(alpha_words)) < 0.3:
+                return True
 
         # Drop lines that are ONLY digits/short tokens, UNLESS context rule matches
         is_page_number = re.fullmatch(r'\d+', t) and w < 4 * h_med and (y < 0.15 * img_h or y > 0.85 * img_h) and (0.35 * img_w < x < 0.65 * img_w)
@@ -503,6 +603,10 @@ class VietOCRService:
             
         # Ảo giác dấu chấm/gạch ngang
         if len(re.findall(r'[\.\-\_~]', t)) >= 12:
+            return True
+
+        # Ảo giác watermark mờ rác
+        if len(re.findall(r'\"\"+', t)) >= 2 or len(re.findall(r'\d/\d/\d/\d', t)) >= 1 or '??T2' in t or 'yhng' in t or 'nghvay' in t or 'vụvv' in t or 'viv' in t:
             return True
 
         # Lặp từ do con dấu tròn đỏ
@@ -687,7 +791,7 @@ class VietOCRService:
             else:
                 if self._is_noise_line_advanced(text, box, img_w, img_h, h_med, stamp_mask):
                     drop_reason = "noise_line_advanced"
-                elif conf < 0.30:  # Drop lines that are extremely low confidence (likely hallucination)
+                elif conf < 0.60:  # Drop lines that are low confidence (likely hallucination or junk)
                     drop_reason = f"low_conf:{conf:.2f}"
 
             if not drop_reason:
@@ -890,15 +994,13 @@ class VietOCRService:
 
     # ── OCR toàn file ─────────────────────────────────────────────────────────
     def extract_text_from_file(
-        self, file_bytes: bytes, file_type: str, engine: str | None = None
-    ) -> tuple[str, str, float]:
+        self, file_bytes: bytes, file_type: str, engine: str | None = None, pages: list[int] | int | None = None
+    ) -> tuple[str, str, float, int]:
         """
         Trích xuất toàn văn từ file PDF hoặc Ảnh (JPG, PNG, TIFF).
 
         Returns:
-            (raw_text, processed_text, heuristic_quality_score)
-            raw_text       — văn bản OCR thô ngay sau model
-            processed_text — sau post-processing (sửa lỗi, chuẩn hoá NFC)
+            (raw_text, processed_text, heuristic_quality_score, page_count)
         """
         file_ext = file_type.lower().replace(".", "")
         _s = self._get_settings()
@@ -910,32 +1012,45 @@ class VietOCRService:
         selected_engine = engine or (getattr(_s, "ocr_engine", "vietocr") if _s else "vietocr")
 
         logger.info(
-            "OCR: engine={eng}, dpi={dpi}, fast={fm}, tables={et}",
-            eng=selected_engine, dpi=_render_dpi, fm=_fast_mode, et=_extract_tables,
+            "OCR: engine={eng}, dpi={dpi}, fast={fm}, tables={et}, pages={p}",
+            eng=selected_engine, dpi=_render_dpi, fm=_fast_mode, et=_extract_tables, p=pages
         )
+
+        page_count = 1
 
         # ── PDF ──────────────────────────────────────────────────────────────
         if file_ext == "pdf":
             if pymupdf is not None:
                 try:
                     doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+                    page_count = len(doc)
+                    
+                    target_pages = []
+                    if isinstance(pages, int):
+                        target_pages = list(range(min(pages, page_count)))
+                    elif isinstance(pages, list):
+                        target_pages = [p for p in pages if 0 <= p < page_count]
+                    else:
+                        target_pages = list(range(page_count))
 
                     # PDF có text layer → trích xuất trực tiếp (siêu tốc)
                     if selected_engine == "vietocr":
-                        pages_text = [page.get_text().strip() for page in doc]
-                        pages_text = [t for t in pages_text if t]
-                        if pages_text and len("\n".join(pages_text)) > 20:
-                            raw_full = "\n\n".join(pages_text)
+                        # Luôn trích xuất TẤT CẢ các trang đối với text-layer PDF, bất kể target_pages
+                        all_pages_text = [doc[idx].get_text().strip() for idx in range(page_count)]
+                        all_pages_text = [t for t in all_pages_text if t]
+                        # Only use text layer if it has some substantial text (>= 50 chars)
+                        if all_pages_text and len("\n".join(all_pages_text)) >= 50:
+                            raw_full = "\n\n".join(all_pages_text)
                             processed_full = self.post_process_vietnamese(raw_full)
-                            logger.info("Direct text PDF: {p} trang, {c} ký tự",
-                                        p=len(doc), c=len(processed_full))
-                            return raw_full, processed_full, self.calculate_confidence_score(processed_full, "direct_pdf")
+                            logger.info("Direct text PDF: {p} trang (yêu cầu {tp} nhưng đã lấy toàn bộ), {c} ký tự",
+                                        p=page_count, tp=len(target_pages), c=len(processed_full))
+                            return raw_full, processed_full, self.calculate_confidence_score(processed_full, "direct_pdf"), page_count
 
                     # PDF scan ảnh
                     raw_pages: list[str]       = []
                     processed_pages: list[str] = []
-                    total = len(doc)
-                    for idx, page in enumerate(doc):
+                    for idx in target_pages:
+                        page = doc[idx]
                         t0 = time.time()
                         pix = page.get_pixmap(dpi=_render_dpi)
                         page_img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
@@ -946,7 +1061,7 @@ class VietOCRService:
                             page_num=idx + 1,
                         )
                         logger.info("OCR trang {i}/{t} [{eng}] | {s:.1f}s",
-                                    i=idx + 1, t=total, eng=selected_engine, s=time.time() - t0)
+                                    i=idx + 1, t=page_count, eng=selected_engine, s=time.time() - t0)
                         if page_raw:
                             raw_pages.append(page_raw)
                         if page_proc:
@@ -955,7 +1070,7 @@ class VietOCRService:
                     if raw_pages:
                         raw_full       = "\n\n".join(raw_pages)
                         processed_full = self.post_process_vietnamese("\n\n".join(processed_pages))
-                        return raw_full, processed_full, self.calculate_confidence_score(processed_full, selected_engine)
+                        return raw_full, processed_full, self.calculate_confidence_score(processed_full, selected_engine), page_count
                 except Exception as exc:
                     logger.warning("PyMuPDF OCR failed: {err}", err=str(exc))
 
@@ -963,26 +1078,38 @@ class VietOCRService:
             if pypdf is not None and selected_engine == "vietocr":
                 try:
                     reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-                    texts  = [p.extract_text() or "" for p in reader.pages if p.extract_text()]
-                    if texts and len("\n".join(texts)) > 30:
+                    page_count = len(reader.pages)
+                    
+                    target_pages = []
+                    if isinstance(pages, int):
+                        target_pages = list(range(min(pages, page_count)))
+                    elif isinstance(pages, list):
+                        target_pages = [p for p in pages if 0 <= p < page_count]
+                    else:
+                        target_pages = list(range(page_count))
+                        
+                    # Extract all pages for text-layer PDFs
+                    texts  = [page.extract_text() or "" for page in reader.pages]
+                    texts  = [t for t in texts if t]
+                    if texts and len("\n".join(texts)) >= 50:
                         raw_full  = "\n\n".join(texts)
                         proc_full = self.post_process_vietnamese(raw_full)
-                        return raw_full, proc_full, self.calculate_confidence_score(proc_full, "pypdf")
+                        return raw_full, proc_full, self.calculate_confidence_score(proc_full, "pypdf"), page_count
                 except Exception:
                     pass
 
-            return "", "", 0.0
+            return "", "", 0.0, page_count
 
         # ── Ảnh (JPG / PNG / TIFF) ───────────────────────────────────────────
         try:
             image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
             raw_text, processed_text = self._ocr_image(image, page_num=1)
             if raw_text:
-                return raw_text, processed_text, self.calculate_confidence_score(processed_text, selected_engine)
+                return raw_text, processed_text, self.calculate_confidence_score(processed_text, selected_engine), page_count
         except Exception as exc:
             logger.warning("Image OCR failed: {err}", err=str(exc))
 
-        return "", "", 0.0
+        return "", "", 0.0, page_count
 
     # ── So sánh engine ────────────────────────────────────────────────────────
     def compare_ocr_engines(self, file_bytes: bytes, file_type: str) -> dict[str, Any]:
@@ -998,11 +1125,11 @@ class VietOCRService:
                 if eng_key == "tesseract":
                     try:
                         from app.services.tesseract_service import tesseract_service
-                        raw_text, processed_text, conf = tesseract_service.extract_text_from_file(file_bytes, file_type)
+                        raw_text, processed_text, conf, pc = tesseract_service.extract_text_from_file(file_bytes, file_type)
                     except Exception:
-                        raw_text, processed_text, conf = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                        raw_text, processed_text, conf, pc = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
                 else:
-                    raw_text, processed_text, conf = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                    raw_text, processed_text, conf, pc = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
                 
                 text = processed_text or raw_text
                 results[eng_key] = {

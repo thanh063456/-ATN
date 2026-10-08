@@ -110,6 +110,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             raw_text = ""
             processed_text = ""
             confidence = 0.0
+            page_count = 1
 
             try:
                 # Read settings
@@ -120,9 +121,14 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 if ocr_scope == "first_page":
                     target_pages = list(range(ocr_first_page_count))
                     
-                raw_text, processed_text, confidence, page_count = await asyncio.to_thread(
+                ocr_res = await asyncio.to_thread(
                     service.extract_text_from_file, file_bytes, doc.file_type, target_engine, target_pages
                 )
+                if isinstance(ocr_res, (list, tuple)) and len(ocr_res) >= 4:
+                    raw_text, processed_text, confidence, page_count = ocr_res[:4]
+                elif isinstance(ocr_res, (list, tuple)) and len(ocr_res) == 3:
+                    raw_text, processed_text, confidence = ocr_res[:3]
+                    page_count = 1
             except Exception as exc:
                 exc_str = str(exc)
                 if exc_str.startswith("LOW_QUALITY:"):
