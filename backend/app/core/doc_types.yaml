@@ -1,0 +1,115 @@
+types:
+  - code: "THONG_BAO"
+    name: "Thông báo"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["thong bao", "thong bac"]
+    so_hieu_patterns: ["TB", "TB-"]
+    body_hints: ["nay thong bao", "thong bao den"]
+
+  - code: "KE_HOACH"
+    name: "Kế hoạch"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["ke hoach"]
+    so_hieu_patterns: ["KH", "KH-"]
+    body_hints: ["ban hanh ke hoach", "muc tieu", "yeu cau"]
+
+  - code: "QUYET_DINH"
+    name: "Quyết định"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["quyet dinh", "quyet dnh"]
+    so_hieu_patterns: ["QD", "QĐ", "QD-", "QĐ-"]
+    body_hints: ["quyet dinh:", "dieu 1", "dieu 2"]
+
+  - code: "HUONG_DAN"
+    name: "Hướng dẫn"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["huong dan"]
+    so_hieu_patterns: ["HD", "HD-"]
+    body_hints: ["cac buoc", "huong dan thuc hien"]
+
+  - code: "BAO_CAO"
+    name: "Báo cáo"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["bao cao"]
+    so_hieu_patterns: ["BC", "BC-"]
+    body_hints: ["tinh hinh", "ket qua"]
+
+  - code: "TO_TRINH"
+    name: "Tờ trình"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["to trinh"]
+    so_hieu_patterns: ["TTr", "TTr-"]
+    body_hints: ["kinh trinh", "de nghi"]
+
+  - code: "CONG_VAN"
+    name: "Công văn"
+    group: "CONG_VAN"
+    title_patterns: []
+    so_hieu_patterns: ["CV", "CV-"]
+    body_hints: ["kinh gui", "v/v", "ve viec"]
+
+  - code: "GIAY_MOI"
+    name: "Giấy mời"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["giay moi"]
+    so_hieu_patterns: ["GM", "GM-"]
+    body_hints: ["tran trong kinh moi", "toi du"]
+
+  - code: "BIEN_BAN"
+    name: "Biên bản"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["bien ban"]
+    so_hieu_patterns: ["BB", "BB-"]
+    body_hints: ["thanh phan tham du", "noi dung cuoc hop"]
+
+  - code: "DANH_SACH"
+    name: "Danh sách"
+    group: "DANH_SACH"
+    title_patterns: ["danh sach"]
+    so_hieu_patterns: ["DS", "DS-"]
+    body_hints: ["stt", "ho va ten", "mssv"]
+
+  - code: "DIEU_LE_QUY_CHE"
+    name: "Điều lệ / Quy chế"
+    group: "VAN_BAN_HANH_CHINH"
+    title_patterns: ["dieu le", "quy che", "quy dinh"]
+    so_hieu_patterns: ["QC", "QC-", "DL", "DL-", "QDi"]
+    body_hints: ["chuong i", "dieu 1"]
+
+  - code: "DON_TU"
+    name: "Đơn từ"
+    group: "DON_TU"
+    title_patterns: ["don xin", "don de nghi", "giay de nghi", "don"]
+    so_hieu_patterns: []
+    body_hints: ["kinh gui", "em ten la", "ho va ten"]
+    subtypes:
+      - code: "hoc_bong"
+        keywords: ["hoc bong"]
+      - code: "mien_giam_hoc_phi"
+        keywords: ["mien giam", "hoc phi"]
+      - code: "bao_luu"
+        keywords: ["bao luu", "ket qua hoc tap"]
+      - code: "nghi_hoc_tam_thoi"
+        keywords: ["nghi hoc tam thoi"]
+      - code: "xac_nhan_sinh_vien"
+        keywords: ["xac nhan sinh vien"]
+      - code: "cap_lai_the"
+        keywords: ["cap lai the", "lam lai the"]
+      - code: "gia_han_hoc_tap"
+        keywords: ["gia han hoc tap", "keo dai thoi gian"]
+      - code: "khac"
+        keywords: []
+
+  - code: "GIAY_XAC_NHAN"
+    name: "Giấy xác nhận"
+    group: "DON_TU"
+    title_patterns: ["giay xac nhan", "xac nhan"]
+    so_hieu_patterns: ["GXN", "GXN-"]
+    body_hints: ["chung nhan", "xac nhan"]
+
+  - code: "KHAC"
+    name: "Khác"
+    group: "KHAC"
+    title_patterns: []
+    so_hieu_patterns: []
+    body_hints: []

@@ -194,6 +194,11 @@ async def init_db() -> None:
                 else:
                     await session.commit()
                     logger.info("Database initialized default roles for production/staging (no demo users seeded).")
+
+                # Seed document categories from doc_types.yaml
+                from app.core.doc_types_config import seed_document_categories
+                await seed_document_categories(session)
+
             except Exception as seed_exc:
                 await session.rollback()
                 logger.warning("Seed initialization note: {err}", err=str(seed_exc))
