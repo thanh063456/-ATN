@@ -61,6 +61,7 @@ async def init_db() -> None:
                 pool_size=settings.db_pool_size,
                 max_overflow=settings.db_max_overflow,
                 pool_timeout=5,
+                pool_recycle=60,
                 pool_pre_ping=True,
                 connect_args=connect_args,
             )

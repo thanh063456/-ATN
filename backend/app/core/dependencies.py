@@ -6,6 +6,7 @@ Cung cấp:
 - get_current_user_optional: Xác thực nếu có token, không bắt buộc
 - require_roles: RBAC Guard chặn theo vai trò (ADMIN, STAFF, STUDENT)
 """
+import asyncio
 from typing import Sequence
 from uuid import UUID
 
@@ -56,7 +57,7 @@ async def _resolve_user_from_token(
 
     # 2. Thử xác thực với Supabase Auth
     try:
-        supa_res = supabase_admin.auth.get_user(token)
+        supa_res = await asyncio.to_thread(supabase_admin.auth.get_user, token)
         if supa_res and supa_res.user:
             supa_user = supa_res.user
             supa_uid = str(supa_user.id)

@@ -87,6 +87,9 @@ export interface DocumentMetadata {
 export interface DocumentDetail extends DocumentSummary {
   page_count?: number;
   category_id?: string;
+  category?: { id: string; code: string; name: string };
+  category_name?: string;
+  category_code?: string;
   uploaded_by?: string;
   is_deleted: boolean;
   updated_at: string;
