@@ -93,7 +93,44 @@ OCR_CHAR_RULES: list[tuple[str, str, int, str]] = [
         0,
         'roman_I1_to_II: "I1." → "II."',
     ),
+    (
+        r'\bIL[\.\,\s]+(?=[A-ZÀ-Ỹ])',
+        r'II. ',
+        0,
+        'roman_IL_to_II: "IL." hoặc "IL " → "II."',
+    ),
+    (
+        r'\bIIL[\.\,\s]+(?=[A-ZÀ-Ỹ])',
+        r'III. ',
+        0,
+        'roman_IIL_to_III: "IIL." hoặc "IIL " → "III."',
+    ),
+    (
+        r'\bCăn\s+cứ\?',
+        r'Căn cứ',
+        re.IGNORECASE,
+        'can_cu_question_mark: "Căn cứ?" → "Căn cứ"',
+    ),
+    # OCR lộn dấu cộng thành số 4 hoặc gạch ngang đầu dòng
+    (
+        r'^[\-\s4]+(Bước\s+\d+:)',
+        r'+ \1',
+        re.MULTILINE,
+        'bullet_plus_buoc: OCR lầm dấu + thành 4 hoặc - trước chữ Bước',
+    ),
     # Dấu ngoặc đơn/vuông lạc giữa từ và khoảng trắng
+    (
+        r'\bthủ\s+đoan\s+tới\s+nhạm\b',
+        r'thủ đoạn tội phạm',
+        re.IGNORECASE,
+        'title_thu_doan_toi_pham: "thủ đoan tới nhạm" → "thủ đoạn tội phạm"',
+    ),
+    (
+        r'\bthủ\s+đoạn\s+tới\s+nhạm\b',
+        r'thủ đoạn tội phạm',
+        re.IGNORECASE,
+        'title_thu_doan_toi_pham_2: "thủ đoạn tới nhạm" → "thủ đoạn tội phạm"',
+    ),
     (
         r'([a-zA-ZÀ-ỹ0-9])\]\s+([a-zA-ZÀ-ỹ])',
         r'\1 \2',

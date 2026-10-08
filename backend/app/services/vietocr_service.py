@@ -106,42 +106,27 @@ class VietOCRService:
     # ── Tiền xử lý ảnh ────────────────────────────────────────────────────────
     def preprocess_image(self, pil_image: Image.Image) -> Image.Image:
         """
-        Tiền xử lý ảnh toàn trang:
-        Grayscale → CLAHE (tăng tương phản) → GaussianBlur (khử nhiễu nhẹ).
+        Bảo toàn độ nét và màu sắc tự nhiên của ảnh gốc cho detector EasyOCR và VietOCR.
+        Không áp dụng CLAHE hay GaussianBlur toàn trang làm vỡ nét chữ và gây đứt đoạn dòng văn bản.
         """
-        if cv2 is None:
-            return pil_image
-        try:
-            img_np = np.array(pil_image)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            enhanced = clahe.apply(gray)
-            blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
-            return Image.fromarray(blurred)
-        except Exception as exc:
-            logger.debug("preprocess_image fallback: {err}", err=str(exc))
-            return pil_image
+        return pil_image
 
     def preprocess_handwriting(self, pil_image: Image.Image) -> Image.Image:
         """
         Tiền xử lý từng dòng ảnh:
-        Upscale nếu < 48px cao → CLAHE → Padding chống cắt dấu tiếng Việt.
+        Upscale nếu dòng quá thấp (< 32px) để mô hình nhận diện rõ dấu tiếng Việt.
+        Không áp dụng CLAHE để tránh gây nhiễu quầng sáng (halo) làm biến dạng nét chữ in chuẩn.
         """
         if cv2 is None:
             return pil_image
         try:
             img_np = np.array(pil_image)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np
-
-            h, w = gray.shape[:2]
-            if h < 48 and h > 0:
-                scale = min(2.0, max(1.5, 56.0 / h))
-                gray = cv2.resize(gray, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-
-            clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(4, 4))
-            enhanced = clahe.apply(gray)
-            padded = cv2.copyMakeBorder(enhanced, 4, 4, 6, 6, cv2.BORDER_CONSTANT, value=255)
-            return Image.fromarray(padded)
+            h, w = img_np.shape[:2]
+            if 0 < h < 32:
+                scale = min(2.0, 36.0 / h)
+                resized = cv2.resize(img_np, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+                return Image.fromarray(resized)
+            return pil_image
         except Exception as exc:
             logger.debug("preprocess_handwriting fallback: {err}", err=str(exc))
             return pil_image
@@ -591,10 +576,14 @@ class VietOCRService:
                 return True
                 
         # Filter garbage words and known hallucinated Latin long words
-        if t in ("2.2", "42", "4.2", "22", "Coll", "Chines", "CHILL", "0%", "2/42"):
+        if t in ("2.2", "42", "4.2", "22", "Coll", "Chines", "CHILL", "0%", "2/42", "Contracts", "Contract"):
             return True
             
-        if re.search(r'\b(?:Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\b', t, re.IGNORECASE):
+        if re.search(r'\b(?:Contracts?|Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\b', t, re.IGNORECASE):
+            return True
+
+        # Rác lề mép ngoài văn bản (x sát mép phải > 88% chiều rộng trang hoặc trái < 5%)
+        if (x > 0.88 * img_w or (x + w) < 0.05 * img_w) and w < 3 * h_med and not is_page_number:
             return True
 
         # Barcode dài nằm xen kẽ

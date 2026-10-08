@@ -47,6 +47,11 @@ def rejoin_paragraphs(text: str) -> str:
             result.append(lines[i])
             continue
 
+        # Nếu dòng trước chỉ có chữ "Căn cứ" đứng riêng lẻ, ghép liền với văn bản căn cứ kế tiếp
+        if re.fullmatch(r'Căn\s+cứ[\:\.\,\?]*', prev, re.IGNORECASE):
+            result[-1] = "Căn cứ " + curr
+            continue
+
         # Không nối nếu dòng trước là tiêu đề / đề mục viết hoa (vd: "KẾ HOẠCH", "QUYẾT ĐỊNH", "I. MỤC ĐÍCH")
         if prev.isupper() and len(prev) >= 3:
             result.append(lines[i])
@@ -68,10 +73,10 @@ def rejoin_paragraphs(text: str) -> str:
             continue
 
         # CHỈ NỐI DÒNG nếu dòng hiện tại rõ ràng là phần tiếp nối của câu (bắt đầu bằng chữ thường)
-        # hoặc dòng trước kết thúc bằng dấu gạch nối ngắt từ
+        # hoặc dòng trước kết thúc bằng dấu gạch nối ngắt từ. Dùng curr[0].islower() chuẩn Unicode tiếng Việt.
         if prev.endswith('-') or prev.endswith('–'):
             result[-1] = result[-1].rstrip('-–') + curr
-        elif re.match(r'^[a-zà-ỹ]', curr):
+        elif curr and curr[0].islower():
             result[-1] = result[-1] + " " + curr
         else:
             result.append(lines[i])
