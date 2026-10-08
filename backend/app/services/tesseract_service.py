@@ -22,36 +22,35 @@ from PIL import Image
 
 from app.core.exceptions import EngineUnavailableError
 
-try:
-    import pytesseract
-    # Cấu hình đường dẫn Tesseract trên Windows nếu chưa có trong PATH
-    if platform.system() == "Windows":
-        for _candidate in [
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        ]:
-            if os.path.exists(_candidate):
-                pytesseract.pytesseract.tesseract_cmd = _candidate
-                break
-    # Trỏ TESSDATA_PREFIX về thư mục chứa model ngôn ngữ cục bộ
-    _local_tessdata = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../tessdata")
-    )
-    if os.path.exists(_local_tessdata):
-        if platform.system() == "Windows" and any(ord(c) > 127 for c in _local_tessdata):
-            import subprocess
-            import tempfile
-            _temp_tessdata = os.path.join(tempfile.gettempdir(), "DocuCTSV_tessdata_link")
-            if not os.path.exists(_temp_tessdata):
-                try:
-                    subprocess.run(f'cmd /c mklink /J "{_temp_tessdata}" "{_local_tessdata}"', shell=True, check=True)
-                except Exception:
-                    pass
-            os.environ["TESSDATA_PREFIX"] = _temp_tessdata
-        else:
-            os.environ.setdefault("TESSDATA_PREFIX", _local_tessdata)
-except ImportError:
-    pytesseract = None  # type: ignore[assignment]
+import pytesseract
+
+# Cấu hình đường dẫn Tesseract trên Windows nếu chưa có trong PATH
+if platform.system() == "Windows":
+    for _candidate in [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ]:
+        if os.path.exists(_candidate):
+            pytesseract.pytesseract.tesseract_cmd = _candidate
+            break
+
+# Trỏ TESSDATA_PREFIX về thư mục chứa model ngôn ngữ cục bộ
+_local_tessdata = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../tessdata")
+)
+if os.path.exists(_local_tessdata):
+    if platform.system() == "Windows" and any(ord(c) > 127 for c in _local_tessdata):
+        import subprocess
+        import tempfile
+        _temp_tessdata = os.path.join(tempfile.gettempdir(), "DocuCTSV_tessdata_link")
+        if not os.path.exists(_temp_tessdata):
+            try:
+                subprocess.run(f'cmd /c mklink /J "{_temp_tessdata}" "{_local_tessdata}"', shell=True, check=True)
+            except Exception:
+                pass
+        os.environ["TESSDATA_PREFIX"] = _temp_tessdata
+    else:
+        os.environ.setdefault("TESSDATA_PREFIX", _local_tessdata)
 
 import cv2
 import numpy as np
@@ -97,8 +96,6 @@ class TesseractService:
         Kiểm tra Tesseract binary và traineddata.
         Raise EngineUnavailableError nếu không khả dụng.
         """
-        if pytesseract is None:
-            raise EngineUnavailableError("tesseract", "Thư viện 'pytesseract' chưa được cài đặt.")
         try:
             ver = pytesseract.get_tesseract_version()
             self.VERSION = str(ver)
@@ -202,7 +199,6 @@ class TesseractService:
         Lọc nhiễu và giữ nguyên cấu trúc đoạn văn.
         """
         self.check_availability()
-        assert pytesseract is not None
         processed = self.preprocess_for_tesseract(pil_image)
         
         # Step 3: TSV data
