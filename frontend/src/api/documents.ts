@@ -293,6 +293,16 @@ export const documentsApi = {
     return res.data;
   },
 
+  overrideType: async (id: string, category_code: string): Promise<any> => {
+    const res = await apiClient.patch(`/documents/${id}/type`, { category_code });
+    return res.data;
+  },
+
+  triggerOcrFull: async (id: string): Promise<any> => {
+    const res = await apiClient.post(`/documents/${id}/ocr-full`);
+    return res.data;
+  },
+
   getTagsSummary: async (): Promise<TagSummaryResponse> => {
     const res = await apiClient.get<TagSummaryResponse>("/documents/tags/summary");
     return res.data;

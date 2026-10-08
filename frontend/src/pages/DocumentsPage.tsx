@@ -598,6 +598,19 @@ export const DocumentsPage: React.FC = () => {
                               ) : code ? (
                                 <span style={{ color: "var(--primary-600)", fontWeight: 600 }}>{code}</span>
                               ) : null}
+                              {doc.category_code === 'KHAC' && (
+                                <span style={{
+                                  backgroundColor: "#fef2f2",
+                                  color: "#dc2626",
+                                  fontWeight: 700,
+                                  padding: "0.1rem 0.4rem",
+                                  borderRadius: "0.25rem",
+                                  border: "1px solid #fca5a5",
+                                  fontSize: "0.7rem",
+                                }}>
+                                  Cần kiểm tra
+                                </span>
+                              )}
                               <span>{(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
                               <span>•</span>
                               <span>{new Date(doc.created_at).toLocaleDateString("vi-VN")}</span>

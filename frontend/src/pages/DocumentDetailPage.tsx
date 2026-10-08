@@ -651,6 +651,30 @@ export const DocumentDetailPage: React.FC = () => {
     }
   };
 
+  const handleTriggerOcrFull = async () => {
+    if (!id) return;
+    try {
+      await documentsApi.triggerOcrFull(id);
+      addToast({ type: "success", title: "Thành công", message: "Đã kích hoạt quét OCR toàn văn bản." });
+      loadDoc();
+    } catch (err: any) {
+      addToast({ type: "error", title: "Lỗi", message: err.message || "Không thể chạy OCR full." });
+    }
+  };
+
+  const handleOverrideType = async () => {
+    if (!id) return;
+    const newCode = window.prompt("Nhập mã loại tài liệu (category code, VD: THONG_BAO, KE_HOACH, DON_TU):");
+    if (!newCode) return;
+    try {
+      await documentsApi.overrideType(id, newCode.toUpperCase().trim());
+      addToast({ type: "success", title: "Thành công", message: "Đã ghi đè loại tài liệu." });
+      loadDoc();
+    } catch (err: any) {
+      addToast({ type: "error", title: "Lỗi", message: err.message || "Không thể cập nhật loại." });
+    }
+  };
+
   const handleReprocessOCR = async (engine: string) => {
     if (!id) return;
     try {
@@ -844,6 +868,9 @@ export const DocumentDetailPage: React.FC = () => {
                   Phê duyệt hồ sơ
                 </Button>
               )}
+              <Button variant="outline" size="sm" onClick={handleTriggerOcrFull} leftIcon={<RefreshCw size={14} />}>
+                Quét OCR Toàn Bộ
+              </Button>
               {!isRejected && (
                 <Button variant="danger" size="sm" onClick={handleReject} leftIcon={<XCircle size={14} />}>
                   Từ chối
@@ -2049,9 +2076,14 @@ export const DocumentDetailPage: React.FC = () => {
 
               <div style={fieldBoxStyle}>
                 <span style={fieldLabelStyle}>Loại đơn từ:</span>
-                <span style={{ ...fieldValueStyle, fontWeight: 600, color: "#0284c7" }}>
-                  {aiExtractData?.document_type || doc.metadata?.extra?.document_type || "Hồ sơ / Đơn từ CTSV"}
-                </span>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <span style={{ ...fieldValueStyle, fontWeight: 600, color: "#0284c7" }}>
+                    {aiExtractData?.document_type || doc.metadata?.extra?.document_type || "Hồ sơ / Đơn từ CTSV"}
+                  </span>
+                  {isStaffOrAdmin && (
+                    <button onClick={handleOverrideType} style={{ fontSize: "10px", padding: "2px 5px", cursor: "pointer", border: "1px solid #0284c7", background: "white", borderRadius: "3px", color: "#0284c7" }}>Sửa</button>
+                  )}
+                </div>
               </div>
 
               {(aiExtractData?.amount || doc.metadata?.extra?.amount) && (

@@ -255,6 +255,11 @@ export const SearchPage: React.FC = () => {
                 <option value="HOC_BONG">Hồ sơ xét học bổng</option>
                 <option value="KHEN_THUONG">Khen thưởng - Kỷ luật</option>
                 <option value="MIEN_GIAM_HOC_PHI">Miễn giảm học phí</option>
+                <option value="THONG_BAO">Thông báo</option>
+                <option value="KE_HOACH">Kế hoạch</option>
+                <option value="QUYET_DINH">Quyết định</option>
+                <option value="CONG_VAN">Công văn</option>
+                <option value="KHAC">Khác / Cần kiểm tra</option>
               </select>
             </div>
 
