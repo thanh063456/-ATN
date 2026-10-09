@@ -262,6 +262,15 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 )
                 session.add(new_meta)
 
+            # Trích xuất các thuộc tính cần thiết trước khi commit để tránh lỗi Lazy Loading/Attribute Expiration
+            doc_id_val = doc.id
+            doc_title_val = doc.title
+            doc_uploaded_by_val = doc.uploaded_by
+            doc_is_deleted_val = doc.is_deleted
+            doc_created_at_val = doc.created_at
+            final_cat_code = cat_code or (doc.category.code if doc.category else None)
+            final_cat_name = cat_name or (doc.category.name if doc.category else None)
+
             # ── 8. Cập nhật Document và Job hoàn thành (progress: 100%) ────────
             await session.execute(
                 update(Document)
@@ -278,22 +287,22 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             # ── 9. Backend chủ động index sang Elasticsearch ───────────────────
             try:
                 await search_index_service.index_document(
-                    document_id=doc.id,
-                    title=doc.title,
+                    document_id=doc_id_val,
+                    title=doc_title_val,
                     content=raw_text,
-                    category_code=cat_code if cat_code else (doc.category.code if doc.category else None),
-                    category_name=cat_name if cat_name else (doc.category.name if doc.category else None),
+                    category_code=final_cat_code,
+                    category_name=final_cat_name,
                     student_id=final_student_id,
                     student_name=final_student_name,
                     document_date=doc_date.isoformat() if doc_date else None,
                     document_number=final_doc_no,
-                    uploaded_by=doc.uploaded_by,
+                    uploaded_by=doc_uploaded_by_val,
                     ocr_status="DONE",
                     ocr_confidence=confidence,
-                    is_deleted=doc.is_deleted,
-                    created_at=doc.created_at,
-                    updated_at=doc.updated_at,
-                    document_type=cat_code if cat_code else (doc.category.code if doc.category else None),
+                    is_deleted=doc_is_deleted_val,
+                    created_at=doc_created_at_val,
+                    updated_at=now,
+                    document_type=final_cat_code,
                     document_subtype=doctype_result.subtype,
                 )
                 logger.info("Indexed document {id} into Elasticsearch successfully", id=document_id)
@@ -437,12 +446,26 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
                 doc.metadata_.extra["ocr_scope"] = "full"
                 doc.metadata_.extra["pages_ocr"] = page_count
 
+            # Trích xuất trước khi commit để tránh lỗi lazy loading
+            doc_id_val = doc.id
+            doc_title_val = doc.title
+            doc_uploaded_by_val = doc.uploaded_by
+            doc_is_deleted_val = doc.is_deleted
+            doc_created_at_val = doc.created_at
+            cat_code = doc.category.code if doc.category else None
+            cat_name = doc.category.name if doc.category else None
+            meta_student_id = doc.metadata_.student_id if doc.metadata_ else None
+            meta_student_name = doc.metadata_.student_name if doc.metadata_ else None
+            meta_doc_date = doc.metadata_.document_date.isoformat() if doc.metadata_ and doc.metadata_.document_date else None
+            meta_doc_no = doc.metadata_.document_number if doc.metadata_ else None
+            meta_subtype = doc.metadata_.extra.get("document_subtype") if doc.metadata_ and doc.metadata_.extra else None
+
             await session.execute(update(Document).where(Document.id == doc_uuid).values(ocr_status="DONE", updated_at=now))
             await session.commit()
 
             # Audit log for full OCR
             audit_full = AuditLog(
-                user_id=doc.uploaded_by,
+                user_id=doc_uploaded_by_val,
                 action="OCR_FULL_COMPLETED",
                 resource_type="document",
                 resource_id=doc_uuid,
@@ -457,28 +480,25 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
             await session.commit()
 
             # Re-index
-            cat_code = doc.category.code if doc.category else None
-            cat_name = doc.category.name if doc.category else None
-            
             try:
                 await search_index_service.index_document(
-                    document_id=doc.id,
-                    title=doc.title,
+                    document_id=doc_id_val,
+                    title=doc_title_val,
                     content=new_raw,
                     category_code=cat_code,
                     category_name=cat_name,
-                    student_id=doc.metadata_.student_id if doc.metadata_ else None,
-                    student_name=doc.metadata_.student_name if doc.metadata_ else None,
-                    document_date=doc.metadata_.document_date.isoformat() if doc.metadata_ and doc.metadata_.document_date else None,
-                    document_number=doc.metadata_.document_number if doc.metadata_ else None,
-                    uploaded_by=doc.uploaded_by,
+                    student_id=meta_student_id,
+                    student_name=meta_student_name,
+                    document_date=meta_doc_date,
+                    document_number=meta_doc_no,
+                    uploaded_by=doc_uploaded_by_val,
                     ocr_status="DONE",
                     ocr_confidence=(latest_ocr.confidence_score + confidence) / 2 if latest_ocr else confidence,
-                    is_deleted=doc.is_deleted,
-                    created_at=doc.created_at,
-                    updated_at=doc.updated_at,
+                    is_deleted=doc_is_deleted_val,
+                    created_at=doc_created_at_val,
+                    updated_at=now,
                     document_type=cat_code,
-                    document_subtype=doc.metadata_.extra.get("document_subtype") if doc.metadata_ and doc.metadata_.extra else None,
+                    document_subtype=meta_subtype,
                 )
             except Exception as es_err:
                 logger.warning("ES indexing failed: {err}", err=str(es_err))
