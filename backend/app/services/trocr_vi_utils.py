@@ -85,7 +85,14 @@ def pad_image_to_square(image: Image.Image, target_size=384) -> Image.Image:
         max_dim = max(w, h)
         # Pad with white
         padding = (0, 0, max_dim - w, max_dim - h)
-        sq_img = ImageOps.expand(image, border=padding, fill=(255, 255, 255))
+        fill_color: int | tuple[int, ...]
+        if image.mode in ("L", "1"):
+            fill_color = 255
+        elif image.mode == "RGBA":
+            fill_color = (255, 255, 255, 255)
+        else:
+            fill_color = (255, 255, 255)
+        sq_img = ImageOps.expand(image, border=padding, fill=fill_color)
         
     if sq_img.size != (target_size, target_size):
         sq_img = sq_img.resize((target_size, target_size), Image.Resampling.LANCZOS)
