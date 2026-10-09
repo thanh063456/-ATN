@@ -10,6 +10,7 @@ Mọi ngưỡng số đọc từ app.core.config.settings.
 """
 from __future__ import annotations
 
+import os
 import re
 
 from loguru import logger
@@ -49,6 +50,16 @@ class TrOCREngine:
                 _s = self._get_settings()
                 model_name = getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
                 device     = getattr(_s, "trocr_device", "cpu")                                if _s else "cpu"
+
+                if device == "cuda" and not torch.cuda.is_available():
+                    logger.warning("CUDA không khả dụng, chuyển sang CPU cho TrOCR")
+                    device = "cpu"
+
+                if not os.path.exists(model_name) and not model_name.startswith("microsoft/"):
+                    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+                    cand = os.path.join(repo_root, model_name.lstrip("./\\"))
+                    if os.path.exists(cand):
+                        model_name = cand
 
                 logger.info("Initializing Microsoft TrOCR ({model}) on {device}...",
                             model=model_name, device=device)
@@ -116,7 +127,15 @@ class TrOCREngine:
                 )
 
             generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-            return [str(t).strip() for t in generated_texts]
+            cleaned_texts = []
+            for t in generated_texts:
+                s = str(t).strip()
+                if "   " in s:
+                    s = " ".join([w.replace(" ", "") for w in s.split("   ")])
+                elif len(s) > 1 and " " in s and not any(len(tok) > 1 for tok in s.split()):
+                    s = "".join(s.split())
+                cleaned_texts.append(s)
+            return cleaned_texts
 
         except Exception as exc:
             if isinstance(exc, EngineUnavailableError):
