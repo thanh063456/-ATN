@@ -126,15 +126,47 @@ class TrOCREngine:
 
     # ── Line OCR ──────────────────────────────────────────────────────────────
     def _chunk_and_pad(self, img: Image.Image) -> list[Image.Image]:
-        """Chunk long lines and pad with white (shared function)."""
-        from app.services.trocr_vi_utils import chunk_long_line, pad_image_to_square
-        
-        chunks = chunk_long_line(img, " " * 100, max_chars=25) # Mocking text length to force width-based chunking
-        
-        sq_chunks = []
-        for c_img, _ in chunks:
-            sq_chunks.append(pad_image_to_square(c_img, target_size=384))
-        return sq_chunks
+        """Chunk long lines and pad with white."""
+        from app.services.trocr_vi_utils import pad_image_to_square
+        import numpy as np
+
+        w, h = img.size
+        if h <= 0 or w <= 0:
+            return []
+
+        # If aspect ratio <= 3.5, pad directly to square
+        if w <= int(h * 3.5):
+            return [pad_image_to_square(img, target_size=384)]
+
+        # If long line, split into segments of max width ~3.5*h at whitespace columns
+        target_chunk_w = max(1, int(h * 3.5))
+        gray = np.array(img.convert("L"))
+        chunks = []
+        curr_x = 0
+
+        while curr_x < w:
+            end_x = min(w, curr_x + target_chunk_w)
+            if end_x >= w:
+                chunks.append(img.crop((curr_x, 0, w, h)))
+                break
+
+            # Search for the whitest column (inter-word gap) in [end_x - 0.25*target, end_x + 0.15*target]
+            search_start = max(curr_x + int(h * 1.5), end_x - int(target_chunk_w * 0.25))
+            search_end = min(w - 1, end_x + int(target_chunk_w * 0.15))
+
+            best_split = end_x
+            if search_end > search_start:
+                window = gray[:, search_start:search_end]
+                col_means = window.mean(axis=0)
+                best_split = search_start + int(np.argmax(col_means))
+
+            chunks.append(img.crop((curr_x, 0, best_split, h)))
+            curr_x = best_split
+
+        if not chunks:
+            chunks = [img]
+
+        return [pad_image_to_square(c_img, target_size=384) for c_img in chunks]
 
     def ocr_lines(
         self,

@@ -134,6 +134,12 @@ export const DocumentDetailPage: React.FC = () => {
       if (data.all_ocr_results && data.all_ocr_results.length > 0) {
         const engineResult = data.all_ocr_results.find(r => r.ocr_engine === selectedOcrEngine);
         setCorrectedText(engineResult?.corrected_text || engineResult?.raw_text || "");
+        if (runningEngine) {
+          const eng = data.all_ocr_results.find(r => r.ocr_engine === runningEngine);
+          if (eng && (eng.status === "DONE" || eng.status === "LOW_QUALITY" || eng.status === "FAILED")) {
+            setRunningEngine(null);
+          }
+        }
       } else {
         setCorrectedText("");
       }
@@ -234,13 +240,13 @@ export const DocumentDetailPage: React.FC = () => {
         setDoc(data);
         if (runningEngine) {
           const eng = data.all_ocr_results?.find(r => r.ocr_engine === runningEngine);
-          if (eng && (eng.status === "DONE" || eng.status === "FAILED")) {
+          if (eng && (eng.status === "DONE" || eng.status === "LOW_QUALITY" || eng.status === "FAILED")) {
             setRunningEngine(null);
-            if (eng.status === "DONE") {
+            if (eng.status === "DONE" || eng.status === "LOW_QUALITY") {
               addToast({
-                type: "success",
-                title: "Hoàn thành OCR",
-                message: `Mô hình ${runningEngine.toUpperCase()} đã quét xong.`,
+                type: eng.status === "LOW_QUALITY" ? "warning" : "success",
+                title: eng.status === "LOW_QUALITY" ? "Hoàn thành OCR (Độ tin cậy thấp)" : "Hoàn thành OCR",
+                message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} đã quét xong.`,
               });
               if (selectedOcrEngine === runningEngine) {
                 setCorrectedText(eng.corrected_text || eng.raw_text || "");
@@ -1386,7 +1392,7 @@ export const DocumentDetailPage: React.FC = () => {
               <div style={{ display: "flex", flex: 1, overflowX: "auto" }}>
                 {OCR_ENGINES.map((eng) => {
                   const res = doc?.all_ocr_results?.find((r: any) => r.ocr_engine === eng.id);
-                  const isRunning = runningEngine === eng.id || (doc?.ocr_status === "PROCESSING" && eng.id === "vietocr");
+                  const isRunning = (runningEngine === eng.id && (!res || res.status === "PROCESSING" || res.status === "PENDING")) || (doc?.ocr_status === "PROCESSING" && eng.id === "vietocr" && !res);
                   const isFailed = res?.status === "FAILED";
                   const isDone = res?.status === "DONE" || (res && !isFailed);
                   const isNotRun = !res && !isRunning;
@@ -1805,7 +1811,7 @@ export const DocumentDetailPage: React.FC = () => {
                       }}
                       placeholder="Nhập nội dung chỉnh sửa..."
                     />
-                  ) : runningEngine === selectedOcrEngine || (!getSelectedEngineResult() && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && selectedOcrEngine === "vietocr") ? (
+                  ) : ((runningEngine === selectedOcrEngine && (!getSelectedEngineResult() || getSelectedEngineResult()?.status === "PROCESSING" || getSelectedEngineResult()?.status === "PENDING")) || (!getSelectedEngineResult() && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && selectedOcrEngine === "vietocr")) ? (
                     <div
                       style={{
                         flex: 1,

@@ -128,27 +128,14 @@ class TrOCRService:
         unique_words = set(words)
         repeat_ratio = 1.0 - (len(unique_words) / len(words))
         
-        # ASCII-only ratio
-        ascii_chars = sum(1 for c in text if ord(c) < 128)
-        ascii_ratio = ascii_chars / len(text) if len(text) > 0 else 0
-        
-        # English-word ratio
-        english_words = {"receipt", "invoice", "cashier", "refund", "total", "pay", "date", "time"}
-        eng_count = sum(1 for w in words if w.lower() in english_words)
-        eng_ratio = eng_count / len(words)
-        
         # Bracket spam
         bracket_count = sum(1 for c in text if c in "()[]{}<>*")
         bracket_ratio = bracket_count / len(text) if len(text) > 0 else 0
         
         if repeat_ratio > 0.5 and len(words) > 10:
             return True, "Lặp từ quá nhiều (repeat ratio > 0.5)"
-        if eng_ratio > 0.2:
-            return True, "Nhiễu tiếng Anh (không được fine-tune cho tiếng Việt)"
-        if bracket_ratio > 0.1:
+        if bracket_ratio > 0.25:
             return True, "Nhiễu ký tự đặc biệt (bracket spam)"
-        if ascii_ratio > 0.95 and len(text) > 20:
-            return True, "Văn bản chủ yếu là ASCII, mất dấu tiếng Việt"
             
         return False, ""
 
@@ -290,9 +277,10 @@ class TrOCRService:
         
         is_degen, reason = self._is_degenerate(raw_text)
         if is_degen:
-            raise Exception(f"LOW_QUALITY: {reason}")
-            
-        confidence = self.heuristic_quality_score(processed_text) if processed_text else 0.0
+            logger.warning("TrOCR output may be low quality: {reason}", reason=reason)
+            confidence = min(0.35, self.heuristic_quality_score(processed_text)) if processed_text else 0.0
+        else:
+            confidence = self.heuristic_quality_score(processed_text) if processed_text else 0.0
 
         return raw_text, processed_text, confidence, page_count
 
