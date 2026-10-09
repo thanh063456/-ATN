@@ -35,23 +35,38 @@ if backend_path not in sys.path:
 from app.services.trocr_vi_utils import create_vi_tokenizer, pad_image_to_square
 
 
+_path_cache = {}
+
 def resolve_image_path(path_str: str, data_dir: str, base_dir: Path) -> str | None:
     """Kiểm tra và trả về đường dẫn ảnh tuyệt đối hợp lệ."""
     if not path_str or pd.isna(path_str):
         return None
     p = str(path_str).strip()
+    if p in _path_cache:
+        return _path_cache[p]
+
+    cand = base_dir / p
+    if cand.exists():
+        res = str(cand.resolve())
+        _path_cache[p] = res
+        return res
+
     if os.path.isabs(p) and os.path.exists(p):
+        _path_cache[p] = p
         return p
+
     candidates = [
-        base_dir / p,
         Path(data_dir) / p,
-        Path(data_dir) / "crops_new" / os.path.basename(p),
         base_dir / "dataset" / "crops_new" / os.path.basename(p),
+        Path(data_dir) / "crops_new" / os.path.basename(p),
         base_dir / "dataset" / p,
     ]
     for cand in candidates:
         if cand.exists():
-            return str(cand.resolve())
+            res = str(cand.resolve())
+            _path_cache[p] = res
+            return res
+    _path_cache[p] = None
     return None
 
 
@@ -137,6 +152,8 @@ def main():
     parser.add_argument("--epochs", type=int, default=5, help="Số epochs")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size trên mỗi GPU (RTX 3050 6GB khuyên dùng 4)")
     parser.add_argument("--grad_accum", type=int, default=4, help="Gradient accumulation steps (effective batch size = 4*4=16)")
+    parser.add_argument("--train_file", type=str, default=None, help="Đường dẫn file train cụ thể (tsv hoặc txt)")
+    parser.add_argument("--val_file", type=str, default=None, help="Đường dẫn file val cụ thể (tsv hoặc txt)")
     parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
     parser.add_argument("--fp16", action="store_true", default=None, help="Bật fp16 (tự động bật nếu có CUDA)")
     parser.add_argument("--resume", type=str, default=None, help="Resume từ checkpoint")
@@ -158,23 +175,35 @@ def main():
     
     # 1. Tìm file train và val
     candidate_train_paths = [
+        args.train_file,
+        args.data_dir if os.path.isfile(args.data_dir) else None,
+        os.path.join(args.data_dir, "train_annotation.txt"),
+        os.path.join(args.data_dir, "annotation_train.txt"),
         os.path.join(args.data_dir, f"train_{args.stage}.tsv"),
         os.path.join(args.data_dir, "splits", "train.tsv"),
         os.path.join(args.data_dir, "train.tsv"),
         os.path.join(args.data_dir, "annotations", "train_annotation.txt"),
+        os.path.join(project_root, "dataset", "annotations", "train_annotation.txt"),
+        os.path.join(project_root, "dataset", "splits", "train.tsv"),
     ]
     candidate_val_paths = [
+        args.val_file,
+        os.path.join(args.data_dir, "val_annotation.txt"),
+        os.path.join(args.data_dir, "annotation_val.txt"),
         os.path.join(args.data_dir, f"val_{args.stage}.tsv"),
         os.path.join(args.data_dir, "splits", "val.tsv"),
         os.path.join(args.data_dir, "val.tsv"),
         os.path.join(args.data_dir, "annotations", "val_annotation.txt"),
+        os.path.join(project_root, "dataset", "annotations", "val_annotation.txt"),
+        os.path.join(project_root, "dataset", "splits", "val.tsv"),
     ]
 
-    train_path = next((p for p in candidate_train_paths if os.path.exists(p)), None)
-    val_path = next((p for p in candidate_val_paths if os.path.exists(p)), None)
+    train_path = next((p for p in candidate_train_paths if p and os.path.exists(p)), None)
+    val_path = next((p for p in candidate_val_paths if p and os.path.exists(p)), None)
 
     if not train_path:
-        raise FileNotFoundError(f"Không tìm thấy file train trong các đường dẫn: {candidate_train_paths}")
+        valid_candidates = [p for p in candidate_train_paths if p]
+        raise FileNotFoundError(f"Không tìm thấy file train trong các đường dẫn: {valid_candidates}")
     
     print(f"-> Đang tải Train data từ: {train_path}")
     train_df = load_dataset_split(train_path, args.data_dir, project_root)
