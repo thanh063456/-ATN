@@ -758,16 +758,12 @@ export const DocumentDetailPage: React.FC = () => {
   const isApproved = doc.ocr_status === "APPROVED";
   const isRejected = doc.ocr_status === "REJECTED";
 
-  const filePreviewUrl = useMemo(() => {
-    if (!doc) return "";
-    let base = doc.file_url
-      ? (doc.file_url.startsWith("http") ? doc.file_url : `${API_BASE_URL.replace("/api/v1", "")}${doc.file_url}`)
-      : `${API_BASE_URL}/documents/${doc.id}/file`;
-    if (token && !base.includes("token=") && !base.includes("ticket=")) {
-      base += (base.includes("?") ? "&" : "?") + `token=${encodeURIComponent(token)}`;
-    }
-    return base;
-  }, [doc, token]);
+  let filePreviewUrl = doc.file_url
+    ? (doc.file_url.startsWith("http") ? doc.file_url : `${API_BASE_URL.replace("/api/v1", "")}${doc.file_url}`)
+    : `${API_BASE_URL}/documents/${doc.id}/file`;
+  if (token && !filePreviewUrl.includes("token=") && !filePreviewUrl.includes("ticket=")) {
+    filePreviewUrl += (filePreviewUrl.includes("?") ? "&" : "?") + `token=${encodeURIComponent(token)}`;
+  }
 
   return (
     <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
