@@ -17,26 +17,34 @@ def is_personal_data(text: str) -> bool:
 def main():
     base_dir = Path(__file__).resolve().parent.parent.parent
     dataset_dir = base_dir / "dataset"
+    splits_dir = dataset_dir / "splits"
     out_zip = base_dir / "trocr_vi_training_package.zip"
     
-    manifest_files = [f for f in os.listdir(dataset_dir) if f.endswith(".tsv") and ("train" in f or "val" in f or "test" in f or "synth" in f)]
+    if not splits_dir.exists():
+        print("No splits directory found in dataset/")
+        return
+        
+    manifest_files = [f for f in os.listdir(splits_dir) if f.endswith(".tsv")]
     
     if not manifest_files:
-        print("No manifest files found in dataset/")
+        print("No manifest files found in dataset/splits/")
         return
         
     excluded_records = []
     
     with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
         for manifest in manifest_files:
-            manifest_path = dataset_dir / manifest
+            manifest_path = splits_dir / manifest
             df = pd.read_csv(manifest_path, sep="\t")
             
             clean_records = []
             
             for idx, row in df.iterrows():
-                text = str(row['text'])
-                img_path = Path(row['image_path'])
+                text = str(row['label']) if 'label' in row else str(row.get('text', ''))
+                img_path_str = str(row['path']) if 'path' in row else str(row.get('image_path', ''))
+                
+                # Convert the relative path stored in TSV to absolute path for zipping
+                img_path = base_dir / img_path_str
                 
                 if is_personal_data(text):
                     excluded_records.append({

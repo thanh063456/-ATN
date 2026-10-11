@@ -20,15 +20,20 @@ def main():
     splits_dir = base_dir / "dataset" / "splits"
     splits_dir.mkdir(exist_ok=True, parents=True)
     
-    anno_file = annotations_dir / "annotation_v2_aligned.txt"
+    anno_file = annotations_dir / "annotation_new_pseudo.txt"
     if not anno_file.exists():
         anno_file = annotations_dir / "annotation_train.txt"
         
     records = []
     with open(anno_file, "r", encoding="utf-8") as f:
         for line in f:
-            if "\t" not in line: continue
-            path, label = line.strip().split("\t", 1)
+            line = line.rstrip('\n')
+            if "\t" not in line: 
+                # Handle cases where the crop has no text
+                path = line.strip()
+                label = ""
+            else:
+                path, label = line.split("\t", 1)
             doc_id = os.path.basename(path).split('_line_')[0]
             records.append({"path": path, "label": label, "doc_id": doc_id, "type": get_doc_type(doc_id)})
             

@@ -92,6 +92,8 @@ class VietOCREngine:
                     "../models/*_best.pth",
                     os.path.join(os.path.dirname(__file__), "../../../models/*_best.pth"),
                     os.path.join(os.path.dirname(__file__), "../../models/*_best.pth"),
+                    os.path.join(os.path.dirname(__file__), "../../../models/*finetuned.pth"),
+                    os.path.join(os.path.dirname(__file__), "../../models/*finetuned.pth"),
                 ]
                 custom_models: list[str] = []
                 for pat in candidate_patterns:

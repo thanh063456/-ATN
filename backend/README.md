@@ -52,10 +52,10 @@ backend/
 - [ ] Implement database models (SQLAlchemy): User, Document, OCRResult, ProcessingJob
 - [ ] Setup Alembic + initial migration
 - [ ] Implement JWT authentication router
-- [ ] Implement Document upload endpoint (multipart/form-data → MinIO)
-- [ ] Implement OCR service (sync + async Celery task)
-- [ ] Implement Elasticsearch indexing service
-- [ ] Implement Search router với highlight
+- [x] Implement Document upload endpoint (multipart/form-data → MinIO)
+- [x] Implement OCR service (sync + async Celery task)
+- [x] Implement Elasticsearch indexing service
+- [x] Implement Search router với highlight
 - [ ] Viết Dockerfile (multi-stage, non-root user)
 - [ ] Đạt test coverage >= 80%
 

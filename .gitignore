@@ -35,6 +35,7 @@ dist/
 .env
 .env.local
 .env.*.local
+.env_*
 *.env
 
 # ── IDE / Editor ─────────────────────────────────────────────
@@ -56,9 +57,11 @@ docker-compose.override.yml
 *.h5
 *.pkl
 *.bin
+*.safetensors
 *.traineddata
 tessdata/
 checkpoints/
+models/trocr-vi/
 runs/
 mlruns/
 wandb/
@@ -66,6 +69,11 @@ debug_boxes*.jpg
 
 # ── Datasets & LMDB ──────────────────────────────────────────
 dataset/raw/
+dataset/raw_new/
+dataset/crops/
+dataset/crops_new/
+dataset/synth_crops/
+dataset/splits/
 dataset/processed/
 dataset/augmented/
 train_data/
@@ -93,6 +101,7 @@ htmlcov/
 .tox/
 coverage.xml
 *.cover
+backend/tests/data/
 
 # ── Elasticsearch ────────────────────────────────────────────
 elasticsearch/data/

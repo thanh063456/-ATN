@@ -28,6 +28,7 @@ class TrOCREngine:
         self._model = None
         self._settings = None
         self._init_error = None
+        self._device = None
 
     # ── Settings ──────────────────────────────────────────────────────────────
     def _get_settings(self):
@@ -49,11 +50,16 @@ class TrOCREngine:
 
                 _s = self._get_settings()
                 model_name = getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
-                device     = getattr(_s, "trocr_device", "cpu")                                if _s else "cpu"
+                req_device = getattr(_s, "trocr_device", "cpu")                                if _s else "cpu"
 
-                if device == "cuda" and not torch.cuda.is_available():
-                    logger.warning("CUDA không khả dụng, chuyển sang CPU cho TrOCR")
-                    device = "cpu"
+                device = "cpu"
+                if req_device == "cuda":
+                    if torch.cuda.is_available():
+                        device = "cuda"
+                    else:
+                        logger.warning("CUDA không khả dụng trên hệ thống, tự động fallback sang CPU cho TrOCR")
+
+                self._device = device
 
                 if not os.path.exists(model_name) and not model_name.startswith("microsoft/"):
                     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -73,10 +79,6 @@ class TrOCREngine:
                     VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
                 )
                 self._model.eval()
-                if device == "cpu":
-                    self._model = torch.quantization.quantize_dynamic(
-                        self._model, {torch.nn.Linear}, dtype=torch.qint8
-                    )
                 self._init_error = None
                 logger.info("Initialized Microsoft TrOCR Vision Transformer successfully")
             except Exception as exc:
@@ -85,6 +87,7 @@ class TrOCREngine:
                 self._image_processor = None
                 self._tokenizer = None
                 self._model = None
+                self._device = None
                 raise EngineUnavailableError(
                     "trocr",
                     f"Không thể khởi tạo mô hình Microsoft TrOCR: {exc}"
@@ -108,33 +111,21 @@ class TrOCREngine:
 
         try:
             import torch
-            _s = self._get_settings()
-            device = getattr(_s, "trocr_device", "cpu") if _s else "cpu"
+            device = self._device or ("cuda" if torch.cuda.is_available() else "cpu")
 
             rgb_images = [img.convert("RGB") if img.mode != "RGB" else img for img in images]
             pixel_values = image_processor(images=rgb_images, return_tensors="pt").pixel_values.to(device)
 
             with torch.inference_mode():
-                # Scale max_new_tokens to crop width if possible, but here we just use a safe upper bound
-                # since we already chunked the images to 3:1 aspect ratio.
                 generated_ids = model.generate(
                     pixel_values, 
-                    max_new_tokens=40,
-                    no_repeat_ngram_size=3,
-                    repetition_penalty=1.2,
+                    max_new_tokens=64,
                     num_beams=1,
                     do_sample=False
                 )
 
             generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-            cleaned_texts = []
-            for t in generated_texts:
-                s = str(t).strip()
-                if "   " in s:
-                    s = " ".join([w.replace(" ", "") for w in s.split("   ")])
-                elif len(s) > 1 and " " in s and not any(len(tok) > 1 for tok in s.split()):
-                    s = "".join(s.split())
-                cleaned_texts.append(s)
+            cleaned_texts = [str(t).strip() for t in generated_texts]
             return cleaned_texts
 
         except Exception as exc:
@@ -144,56 +135,13 @@ class TrOCREngine:
             raise EngineUnavailableError("trocr", f"Lỗi suy luận TrOCR: {exc}") from exc
 
     # ── Line OCR ──────────────────────────────────────────────────────────────
-    def _chunk_and_pad(self, img: Image.Image) -> list[Image.Image]:
-        """Chunk long lines and pad with white."""
-        from app.services.trocr_vi_utils import pad_image_to_square
-        import numpy as np
-
-        w, h = img.size
-        if h <= 0 or w <= 0:
-            return []
-
-        # If aspect ratio <= 3.5, pad directly to square
-        if w <= int(h * 3.5):
-            return [pad_image_to_square(img, target_size=384)]
-
-        # If long line, split into segments of max width ~3.5*h at whitespace columns
-        target_chunk_w = max(1, int(h * 3.5))
-        gray = np.array(img.convert("L"))
-        chunks = []
-        curr_x = 0
-
-        while curr_x < w:
-            end_x = min(w, curr_x + target_chunk_w)
-            if end_x >= w:
-                chunks.append(img.crop((curr_x, 0, w, h)))
-                break
-
-            # Search for the whitest column (inter-word gap) in [end_x - 0.25*target, end_x + 0.15*target]
-            search_start = max(curr_x + int(h * 1.5), end_x - int(target_chunk_w * 0.25))
-            search_end = min(w - 1, end_x + int(target_chunk_w * 0.15))
-
-            best_split = end_x
-            if search_end > search_start:
-                window = gray[:, search_start:search_end]
-                col_means = window.mean(axis=0)
-                best_split = search_start + int(np.argmax(col_means))
-
-            chunks.append(img.crop((curr_x, 0, best_split, h)))
-            curr_x = best_split
-
-        if not chunks:
-            chunks = [img]
-
-        return [pad_image_to_square(c_img, target_size=384) for c_img in chunks]
-
     def ocr_lines(
         self,
         line_images: list[Image.Image],
         preprocess_fn=None,
     ) -> list[tuple[str, float]]:
         """
-        OCR danh sách ảnh dòng bằng TrOCR.
+        OCR danh sách ảnh dòng bằng TrOCR (batch predict trực tiếp, không cắt nhỏ chunk).
         """
         if not line_images:
             return []
@@ -207,22 +155,17 @@ class TrOCREngine:
         total_lines = len(cleaned)
         line_results: list[tuple[str, float]] = []
 
-        # Process line by line to handle chunks properly
-        for i, line_img in enumerate(cleaned):
-            logger.info("[TrOCR] Đang xử lý dòng {start}/{total}...",
-                        start=i + 1, total=total_lines)
-            chunks = self._chunk_and_pad(line_img)
-            
-            chunk_texts = []
-            for j in range(0, len(chunks), _batch_size):
-                batch = chunks[j: j + _batch_size]
-                chunk_texts.extend(self.predict_batch(batch))
-                
-            txt = " ".join([t for t in chunk_texts if t]).strip()
-            if txt:
-                bad  = len(re.findall(r'[%~^|<>{}\[\]\\]', txt))
-                conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
-                line_results.append((txt, round(conf, 2)))
+        logger.info("[TrOCR] Bắt đầu nhận diện {total} dòng văn bản...", total=total_lines)
+
+        for i in range(0, total_lines, _batch_size):
+            batch = cleaned[i: i + _batch_size]
+            preds = self.predict_batch(batch)
+            for txt in preds:
+                txt = txt.strip()
+                if txt:
+                    bad = len(re.findall(r'[%~^|<>{}\[\]\\]', txt))
+                    conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
+                    line_results.append((txt, round(conf, 2)))
 
         return line_results
 

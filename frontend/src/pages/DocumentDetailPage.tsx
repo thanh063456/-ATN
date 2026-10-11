@@ -1781,11 +1781,10 @@ export const DocumentDetailPage: React.FC = () => {
                 {/* Textarea / Editor Body */}
                 <div style={{ flex: 1, padding: "1rem", display: "flex", flexDirection: "column" }}>
                   {selectedOcrEngine === "trocr" && (
-                    <div style={{ backgroundColor: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", padding: "0.75rem", borderRadius: "0.375rem", marginBottom: "1rem", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-                      <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px" }} />
-                      <div style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
-                        <strong>Cảnh báo:</strong> Mô hình Microsoft TrOCR này chỉ là baseline tiếng Anh, chưa được fine-tune cho tiếng Việt. 
-                        Do đó, kết quả nhận diện sẽ bị mất dấu và có thể gặp lỗi lặp từ.
+                    <div style={{ backgroundColor: "#eff6ff", color: "#1e40af", border: "1px solid #bfdbfe", padding: "0.6rem 0.85rem", borderRadius: "0.375rem", marginBottom: "0.85rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Sparkles size={16} style={{ color: "#2563eb", flexShrink: 0 }} />
+                      <div style={{ fontSize: "0.8rem", lineHeight: 1.4 }}>
+                        <strong>Mô hình TrOCR-Vi (Fine-tuned):</strong> Đã được huấn luyện trên tập dữ liệu dòng văn bản tiếng Việt (bảo toàn Byte-Level BPE 50k tokens).
                       </div>
                     </div>
                   )}
