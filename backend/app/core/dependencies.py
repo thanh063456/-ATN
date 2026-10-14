@@ -6,8 +6,7 @@ Cung cấp:
 - get_current_user_optional: Xác thực nếu có token, không bắt buộc
 - require_roles: RBAC Guard chặn theo vai trò (ADMIN, STAFF, STUDENT)
 """
-import asyncio
-from typing import Sequence
+from typing import Any, Sequence
 from uuid import UUID
 
 from fastapi import Depends, status
@@ -57,7 +56,7 @@ async def _resolve_user_from_token(
 
     # 2. Thử xác thực với Supabase Auth
     try:
-        supa_res = await asyncio.to_thread(supabase_admin.auth.get_user, token)
+        supa_res = supabase_admin.auth.get_user(token)
         if supa_res and supa_res.user:
             supa_user = supa_res.user
             supa_uid = str(supa_user.id)
@@ -171,13 +170,18 @@ async def get_current_user(
     return user
 
 
-def require_roles(allowed_roles: Sequence[str]):
-    """RBAC Guard: Chỉ cho phép các vai trò trong allowed_roles (ADMIN, STAFF, STUDENT)."""
+def require_roles(*roles: Any):
+    """RBAC Guard: Chỉ cho phép các vai trò được chỉ định (nhận cả list/tuple hoặc nhiều đối số)."""
+    if len(roles) == 1 and isinstance(roles[0], (list, tuple, set)):
+        allowed = [str(r) for r in roles[0]]
+    else:
+        allowed = [str(r) for r in roles]
+
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:
         role_name = current_user.role.name if current_user.role else "STUDENT"
-        if role_name not in allowed_roles:
+        if role_name not in allowed:
             raise AppException(
-                message=f"Bạn không có quyền thực hiện thao tác này (yêu cầu vai trò: {', '.join(allowed_roles)})",
+                message=f"Bạn không có quyền thực hiện thao tác này (yêu cầu vai trò: {', '.join(allowed)})",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
         return current_user

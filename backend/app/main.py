@@ -6,14 +6,24 @@ import re
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from typing import Any
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from loguru import logger
+try:
+    from loguru import logger
+except ImportError:
+    import logging
+    logger = logging.getLogger("main")
+logger: Any = logger
 
 import uuid
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
+try:
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+except ImportError:
+    _rate_limit_exceeded_handler = None  # type: ignore
+    RateLimitExceeded = Exception        # type: ignore
 
 from app.core.config import settings
 from app.core.elasticsearch import init_elasticsearch_index
@@ -78,24 +88,27 @@ setup_access_log_filter()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup và shutdown lifecycle hooks."""
     setup_access_log_filter()
-    logger.info("Starting {name} [{env}]", name=settings.app_name, env=settings.app_env)
+    logger.info(f"Starting {settings.app_name} [{settings.app_env}]")
     # Khởi tạo Database schema và seed data
     from app.core.database import init_db
     try:
         await init_db()
     except Exception as exc:
         if settings.app_env != "development":
-            logger.critical("Fatal: Database initialization failed in environment '{env}': {err}", env=settings.app_env, err=str(exc))
+            logger.critical(f"Fatal: Database initialization failed in environment '{settings.app_env}': {exc}")
             raise
-        logger.warning("Could not initialize database on startup: {err}", err=str(exc))
+        logger.warning(f"Could not initialize database on startup: {exc}")
 
     # Khởi tạo Elasticsearch index và mapping tiếng Việt nếu chưa tồn tại
     try:
         await init_elasticsearch_index()
     except Exception as exc:
-        logger.warning("Could not initialize Elasticsearch on startup: {err}", err=str(exc))
+        logger.warning(f"Could not initialize Elasticsearch on startup: {exc}")
     yield
-    logger.info("Shutting down {name}", name=settings.app_name)
+    logger.info(f"Shutting down {settings.app_name}")
+    # Đóng kết nối Elasticsearch client
+    from app.core.elasticsearch import close_es_client
+    await close_es_client()
     # Dispose async engine để tránh ResourceWarning
     from app.core.database import engine
     await engine.dispose()
@@ -137,7 +150,8 @@ def create_app() -> FastAPI:
 
     # ── Rate Limiter ───────────────────────────────────────────────────────────
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    if _rate_limit_exceeded_handler is not None:
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # ── Global exception handler ───────────────────────────────────────────────
     def _get_safe_cors_headers(request: Request) -> dict[str, str]:
@@ -151,10 +165,7 @@ def create_app() -> FastAPI:
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
         logger.warning(
-            "AppException: status={status} message={msg} path={path}",
-            status=exc.status_code,
-            msg=exc.message,
-            path=request.url.path,
+            f"AppException: status={exc.status_code} message={exc.message} path={request.url.path}"
         )
         return JSONResponse(
             status_code=exc.status_code,
@@ -166,10 +177,7 @@ def create_app() -> FastAPI:
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         logger.exception(
-            "Unhandled exception [request_id={req_id}]: path={path} error={error}",
-            req_id=request_id,
-            path=request.url.path,
-            error=str(exc),
+            f"Unhandled exception [request_id={request_id}]: path={request.url.path} error={exc}"
         )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -189,20 +197,6 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix=API_PREFIX)     # /api/v1/search
     app.include_router(stats.router, prefix=API_PREFIX)      # /api/v1/stats
     app.include_router(verify.router, prefix=API_PREFIX)     # /api/v1/verify
-
-    @app.get("/api/v1/doc-types", tags=["documents"], summary="Lấy danh mục các loại văn bản và nhóm văn bản")
-    @app.get("/doc-types", tags=["documents"], summary="Lấy danh mục các loại văn bản và nhóm văn bản")
-    async def get_doc_types():
-        from app.core.doc_types_config import DOC_TYPES_CONFIG
-        return [
-            {
-                "code": t.code,
-                "name": t.name,
-                "group": t.group,
-                "subtypes": [{"code": s.code} for s in t.subtypes] if t.subtypes else [],
-            }
-            for t in DOC_TYPES_CONFIG.types
-        ]
 
     # ── Root ──────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)

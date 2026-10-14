@@ -62,6 +62,9 @@ class Document(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now(), nullable=False
     )
+    is_verified: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    verification_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    qr_code_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     # Relationships
     category: Mapped["DocumentCategory | None"] = relationship(

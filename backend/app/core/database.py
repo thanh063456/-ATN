@@ -7,8 +7,14 @@ Tự động kết nối PostgreSQL nếu có; nếu PostgreSQL offline/lỗi, t
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
-from loguru import logger
+try:
+    from loguru import logger
+except ImportError:
+    import logging
+    logger = logging.getLogger("database")
+logger: Any = logger
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -32,7 +38,31 @@ class Base(DeclarativeBase):
 SQLITE_DB_PATH = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../data.db")))
 SQLITE_URL = f"sqlite+aiosqlite:///{SQLITE_DB_PATH.as_posix()}"
 
-engine = create_async_engine(SQLITE_URL, echo=False)
+try:
+    if "postgresql" in settings.database_url:
+        connect_args = {}
+        if "asyncpg" in settings.database_url:
+            connect_args = {
+                "statement_cache_size": 0,
+                "prepared_statement_cache_size": 0,
+            }
+        engine = create_async_engine(
+            settings.database_url,
+            echo=False,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_timeout=5,
+            pool_pre_ping=True,
+            connect_args=connect_args,
+        )
+    else:
+        engine = create_async_engine(SQLITE_URL, echo=False)
+except Exception:
+    try:
+        engine = create_async_engine(SQLITE_URL, echo=False)
+    except Exception:
+        engine = None  # type: ignore
+
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -61,7 +91,6 @@ async def init_db() -> None:
                 pool_size=settings.db_pool_size,
                 max_overflow=settings.db_max_overflow,
                 pool_timeout=5,
-                pool_recycle=60,
                 pool_pre_ping=True,
                 connect_args=connect_args,
             )
@@ -73,23 +102,20 @@ async def init_db() -> None:
         except Exception as exc:
             if settings.app_env != "development":
                 logger.critical(
-                    "PostgreSQL connection failed in environment '{env}': {err}. Refusing SQLite fallback in non-development.",
-                    env=settings.app_env,
-                    err=str(exc),
+                    f"PostgreSQL connection failed in environment '{settings.app_env}': {exc}. Refusing SQLite fallback in non-development."
                 )
                 raise RuntimeError(
                     f"Không thể kết nối cơ sở dữ liệu PostgreSQL trong môi trường '{settings.app_env}': {str(exc)}"
                 ) from exc
 
             logger.warning(
-                "PostgreSQL connection failed ({err}). Using SQLite local DB: {path}",
-                err=str(exc), path=str(SQLITE_DB_PATH)
+                f"PostgreSQL connection failed ({exc}). Using SQLite local DB: {SQLITE_DB_PATH}"
             )
             engine = create_async_engine(SQLITE_URL, echo=False)
             AsyncSessionLocal.configure(bind=engine)
     else:
         if settings.app_env != "development":
-            logger.critical("SQLite database is not allowed in environment '{env}'.", env=settings.app_env)
+            logger.critical(f"SQLite database is not allowed in environment '{settings.app_env}'.")
             raise RuntimeError(
                 f"Chỉ cho phép sử dụng SQLite ở môi trường development. Môi trường hiện tại: {settings.app_env}"
             )
@@ -139,18 +165,13 @@ async def init_db() -> None:
                     else:
                         stmt = f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type};"
                     await conn.execute(text(stmt))
-                logger.debug("Column {col} on table {tbl} checked/added successfully.", col=col, tbl=tbl)
+                logger.debug(f"Column {col} on table {tbl} checked/added successfully.")
             except Exception as col_exc:
                 err_msg = str(col_exc).lower()
                 if "already exists" in err_msg or "duplicate column" in err_msg:
-                    logger.debug("Column {col} on table {tbl} đã tồn tại.", col=col, tbl=tbl)
+                    logger.debug(f"Column {col} on table {tbl} đã tồn tại.")
                 else:
-                    logger.warning(
-                        "Lỗi khi thêm cột {col} vào bảng {tbl}: {err}",
-                        col=col,
-                        tbl=tbl,
-                        err=str(col_exc),
-                    )
+                    logger.warning(f"Lỗi khi thêm cột {col} vào bảng {tbl}: {col_exc}")
 
         logger.info("Database schema initialized successfully.")
 
@@ -174,7 +195,7 @@ async def init_db() -> None:
                 if settings.app_env == "development":
                     user_configs = [
                         ("admin_hethong", "admin@dlu.edu.vn", settings.seed_admin_password, "Quản trị viên Hệ thống (DLU)", "ADMIN", None),
-                        ("canbo_ctsv", "canbo@dlu.edu.vn", settings.seed_staff_password, "Cán bộ CTSV (STAFF)", "STAFF", None),
+                        ("canbo_ctsv", "canbo_ctsv@dlu.edu.vn", settings.seed_staff_password, "Cán bộ CTSV (STAFF)", "STAFF", None),
                         ("sinhvien_demo", "sinhvien@dlu.edu.vn", settings.seed_student_password, "Sinh Viên Mẫu (DLU)", "STUDENT", "2210001"),
                     ]
                     for uname, email, pwd, fname, rname, mssv in user_configs:
@@ -195,16 +216,11 @@ async def init_db() -> None:
                 else:
                     await session.commit()
                     logger.info("Database initialized default roles for production/staging (no demo users seeded).")
-
-                # Seed document categories from doc_types.yaml
-                from app.core.doc_types_config import seed_document_categories
-                await seed_document_categories(session)
-
             except Exception as seed_exc:
                 await session.rollback()
-                logger.warning("Seed initialization note: {err}", err=str(seed_exc))
+                logger.warning(f"Seed initialization note: {seed_exc}")
     except Exception as exc:
-        logger.error("Failed to initialize database tables: {err}", err=str(exc))
+        logger.error(f"Failed to initialize database tables: {exc}")
 
 
 # ── Dependency ─────────────────────────────────────────────────────────────────
