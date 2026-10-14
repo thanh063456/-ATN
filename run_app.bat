@@ -5,8 +5,11 @@ echo   DANG KHOI DONG HE THONG DOCUCTSV OCR (DAI HOC DA LAT)
 echo ========================================================
 echo.
 
+set PYTHON_CMD="C:\Users\ADMIN\AppData\Local\Programs\Python\Python313\python.exe"
+if not exist %PYTHON_CMD% set PYTHON_CMD=python
+
 echo [1/2] Dang khoi dong Backend FastAPI (Port 8000)...
-start "DocuCTSV Backend" cmd /k "cd /d %~dp0backend && uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
+start "DocuCTSV Backend" cmd /k "cd /d %~dp0backend && %PYTHON_CMD% -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 echo [2/2] Dang khoi dong Frontend React Vite (Port 3000)...
 start "DocuCTSV Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
