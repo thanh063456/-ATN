@@ -26,6 +26,7 @@ export interface SearchHit {
   ocr_confidence?: number;
   score: number;
   highlights: Record<string, string[]>;
+  tags?: string[];
   created_at?: string;
 }
 
@@ -62,6 +63,7 @@ export interface SearchParams {
   category_code?: string;
   doc_type_code?: string;
   doc_group?: string;
+  tag?: string;
   ocr_scope?: string;
   ocr_status?: string;
   date_from?: string;

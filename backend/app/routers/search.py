@@ -302,11 +302,12 @@ async def search_documents(
     query_str = q.strip() if isinstance(q, str) else str(q)
 
     # Chuẩn hóa an toàn các tham số khi hàm được gọi trực tiếp bằng Python
+    category_code = category_code if isinstance(category_code, str) and category_code.strip() else None
+    doc_type_code = doc_type_code if isinstance(doc_type_code, str) and doc_type_code.strip() else None
     if not category_code and doc_type_code:
         category_code = doc_type_code
-    category_code = category_code if isinstance(category_code, str) else None
-    ocr_status = ocr_status if isinstance(ocr_status, str) else None
-    tag = tag if isinstance(tag, str) else None
+    ocr_status = ocr_status if isinstance(ocr_status, str) and ocr_status.strip() else None
+    tag = tag if isinstance(tag, str) and tag.strip() else None
     date_from = date_from if isinstance(date_from, str) else None
     date_to = date_to if isinstance(date_to, str) else None
     time_range = time_range if isinstance(time_range, str) else None
@@ -664,8 +665,9 @@ async def search_documents(
             else:
                 stmt = stmt.where(Document.ocr_status == "APPROVED")
 
-        if category_code:
-            stmt = stmt.join(Document.category).where(DocumentCategory.code == category_code)
+        target_category = doc_type_code or category_code
+        if target_category:
+            stmt = stmt.join(Document.category).where(func.upper(DocumentCategory.code) == target_category.upper())
         if ocr_status:
             stmt = stmt.where(Document.ocr_status == ocr_status.upper())
         if date_from:
@@ -713,8 +715,10 @@ async def search_documents(
                 clean_tag = tag if tag.startswith("#") else f"#{tag}"
                 doc_extra = (doc.metadata_.extra or {}) if doc.metadata_ and doc.metadata_.extra else {}
                 doc_tags = doc_extra.get("tags", [])
-                if clean_tag not in doc_tags and tag not in doc_tags:
+                target_tags_lower = [clean_tag.lower(), tag.lower(), clean_tag.lower().replace("#", ""), tag.lower().replace("#", "")]
+                if not any(t.lower() in target_tags_lower or t.lower().replace("#", "") in target_tags_lower for t in doc_tags):
                     continue
+
             ocr_text = ""
             for ocr in doc.ocr_results:
                 if ocr.is_latest:
@@ -752,24 +756,33 @@ async def search_documents(
                 score += 12.0
                 matched_terms_for_highlight.append(st_id)
                 highlights["student_id"] = [st_id]
-            if st_name and (q_ascii in st_name_ascii or any(w in st_name_ascii for w in important_words_ascii if len(w) >= 3)):
+            if st_name and (q_ascii in st_name_ascii or any(re.search(r'(?:\b|^)' + re.escape(w) + r'(?:\b|$)', st_name_ascii) for w in important_words_ascii if len(w) >= 3)):
                 score += 8.0
                 matched_terms_for_highlight.append(st_name)
                 highlights["student_name"] = [st_name]
 
             # 3. Khớp các cụm từ con (sub-phrases)
+            has_subphrase_match = False
             for phrase in sub_phrases:
                 p_ascii = _strip_accents(phrase)
                 if p_ascii in title_ascii:
                     score += 6.0
+                    has_subphrase_match = True
                     matched_terms_for_highlight.append(phrase)
                 if p_ascii in ocr_text_ascii:
                     score += 4.5
+                    has_subphrase_match = True
                     matched_terms_for_highlight.append(phrase)
 
-            # 4. Khớp các từ khóa quan trọng (không phải stopword đơn lẻ)
-            important_title_matches = sum(1 for w in important_words_ascii if w in title_ascii)
-            important_ocr_matches = sum(1 for w in important_words_ascii if w in ocr_text_ascii)
+            # 4. Khớp các từ khóa quan trọng (dùng ranh giới từ whole-word để không bắt nhầm chuỗi con)
+            important_title_matches = sum(
+                1 for w in important_words_ascii
+                if re.search(r'(?:\b|^)' + re.escape(w) + r'(?:\b|$)', title_ascii)
+            )
+            important_ocr_matches = sum(
+                1 for w in important_words_ascii
+                if re.search(r'(?:\b|^)' + re.escape(w) + r'(?:\b|$)', ocr_text_ascii)
+            )
 
             if important_title_matches > 0:
                 score += important_title_matches * 3.0
@@ -779,16 +792,28 @@ async def search_documents(
                 # Khớp toàn bộ các từ quan trọng trong nội dung
                 score += 5.0
                 matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
-            elif len(important_words_ascii) > 1 and important_ocr_matches >= 2:
+            elif len(important_words_ascii) == 2 and important_ocr_matches >= 2:
+                score += 3.0
+                matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
+            elif len(important_words_ascii) >= 3 and (important_ocr_matches >= len(important_words_ascii) or has_subphrase_match):
                 score += 3.0
                 matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
 
             # ĐIỀU KIỆN QUYẾT ĐỊNH: Chỉ chấp nhận nếu có điểm khớp thực chất
-            # (Loại bỏ triệt để trường hợp chỉ trùng 1 chữ stopword thông dụng như "học" hay "nam")
-            has_genuine_match = (
-                score >= 3.0 or
-                (len(important_words_ascii) == 1 and important_ocr_matches >= 1)
-            )
+            # Với câu truy vấn >= 3 từ quan trọng: bắt buộc khớp cụm con hoặc khớp đủ toàn bộ các từ
+            if len(important_words_ascii) >= 3:
+                has_genuine_match = (
+                    q_ascii in title_ascii or
+                    q_ascii in ocr_text_ascii or
+                    has_subphrase_match or
+                    important_title_matches >= 2 or
+                    important_ocr_matches >= len(important_words_ascii)
+                ) and score >= 3.0
+            else:
+                has_genuine_match = (
+                    score >= 3.0 or
+                    (len(important_words_ascii) == 1 and (important_ocr_matches >= 1 or important_title_matches >= 1))
+                )
 
             if has_genuine_match and score > 0:
                 target_terms = list(set(matched_terms_for_highlight)) if matched_terms_for_highlight else raw_words

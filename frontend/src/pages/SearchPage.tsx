@@ -48,6 +48,7 @@ export const SearchPage: React.FC = () => {
   const [query, setQuery] = useState(initialQuery);
   const [categoryCode, setCategoryCode] = useState(searchParams.get("category") || "");
   const [docTypeCode, setDocTypeCode] = useState(searchParams.get("doc_type") || "");
+  const [tag, setTag] = useState(searchParams.get("tag") || "");
   const [ocrScope, setOcrScope] = useState(searchParams.get("ocr_scope") || "");
   const [ocrStatus, setOcrStatus] = useState(searchParams.get("status") || "");
   const [dateFrom, setDateFrom] = useState(searchParams.get("date_from") || "");
@@ -60,7 +61,20 @@ export const SearchPage: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [currentPage, setCurrentPage] = useState(initialPage);
 
-  const performSearch = async (searchQuery: string, pageNumber = 1) => {
+  const performSearch = async (
+    searchQuery: string,
+    pageNumber = 1,
+    overrides?: {
+      categoryCode?: string;
+      docTypeCode?: string;
+      tag?: string;
+      ocrScope?: string;
+      ocrStatus?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      fuzzy?: boolean;
+    }
+  ) => {
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
 
@@ -68,16 +82,26 @@ export const SearchPage: React.FC = () => {
     setHasSearched(true);
     setCurrentPage(pageNumber);
 
+    const activeCategoryCode = overrides?.categoryCode !== undefined ? overrides.categoryCode : categoryCode;
+    const activeDocTypeCode = overrides?.docTypeCode !== undefined ? overrides.docTypeCode : docTypeCode;
+    const activeTag = overrides?.tag !== undefined ? overrides.tag : tag;
+    const activeOcrScope = overrides?.ocrScope !== undefined ? overrides.ocrScope : ocrScope;
+    const activeOcrStatus = overrides?.ocrStatus !== undefined ? overrides.ocrStatus : ocrStatus;
+    const activeDateFrom = overrides?.dateFrom !== undefined ? overrides.dateFrom : dateFrom;
+    const activeDateTo = overrides?.dateTo !== undefined ? overrides.dateTo : dateTo;
+    const activeFuzzy = overrides?.fuzzy !== undefined ? overrides.fuzzy : fuzzy;
+
     try {
       const res = await searchApi.search({
         q: trimmed,
-        category_code: categoryCode || undefined,
-        doc_type_code: docTypeCode || undefined,
-        ocr_scope: ocrScope || undefined,
-        ocr_status: ocrStatus || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        fuzzy: fuzzy,
+        category_code: activeCategoryCode || undefined,
+        doc_type_code: activeDocTypeCode || undefined,
+        tag: activeTag || undefined,
+        ocr_scope: activeOcrScope || undefined,
+        ocr_status: activeOcrStatus || undefined,
+        date_from: activeDateFrom || undefined,
+        date_to: activeDateTo || undefined,
+        fuzzy: activeFuzzy,
         page: pageNumber,
         page_size: 10,
       });
@@ -85,12 +109,13 @@ export const SearchPage: React.FC = () => {
 
       // Đồng bộ URL params
       const newParams: Record<string, string> = { q: trimmed, page: String(pageNumber) };
-      if (categoryCode) newParams.category = categoryCode;
-      if (docTypeCode) newParams.doc_type = docTypeCode;
-      if (ocrScope) newParams.ocr_scope = ocrScope;
-      if (ocrStatus) newParams.status = ocrStatus;
-      if (dateFrom) newParams.date_from = dateFrom;
-      if (dateTo) newParams.date_to = dateTo;
+      if (activeCategoryCode) newParams.category = activeCategoryCode;
+      if (activeDocTypeCode) newParams.doc_type = activeDocTypeCode;
+      if (activeTag) newParams.tag = activeTag;
+      if (activeOcrScope) newParams.ocr_scope = activeOcrScope;
+      if (activeOcrStatus) newParams.status = activeOcrStatus;
+      if (activeDateFrom) newParams.date_from = activeDateFrom;
+      if (activeDateTo) newParams.date_to = activeDateTo;
       setSearchParams(newParams, { replace: true });
     } catch (err: any) {
       addToast({
@@ -122,15 +147,27 @@ export const SearchPage: React.FC = () => {
   const handleResetFilters = () => {
     setCategoryCode("");
     setDocTypeCode("");
+    setTag("");
     setOcrScope("");
     setOcrStatus("");
     setDateFrom("");
     setDateTo("");
     setFuzzy(true);
     if (query.trim()) {
-      performSearch(query, 1);
+      performSearch(query, 1, {
+        categoryCode: "",
+        docTypeCode: "",
+        tag: "",
+        ocrScope: "",
+        ocrStatus: "",
+        dateFrom: "",
+        dateTo: "",
+        fuzzy: true,
+      });
     }
   };
+
+  const activeFilterCount = [categoryCode, docTypeCode, tag, ocrScope, ocrStatus, dateFrom, dateTo].filter(Boolean).length;
 
   const sampleQueries = [
     "miễn giảm học phí",
@@ -192,9 +229,13 @@ export const SearchPage: React.FC = () => {
               variant="outline"
               onClick={() => setShowFilters(!showFilters)}
               leftIcon={<SlidersHorizontal size={16} />}
-              style={{ borderColor: showFilters ? "var(--primary-500)" : undefined }}
+              style={{
+                borderColor: showFilters || activeFilterCount > 0 ? "var(--primary-500)" : undefined,
+                color: activeFilterCount > 0 ? "var(--primary-700)" : undefined,
+                backgroundColor: activeFilterCount > 0 ? "var(--primary-50)" : undefined,
+              }}
             >
-              Bộ lọc {showFilters ? "▲" : "▼"}
+              Bộ lọc {activeFilterCount > 0 ? `(${activeFilterCount})` : ""} {showFilters ? "▲" : "▼"}
             </Button>
 
             <Button
@@ -250,24 +291,57 @@ export const SearchPage: React.FC = () => {
           >
             <div>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)", marginBottom: "0.3rem" }}>
-                Loại danh mục
+                Hình thức văn bản
               </label>
               <select
-                value={categoryCode}
-                onChange={(e) => setCategoryCode(e.target.value)}
+                value={docTypeCode || categoryCode}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDocTypeCode(val);
+                  setCategoryCode(val);
+                }}
                 style={{ width: "100%", padding: "0.45rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
               >
-                <option value="">-- Tất cả danh mục --</option>
-                <option value="DON_NGHI_HOC">Đơn nghỉ học / bảo lưu</option>
-                <option value="GIAY_XAC_NHAN">Giấy xác nhận sinh viên</option>
-                <option value="HOC_BONG">Hồ sơ xét học bổng</option>
-                <option value="KHEN_THUONG">Khen thưởng - Kỷ luật</option>
-                <option value="MIEN_GIAM_HOC_PHI">Miễn giảm học phí</option>
-                <option value="THONG_BAO">Thông báo</option>
-                <option value="KE_HOACH">Kế hoạch</option>
-                <option value="QUYET_DINH">Quyết định</option>
-                <option value="CONG_VAN">Công văn</option>
-                <option value="KHAC">Khác / Cần kiểm tra</option>
+                <option value="">-- Tất cả hình thức --</option>
+                <option value="KE_HOACH">Kế hoạch (KE_HOACH)</option>
+                <option value="THONG_BAO">Thông báo (THONG_BAO)</option>
+                <option value="QUYET_DINH">Quyết định (QUYET_DINH)</option>
+                <option value="DON_TU">Đơn từ (DON_TU)</option>
+                <option value="HUONG_DAN">Hướng dẫn (HUONG_DAN)</option>
+                <option value="BAO_CAO">Báo cáo (BAO_CAO)</option>
+                <option value="CONG_VAN">Công văn (CONG_VAN)</option>
+                <option value="BIEN_BAN">Biên bản (BIEN_BAN)</option>
+                <option value="DANH_SACH">Danh sách (DANH_SACH)</option>
+                <option value="DIEU_LE_QUY_CHE">Điều lệ / Quy chế (DIEU_LE_QUY_CHE)</option>
+                <option value="KHAC">Khác (KHAC)</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)", marginBottom: "0.3rem" }}>
+                Nhãn chủ đề AI (Tags)
+              </label>
+              <select
+                value={tag}
+                onChange={(e) => setTag(e.target.value)}
+                style={{ width: "100%", padding: "0.45rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
+              >
+                <option value="">-- Tất cả chủ đề --</option>
+                <option value="#DonTu">#Đơn từ / Thôi học / Bảo lưu</option>
+                <option value="#MienGiamHocPhi">#Miễn giảm học phí</option>
+                <option value="#HocPhi">#Học phí & Trợ cấp</option>
+                <option value="#HocBong">#Học bổng sinh viên</option>
+                <option value="#XuLyHocVu">#Xử lý học vụ</option>
+                <option value="#XinThoiHoc">#Buộc thôi học / Nghỉ học</option>
+                <option value="#KhenThuong">#Khen thưởng</option>
+                <option value="#KyLuat">#Kỷ luật</option>
+                <option value="#KhoiNghiep">#Khởi nghiệp đổi mới sáng tạo</option>
+                <option value="#CuocThi">#Cuộc thi / Phong trào</option>
+                <option value="#SinhHoatCongDan">#Sinh hoạt công dân</option>
+                <option value="#NganhCNTT">#Ngành CNTT</option>
+                <option value="#K46">#Khóa 46 (K46)</option>
+                <option value="#K47">#Khóa 47 (K47)</option>
+                <option value="#K48">#Khóa 48 (K48)</option>
               </select>
             </div>
 
@@ -327,7 +401,7 @@ export const SearchPage: React.FC = () => {
               </select>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem", gridColumn: "1 / -1", marginTop: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", gridColumn: "1 / -1", marginTop: "0.5rem", flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <input
                   type="checkbox"
@@ -341,16 +415,25 @@ export const SearchPage: React.FC = () => {
                 </label>
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                leftIcon={<RotateCcw size={13} />}
-                onClick={handleResetFilters}
-                style={{ marginLeft: "auto" }}
-              >
-                Đặt lại bộ lọc
-              </Button>
+              <div style={{ display: "flex", gap: "0.5rem", marginLeft: "auto" }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<RotateCcw size={13} />}
+                  onClick={handleResetFilters}
+                >
+                  Đặt lại bộ lọc
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => performSearch(query, 1)}
+                >
+                  Áp dụng bộ lọc
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -395,43 +478,122 @@ export const SearchPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setDocTypeCode("");
-                    performSearch(query, 1);
+                    setCategoryCode("");
+                    performSearch(query, 1, { docTypeCode: "", categoryCode: "" });
                   }}
                   style={{
                     padding: "0.2rem 0.6rem",
                     borderRadius: "9999px",
                     fontSize: "0.75rem",
                     fontWeight: 600,
-                    backgroundColor: !docTypeCode ? "var(--primary-600)" : "var(--gray-100)",
-                    color: !docTypeCode ? "white" : "var(--gray-700)",
+                    backgroundColor: (!docTypeCode && !categoryCode) ? "var(--primary-600)" : "var(--gray-100)",
+                    color: (!docTypeCode && !categoryCode) ? "white" : "var(--gray-700)",
                     border: "1px solid var(--border-color)",
                     cursor: "pointer",
                   }}
                 >
                   Tất cả ({searchResponse.total_hits})
                 </button>
-                {facetList.map(({ code, count }) => (
+                {facetList.map(({ code, count }) => {
+                  const isSelected = (docTypeCode === code || categoryCode === code);
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        const nextVal = isSelected ? "" : code;
+                        setDocTypeCode(nextVal);
+                        setCategoryCode(nextVal);
+                        performSearch(query, 1, { docTypeCode: nextVal, categoryCode: nextVal });
+                      }}
+                      style={{
+                        padding: "0.2rem 0.6rem",
+                        borderRadius: "9999px",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        backgroundColor: isSelected ? "var(--primary-600)" : "var(--gray-100)",
+                        color: isSelected ? "white" : "var(--gray-700)",
+                        border: "1px solid var(--border-color)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {code} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* AI Tags Chips */}
+          {(() => {
+            const rawTags = searchResponse.facets?.tags;
+            if (!rawTags || !Array.isArray(rawTags) || rawTags.length === 0) return null;
+            const tagList = rawTags
+              .map((item: any) => ({
+                tag: typeof item === "object" ? (item.tag || item.key || String(item)) : String(item),
+                count: typeof item === "object" ? (item.count ?? item.doc_count ?? 0) : 0,
+              }))
+              .filter((t) => t.tag && t.tag.trim());
+
+            if (tagList.length === 0) return null;
+
+            return (
+              <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap", padding: "0.15rem 0" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Chủ đề AI:</span>
+                {tag && (
                   <button
-                    key={code}
                     type="button"
                     onClick={() => {
-                      setDocTypeCode(code);
-                      performSearch(query, 1);
+                      setTag("");
+                      performSearch(query, 1, { tag: "" });
                     }}
                     style={{
                       padding: "0.2rem 0.6rem",
                       borderRadius: "9999px",
                       fontSize: "0.75rem",
                       fontWeight: 600,
-                      backgroundColor: docTypeCode === code ? "var(--primary-600)" : "var(--gray-100)",
-                      color: docTypeCode === code ? "white" : "var(--gray-700)",
-                      border: "1px solid var(--border-color)",
+                      backgroundColor: "#fef2f2",
+                      color: "#b91c1c",
+                      border: "1px dashed #f87171",
                       cursor: "pointer",
                     }}
                   >
-                    {code} ({count})
+                    Bỏ lọc chủ đề (x)
                   </button>
-                ))}
+                )}
+                {tagList.slice(0, 12).map(({ tag: t, count }) => {
+                  const isSelected =
+                    tag.toLowerCase() === t.toLowerCase() ||
+                    tag.replace("#", "").toLowerCase() === t.replace("#", "").toLowerCase();
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => {
+                        const nextTag = isSelected ? "" : t;
+                        setTag(nextTag);
+                        performSearch(query, 1, { tag: nextTag });
+                      }}
+                      style={{
+                        padding: "0.2rem 0.55rem",
+                        borderRadius: "9999px",
+                        fontSize: "0.75rem",
+                        fontWeight: isSelected ? 700 : 500,
+                        backgroundColor: isSelected ? "#059669" : "#ecfdf5",
+                        color: isSelected ? "white" : "#065f46",
+                        border: `1px solid ${isSelected ? "#059669" : "#a7f3d0"}`,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                      }}
+                    >
+                      <span>{t}</span>
+                      <span style={{ opacity: isSelected ? 1 : 0.7, fontSize: "0.7rem" }}>({count})</span>
+                    </button>
+                  );
+                })}
               </div>
             );
           })()}
