@@ -41,9 +41,66 @@ class AIService:
             return "openai"
         return "ollama"
 
+    async def _refine_single_chunk(self, chunk: str, provider: str) -> str | None:
+        """Hiệu đính 1 đoạn hoặc 1 trang văn bản qua LLM provider, bảo vệ cấu trúc header 2 cột."""
+        if not chunk.strip():
+            return chunk
+
+        # Tách Header 2 cột hành chính (nếu có) để AI không làm xáo trộn bố cục 2 cột Nghị định 30
+        header_prefix = ""
+        body_to_refine = chunk
+        
+        # Nhận diện nếu chunk chứa tiêu đề chính: KẾ HOẠCH, QUYẾT ĐỊNH, THÔNG BÁO, TỜ TRÌNH, ĐƠN XIN...
+        title_m = re.search(r'(?m)^\s*(KẾ\s+HOẠCH|QUYẾT\s+ĐỊNH|THÔNG\s+BÁO|TỜ\s+TRÌNH|CÔNG\s+VĂN|HƯỚNG\s+DẪN|BIÊN\s+BẢN|BÁO\s+CÁO|ĐƠN\s+XIN)\b', chunk, re.IGNORECASE)
+        if title_m and title_m.start() > 0:
+            header_prefix = chunk[:title_m.start()]
+            body_to_refine = chunk[title_m.start():]
+        elif any(kw in chunk.upper() for kw in ["CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "BỘ GIÁO DỤC VÀ ĐÀO TẠO", "TRƯỜNG ĐẠI HỌC ĐÀ LẠT"]):
+            lines = chunk.splitlines(keepends=True)
+            h_lines = []
+            b_lines = []
+            in_header = True
+            for l in lines:
+                if in_header and (any(kw in l.upper() for kw in ["CỘNG HÒA", "ĐỘC LẬP", "BỘ GIÁO DỤC", "ĐẠI HỌC ĐÀ LẠT", "SỐ:", "NGÀY"]) or not l.strip()):
+                    h_lines.append(l)
+                else:
+                    in_header = False
+                    b_lines.append(l)
+            if h_lines:
+                header_prefix = "".join(h_lines)
+                body_to_refine = "".join(b_lines)
+
+        prompt = (
+            "Bạn là trợ lý ngôn ngữ tiếng Việt chuyên nghiệp hiệu đính văn bản hành chính công tác sinh viên Đại học Đà Lạt.\n"
+            "Dưới đây là phần nội dung văn bản trích xuất từ mô hình OCR quét tài liệu (có thể có lỗi nhận dạng dấu hoặc chữ cái, nhầm số/ký tự).\n"
+            "Nhiệm vụ của bạn:\n"
+            "1. Sửa triệt để các lỗi chính tả, phục hồi đúng dấu câu tiếng Việt chuẩn xác.\n"
+            "   - Sửa các lỗi OCR phổ biến: '6 ất công dân' hoặc 'công dân?' sửa thành 'công dân - HSSV'; 'L MỤC ĐÍCH' sửa thành 'I. MỤC ĐÍCH'.\n"
+            "   - Chuẩn hóa tên chương trình: 'Tuần sinh hoạt công dân - HSSV' đầu khóa dành cho Tân sinh viên khóa 49, năm học 2025-2026.\n"
+            "2. Giữ nguyên 100% các dữ liệu thực tế quan trọng: Mã số sinh viên, số tiền, ngày tháng năm, tên riêng người và trường.\n"
+            "3. Giữ nguyên cấu trúc các đề mục (KẾ HOẠCH, I., II., 1.1., a., b., c.).\n"
+            "4. CHỈ TRẢ VỀ DUY NHẤT VĂN BẢN ĐÃ ĐƯỢC HIỆU ĐÍNH, KHÔNG KÈM LỜI DẪN, KHÔNG GIẢI THÍCH.\n\n"
+            f"--- NỘI DUNG OCR ---\n{body_to_refine}\n--- HẾT ---"
+        )
+
+        refined = None
+        if provider == "gemini" and settings.gemini_api_key:
+            refined = await self._call_gemini(prompt)
+        elif provider == "openai" and settings.openai_api_key:
+            refined = await self._call_openai(prompt)
+        elif provider == "ollama":
+            refined = await self._call_ollama(prompt)
+
+        if refined and len(refined) > len(body_to_refine) * 0.3:
+            final_text = header_prefix + refined
+            return post_process_vietnamese(final_text)
+
+        return None
+
     async def refine_ocr_text(self, raw_text: str) -> dict[str, Any]:
         """
         Dùng AI hậu xử lý, sửa các lỗi chính tả OCR tiếng Việt nhưng giữ nguyên cấu trúc văn bản hành chính.
+        Nếu văn bản nhiều trang, tự động chia theo từng trang để tránh nghẽn/timeout LLM.
         """
         if not raw_text or not raw_text.strip():
             return {
@@ -56,48 +113,50 @@ class AIService:
             }
 
         provider = self._determine_provider()
-        prompt = (
-            "Bạn là chuyên gia ngôn ngữ học tiếng Việt và hiệu đính văn bản hành chính công tác sinh viên Đại học Đà Lạt.\n"
-            "Dưới đây là văn bản trích xuất từ mô hình OCR quét tài liệu (có thể có lỗi nhận dạng dấu tiếng Việt, nhầm lẫn chữ O/0, l/1, hoặc lỗi gõ phím).\n"
-            "Nhiệm vụ của bạn:\n"
-            "1. Sửa các lỗi chính tả, phục hồi đúng dấu câu tiếng Việt chuẩn xác.\n"
-            "2. Giữ nguyên 100% các dữ liệu thực tế quan trọng: Mã số sinh viên, số tiền, ngày tháng năm, tên riêng người và trường.\n"
-            "3. Giữ nguyên bố cục văn bản hành chính (Tiêu ngữ, Tên đơn, Kính gửi, Thân bài, Ký tên).\n"
-            "4. CHỈ TRẢ VỀ DUY NHẤT VĂN BẢN ĐÃ ĐƯỢC HIỆU ĐÍNH, KHÔNG GIẢI THÍCH, KHÔNG THÊM LỜI DẪN.\n\n"
-            f"--- VĂN BẢN OCR GỐC ---\n{raw_text}\n--- HẾT ---"
-        )
+        used_model = getattr(settings, f"{provider}_model", provider)
 
+        # Xử lý theo từng trang nếu có đánh dấu "--- Trang X ---"
+        page_splits = re.split(r'(\n*---\s*Trang\s+\d+[^-\n]*---\n*)', raw_text)
+        if len(page_splits) > 2:
+            refined_parts = []
+            any_llm_success = False
+            for part in page_splits:
+                if re.match(r'^\n*---\s*Trang\s+\d+[^-\n]*---\n*$', part):
+                    refined_parts.append(part)
+                elif part.strip():
+                    try:
+                        p_res = await self._refine_single_chunk(part, provider)
+                        if p_res and len(p_res) > len(part) * 0.3:
+                            refined_parts.append(p_res)
+                            any_llm_success = True
+                        else:
+                            refined_parts.append(post_process_vietnamese(part))
+                    except Exception as pe:
+                        logger.warning("Trang con refinement lỗi ({err}), fallback từ điển", err=str(pe))
+                        refined_parts.append(post_process_vietnamese(part))
+                else:
+                    refined_parts.append(part)
+
+            if any_llm_success:
+                return {
+                    "original_text": raw_text,
+                    "refined_text": "".join(refined_parts),
+                    "provider": provider,
+                    "model": used_model,
+                    "success": True,
+                }
+
+        # Văn bản đơn trang hoặc không có dấu trang
         try:
-            if provider == "gemini" and settings.gemini_api_key:
-                refined = await self._call_gemini(prompt)
-                if refined:
-                    return {
-                        "original_text": raw_text,
-                        "refined_text": refined,
-                        "provider": "gemini",
-                        "model": settings.gemini_model,
-                        "success": True,
-                    }
-            elif provider == "openai" and settings.openai_api_key:
-                refined = await self._call_openai(prompt)
-                if refined:
-                    return {
-                        "original_text": raw_text,
-                        "refined_text": refined,
-                        "provider": "openai",
-                        "model": settings.openai_model,
-                        "success": True,
-                    }
-            elif provider == "ollama":
-                refined = await self._call_ollama(prompt)
-                if refined:
-                    return {
-                        "original_text": raw_text,
-                        "refined_text": refined,
-                        "provider": "ollama",
-                        "model": settings.ollama_model,
-                        "success": True,
-                    }
+            refined = await self._refine_single_chunk(raw_text, provider)
+            if refined and len(refined) > len(raw_text) * 0.3:
+                return {
+                    "original_text": raw_text,
+                    "refined_text": refined,
+                    "provider": provider,
+                    "model": used_model,
+                    "success": True,
+                }
         except Exception as exc:
             err_detail = f"{type(exc).__name__}: {str(exc) or repr(exc)}"
             logger.warning(f"AI text refinement with provider '{provider}' unavailable ({err_detail}). Using Admin Dictionary fallback.")
@@ -293,26 +352,68 @@ class AIService:
                 return choices[0].get("message", {}).get("content", "").strip()
         return ""
 
+    async def _resolve_ollama_model(self, base_url: str) -> str:
+        """Kiểm tra và tự động chọn model Ollama tối ưu VRAM GPU nếu có sẵn."""
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                r = await client.get(f"{base_url}/api/tags")
+                if r.status_code == 200:
+                    installed = [m.get("name", "") for m in r.json().get("models", [])]
+                    for preferred in ("qwen2.5:3b", "qwen2.5:1.5b"):
+                        for inst in installed:
+                            if inst == preferred or inst.startswith(preferred + ":"):
+                                return inst
+        except Exception:
+            pass
+        return settings.ollama_model
+
     async def _call_ollama(self, prompt: str) -> str:
         """Gọi Local Ollama API (http://127.0.0.1:11434/api/generate)."""
         base_url = settings.ollama_base_url.rstrip("/")
         if "://localhost" in base_url:
             base_url = base_url.replace("://localhost", "://127.0.0.1")
         url = f"{base_url}/api/generate"
+
+        model_name = await self._resolve_ollama_model(base_url)
+
+        # Tính toán budget token dự đoán theo độ dài prompt để tăng tốc và tránh timeout
+        words = len(prompt.split())
+        num_predict = min(2048, max(256, int(words * 1.5)))
+
         payload = {
-            "model": settings.ollama_model,
+            "model": model_name,
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": 0.1,
-                "num_predict": 2048,
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "repeat_penalty": 1.2,
+                "num_ctx": 2048,
+                "num_predict": num_predict,
             }
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return data.get("response", "").strip()
+            res_text = data.get("response", "").strip()
+
+            # Chống lặp dòng vô tận (hallucination repetition loop) của LLM
+            lines = res_text.splitlines()
+            dedup_lines = []
+            prev_line = None
+            rep_count = 0
+            for l in lines:
+                l_s = l.strip()
+                if l_s and l_s == prev_line:
+                    rep_count += 1
+                    if rep_count >= 2:
+                        continue
+                else:
+                    prev_line = l_s
+                    rep_count = 1
+                dedup_lines.append(l)
+            return "\n".join(dedup_lines).strip()
 
     def _clean_and_parse_json(self, raw_text: str) -> dict[str, Any] | None:
         """Trích xuất và parse chuỗi JSON từ phản hồi LLM."""

@@ -234,6 +234,20 @@ INDEX_MAPPINGS: dict[str, Any] = {
             "index": True,
             "similarity": "cosine",
         },
+        # Part C & Document Classification fields
+        "doc_type_code": {"type": "keyword"},
+        "doc_type_name": {"type": "keyword"},
+        "doc_group": {"type": "keyword"},
+        "doc_subtype": {"type": "keyword"},
+        "doc_type_confidence": {"type": "float"},
+        "doc_type_source": {"type": "keyword"},
+        "subject": {"type": "text"},
+        "issuing_unit": {"type": "text"},
+        "ocr_scope": {"type": "keyword"},
+        "page_count": {"type": "integer"},
+        "pages_ocr": {"type": "integer"},
+        "needs_review": {"type": "boolean"},
+        "document_type": {"type": "keyword"},
     }
 }
 

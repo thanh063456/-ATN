@@ -16,6 +16,10 @@ import {
   AlertCircle,
   ShieldCheck,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
@@ -24,6 +28,7 @@ import { CameraCaptureModal } from "../components/common/CameraCaptureModal";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useToastStore } from "../stores/useToastStore";
 import { documentsApi, DocumentListItem } from "../api/documents";
+import { statsApi, DashboardStatsResponse } from "../api/stats";
 
 // Helper hàm làm đẹp tiêu đề văn bản hành chính
 function formatDisplayTitle(rawTitle: string): { mainTitle: string; code?: string } {
@@ -68,6 +73,13 @@ export const DocumentsPage: React.FC = () => {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
 
+  // 📄 Phân trang & Thống kê toàn hệ thống
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [systemStats, setSystemStats] = useState<DashboardStatsResponse | null>(null);
+
   const handleCameraCapture = async (file: File) => {
     setIsLoading(true);
     try {
@@ -99,16 +111,35 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
-  const fetchDocuments = async () => {
+  const fetchDashboardStats = async () => {
+    try {
+      const stats = await statsApi.getDashboardStats();
+      setSystemStats(stats);
+    } catch (err) {
+      console.warn("Could not fetch dashboard stats:", err);
+    }
+  };
+
+  const isInitialSearchMount = React.useRef(true);
+
+  const fetchDocuments = async (page = currentPage, size = pageSize, refreshMeta = false) => {
     setIsLoading(true);
     try {
       const res = await documentsApi.list({
-        search: searchFilter || undefined,
+        search: searchFilter.trim() || undefined,
         ocrStatus: statusFilter !== "ALL" ? statusFilter : undefined,
+        approvalStatus: approvalFilter !== "ALL" ? approvalFilter : undefined,
         tag: selectedTag !== "ALL" ? selectedTag : undefined,
+        page: page,
+        pageSize: size,
       });
       setDocs(res.items || []);
-      fetchTags();
+      setTotalItems(res.total || 0);
+      setTotalPages(res.total_pages || 1);
+      if (refreshMeta || !systemStats) {
+        fetchTags();
+        fetchDashboardStats();
+      }
     } catch (err: any) {
       console.warn("Could not fetch from backend:", err);
     } finally {
@@ -116,9 +147,24 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
+  // Reset về trang 1 khi thay đổi bộ lọc hoặc kích thước trang
   useEffect(() => {
-    fetchDocuments();
-  }, [statusFilter, selectedTag]);
+    setCurrentPage(1);
+    fetchDocuments(1, pageSize, true);
+  }, [statusFilter, approvalFilter, selectedTag, pageSize]);
+
+  // Debounce tìm kiếm từ khóa (bỏ qua render ban đầu)
+  useEffect(() => {
+    if (isInitialSearchMount.current) {
+      isInitialSearchMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      fetchDocuments(1, pageSize);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchFilter]);
 
   // Real-time polling nếu có tài liệu đang xử lý OCR (PROCESSING hoặc PENDING)
   useEffect(() => {
@@ -126,11 +172,44 @@ export const DocumentsPage: React.FC = () => {
     if (!hasProcessing) return;
 
     const interval = setInterval(() => {
-      fetchDocuments();
+      fetchDocuments(currentPage, pageSize);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [docs, statusFilter, selectedTag]);
+  }, [docs, currentPage, pageSize]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    setCurrentPage(newPage);
+    fetchDocuments(newPage, pageSize, false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 4) {
+        for (let i = 1; i <= 5; i++) pages.push(i);
+        pages.push(-1);
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 3) {
+        pages.push(1);
+        pages.push(-1);
+        for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push(-1);
+        pages.push(currentPage - 1);
+        pages.push(currentPage);
+        pages.push(currentPage + 1);
+        pages.push(-1);
+        pages.push(totalPages);
+      }
+    }
+    return pages;
+  };
 
   const handleApprove = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -141,7 +220,7 @@ export const DocumentsPage: React.FC = () => {
         title: "Đã phê duyệt hồ sơ",
         message: "Hồ sơ đã được đánh dấu APPROVED và xác thực điện tử",
       });
-      fetchDocuments();
+      fetchDocuments(currentPage, pageSize, true);
     } catch (err: any) {
       addToast({
         type: "error",
@@ -160,7 +239,7 @@ export const DocumentsPage: React.FC = () => {
         title: "Đã từ chối hồ sơ",
         message: "Trạng thái đã chuyển sang REJECTED",
       });
-      fetchDocuments();
+      fetchDocuments(currentPage, pageSize, true);
     } catch (err: any) {
       addToast({
         type: "error",
@@ -170,51 +249,42 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
-  const filteredDocs = docs.filter((doc) => {
-    const uploaderName = doc.uploader_name || doc.student_name || "";
-    const uploaderMssv = doc.uploader_mssv || doc.student_id || "";
-    const docNumber = doc.document_number || "";
-    const matchSearch =
-      !searchFilter ||
-      doc.title.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      docNumber.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      (uploaderName && uploaderName.toLowerCase().includes(searchFilter.toLowerCase())) ||
-      (uploaderMssv && uploaderMssv.includes(searchFilter));
+  // Dữ liệu hiển thị trực tiếp từ server đã được phân trang & lọc chính xác
+  const displayDocs = docs;
 
-    const isApproved = doc.ocr_status === "APPROVED";
-    const matchApproval =
-      approvalFilter === "ALL" ||
-      (approvalFilter === "APPROVED" && isApproved) ||
-      (approvalFilter === "PENDING" && !isApproved);
+  // KPI tóm tắt số liệu toàn hệ thống & theo bộ lọc
+  const isFiltered = Boolean(searchFilter || statusFilter !== "ALL" || approvalFilter !== "ALL" || selectedTag !== "ALL");
 
-    const matchTag =
-      selectedTag === "ALL" ||
-      (doc.tags && doc.tags.some((t) => t.toLowerCase() === selectedTag.toLowerCase() || t.replace(/^#/, "").toLowerCase() === selectedTag.toLowerCase()));
-
-    return matchSearch && matchApproval && matchTag;
-  });
-
-  // KPI tóm tắt số liệu
-  const totalCount = docs.length;
-  const pendingCount = docs.filter((d) => d.ocr_status !== "APPROVED" && d.ocr_status !== "REJECTED").length;
-  const approvedCount = docs.filter((d) => d.ocr_status === "APPROVED").length;
+  const totalCount = isFiltered ? totalItems : (systemStats?.total_documents ?? totalItems);
+  const pendingCount = isFiltered
+    ? docs.filter((d) => d.ocr_status !== "APPROVED" && d.ocr_status !== "REJECTED").length
+    : (systemStats ? Math.max(0, systemStats.total_documents - systemStats.approved_count - systemStats.rejected_count) : totalItems);
+  const approvedCount = isFiltered
+    ? docs.filter((d) => d.ocr_status === "APPROVED").length
+    : (systemStats?.approved_count ?? 0);
+  const digitizedCount = isFiltered
+    ? docs.filter((d) => d.ocr_status === "DONE" || d.ocr_status === "APPROVED").length
+    : (systemStats ? (systemStats.done_count + systemStats.approved_count) : totalItems);
 
   // Helper color map cho badge
   const getTagBadgeStyle = (tag: string) => {
-    const t = tag.toLowerCase();
-    if (t.includes("gap") || t.includes("thieu") || t.includes("ngheo") || t.includes("thuongbinh") || t.includes("khuyettat") || t.includes("mocoi")) {
+    const t = tag.toUpperCase();
+    if (t.startsWith("#SO_") || /^#[0-9]/.test(t)) {
       return { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" };
     }
-    if (t.includes("hocbong") || t.includes("miengiam") || t.includes("kehoach") || t.includes("quyetdinh") || t.includes("vung")) {
+    if (["#THONGBAO", "#KEHOACH", "#QUYETDINH", "#HUONGDAN", "#TOTRINH", "#BAOCAO", "#CONGVAN", "#GIAYMOI", "#BIENBAN", "#DANHSACH", "#DONTU"].includes(t)) {
       return { bg: "#fef3c7", text: "#b45309", border: "#fde68a" };
     }
-    if (t.startsWith("#k") || t.includes("khoa") || t.includes("lop")) {
-      return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
+    if (t.startsWith("#NGANH")) {
+      return { bg: "#dcfce7", text: "#15803d", border: "#86efac" };
     }
-    if (t.includes("duyet") || t.includes("thongbao") || t.includes("chinhsua")) {
+    if (t.startsWith("#KHOA") && !/^#K[0-9]{2}/.test(t)) {
       return { bg: "#e0e7ff", text: "#4338ca", border: "#c7d2fe" };
     }
-    return { bg: "#f3f4f6", text: "#4b5563", border: "#e5e7eb" };
+    if (/^#K[0-9]{2}/.test(t)) {
+      return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
+    }
+    return { bg: "#ccfbf1", text: "#0f766e", border: "#99f6e4" };
   };
 
   return (
@@ -341,7 +411,7 @@ export const DocumentsPage: React.FC = () => {
           </div>
           <div>
             <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Số hóa hoàn tất</div>
-            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#7c3aed" }}>{docs.filter(d => d.ocr_status === "DONE" || d.ocr_status === "APPROVED").length}</div>
+            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#7c3aed" }}>{digitizedCount}</div>
           </div>
         </div>
       </div>
@@ -418,7 +488,7 @@ export const DocumentsPage: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={fetchDocuments}
+                onClick={() => fetchDocuments(currentPage, pageSize)}
                 leftIcon={<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />}
               >
                 Làm mới
@@ -525,7 +595,7 @@ export const DocumentsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredDocs.length === 0 ? (
+              {displayDocs.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: "3.5rem 1rem", textAlign: "center", color: "var(--gray-400)" }}>
                     <FileText size={40} style={{ margin: "0 auto 0.75rem", opacity: 0.4 }} />
@@ -534,7 +604,7 @@ export const DocumentsPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredDocs.map((doc) => {
+                displayDocs.map((doc) => {
                   const isApproved = doc.ocr_status === "APPROVED";
                   const isRejected = doc.ocr_status === "REJECTED";
                   const { mainTitle, code } = formatDisplayTitle(doc.title);
@@ -800,6 +870,182 @@ export const DocumentsPage: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination & Display Controls */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "1rem",
+          padding: "0.85rem 1.25rem",
+          borderTop: "1px solid var(--border-color)",
+          backgroundColor: "#fff",
+        }}>
+          {/* Left: Summary & Page Size Selector */}
+          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.8125rem", color: "var(--gray-600)" }}>
+              Hiển thị <strong style={{ color: "var(--gray-900)" }}>{totalItems > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong> - <strong style={{ color: "var(--gray-900)" }}>{Math.min(currentPage * pageSize, totalItems)}</strong> trong tổng số <strong style={{ color: "var(--primary-700)" }}>{totalItems}</strong> hồ sơ
+            </span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--gray-500)" }}>Số mục / trang:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  const newSize = Number(e.target.value);
+                  setPageSize(newSize);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: "0.3rem 0.6rem",
+                  fontSize: "0.8125rem",
+                  borderRadius: "0.375rem",
+                  border: "1px solid var(--border-color)",
+                  backgroundColor: "var(--gray-50)",
+                  cursor: "pointer",
+                  color: "var(--gray-800)",
+                  fontWeight: 600,
+                }}
+              >
+                <option value={20}>20 hồ sơ</option>
+                <option value={50}>50 hồ sơ</option>
+                <option value={100}>100 hồ sơ</option>
+                <option value={200}>Tất cả ({totalItems})</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Right: Page Navigation Buttons */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <button
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage <= 1 || isLoading}
+              title="Về trang đầu"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0.35rem 0.6rem",
+                borderRadius: "0.375rem",
+                border: "1px solid var(--border-color)",
+                backgroundColor: currentPage <= 1 ? "var(--gray-100)" : "#fff",
+                color: currentPage <= 1 ? "var(--gray-400)" : "var(--gray-700)",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                cursor: currentPage <= 1 ? "not-allowed" : "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <ChevronsLeft size={14} />
+            </button>
+
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1 || isLoading}
+              title="Trang trước"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "0.375rem",
+                border: "1px solid var(--border-color)",
+                backgroundColor: currentPage <= 1 ? "var(--gray-100)" : "#fff",
+                color: currentPage <= 1 ? "var(--gray-400)" : "var(--gray-700)",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                cursor: currentPage <= 1 ? "not-allowed" : "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <ChevronLeft size={14} />
+              Trước
+            </button>
+
+            {/* Page number buttons */}
+            {getPageNumbers().map((p, idx) => {
+              if (p === -1) {
+                return (
+                  <span key={`ellipsis-${idx}`} style={{ padding: "0 0.35rem", color: "var(--gray-400)", fontSize: "0.875rem" }}>
+                    ...
+                  </span>
+                );
+              }
+              const isActive = p === currentPage;
+              return (
+                <button
+                  key={`page-${p}`}
+                  onClick={() => handlePageChange(p)}
+                  disabled={isLoading}
+                  style={{
+                    minWidth: "32px",
+                    height: "32px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: "0.375rem",
+                    border: isActive ? "1px solid var(--primary-600)" : "1px solid var(--border-color)",
+                    backgroundColor: isActive ? "var(--primary-600)" : "#fff",
+                    color: isActive ? "#fff" : "var(--gray-700)",
+                    fontSize: "0.8125rem",
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    boxShadow: isActive ? "0 1px 2px rgba(99, 102, 241, 0.3)" : "none",
+                  }}
+                >
+                  {p}
+                </button>
+              );
+            })}
+
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || isLoading}
+              title="Trang sau"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "0.375rem",
+                border: "1px solid var(--border-color)",
+                backgroundColor: currentPage >= totalPages ? "var(--gray-100)" : "#fff",
+                color: currentPage >= totalPages ? "var(--gray-400)" : "var(--gray-700)",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              Sau
+              <ChevronRight size={14} />
+            </button>
+
+            <button
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage >= totalPages || isLoading}
+              title="Đến trang cuối"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0.35rem 0.6rem",
+                borderRadius: "0.375rem",
+                border: "1px solid var(--border-color)",
+                backgroundColor: currentPage >= totalPages ? "var(--gray-100)" : "#fff",
+                color: currentPage >= totalPages ? "var(--gray-400)" : "var(--gray-700)",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <ChevronsRight size={14} />
+            </button>
+          </div>
         </div>
       </Card>
 

@@ -269,6 +269,8 @@ def _mask_pii(text: str | None) -> str | None:
 async def search_documents(
     q: str = Query(..., min_length=1, description="Từ khóa tìm kiếm (tiếng Việt có dấu hoặc không dấu)"),
     category_code: str | None = Query(None, description="Lọc theo mã danh mục (vd: DON_NGHI_HOC)"),
+    doc_type_code: str | None = Query(None, description="Lọc theo mã loại văn bản (Part C)"),
+    doc_group: str | None = Query(None, description="Lọc theo nhóm văn bản (Part C)"),
     ocr_status: str | None = Query(None, description="Lọc theo trạng thái OCR (vd: DONE, APPROVED)"),
     tag: str | None = Query(None, description="Lọc theo thẻ nhãn (vd: #BẢO_LƯU hoặc BẢO_LƯU)"),
     date_from: str | None = Query(None, description="Ngày tạo từ (định dạng YYYY-MM-DD)"),
@@ -300,6 +302,8 @@ async def search_documents(
     query_str = q.strip() if isinstance(q, str) else str(q)
 
     # Chuẩn hóa an toàn các tham số khi hàm được gọi trực tiếp bằng Python
+    if not category_code and doc_type_code:
+        category_code = doc_type_code
     category_code = category_code if isinstance(category_code, str) else None
     ocr_status = ocr_status if isinstance(ocr_status, str) else None
     tag = tag if isinstance(tag, str) else None
@@ -566,6 +570,11 @@ async def search_documents(
                         {"year": b.get("key_as_string", str(b.get("key"))), "count": b["doc_count"]}
                         for b in es_aggs.get("years", {}).get("buckets", [])
                     ],
+                    "doc_type_code": [
+                        {"code": b["key"], "count": b["doc_count"]}
+                        for b in es_aggs.get("categories", {}).get("buckets", [])
+                    ],
+                    "doc_group": [],
                 }
 
             if total_hits > 0:
@@ -693,6 +702,8 @@ async def search_documents(
             "statuses": [{"status": k, "count": v} for k, v in status_counts.items()],
             "tags": [{"tag": k, "count": v} for k, v in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:15]],
             "years": [{"year": k, "count": v} for k, v in sorted(year_counts.items())],
+            "doc_type_code": [{"code": k, "count": v} for k, v in cat_counts.items()],
+            "doc_group": [],
         }
 
         matched_items: list[tuple[float, Document, str | None, dict[str, list[str]]]] = []

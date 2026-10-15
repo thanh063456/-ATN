@@ -99,6 +99,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             raise
         logger.warning(f"Could not initialize database on startup: {exc}")
 
+    # Khởi tạo và kiểm tra PyTorch CUDA device
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device_name = torch.cuda.get_device_name(0)
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            logger.info("PyTorch CUDA ready: {gpu} (VRAM: {mem:.1f} GB)", gpu=device_name, mem=vram_gb)
+            _ = torch.zeros(1, device="cuda")
+        else:
+            logger.info("PyTorch running on CPU")
+    except Exception as exc:
+        logger.warning("CUDA check on startup: {err}", err=str(exc))
+
     # Khởi tạo Elasticsearch index và mapping tiếng Việt nếu chưa tồn tại
     try:
         await init_elasticsearch_index()
@@ -197,6 +210,11 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix=API_PREFIX)     # /api/v1/search
     app.include_router(stats.router, prefix=API_PREFIX)      # /api/v1/stats
     app.include_router(verify.router, prefix=API_PREFIX)     # /api/v1/verify
+
+    @app.get(f"{API_PREFIX}/doc-types", tags=["documents"], summary="Danh sách cấu hình phân loại văn bản (Doc Types)")
+    async def get_doc_types():
+        from app.core.doc_types_config import DOC_TYPES_CONFIG
+        return [t.model_dump() for t in DOC_TYPES_CONFIG.types]
 
     # ── Root ──────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)

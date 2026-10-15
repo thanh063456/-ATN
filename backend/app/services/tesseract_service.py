@@ -38,6 +38,7 @@ if platform.system() == "Windows":
 _local_tessdata = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../tessdata")
 )
+_active_tessdata = None
 if os.path.exists(_local_tessdata):
     if platform.system() == "Windows" and any(ord(c) > 127 for c in _local_tessdata):
         import subprocess
@@ -49,8 +50,10 @@ if os.path.exists(_local_tessdata):
             except Exception:
                 pass
         os.environ["TESSDATA_PREFIX"] = _temp_tessdata
+        _active_tessdata = _temp_tessdata
     else:
         os.environ.setdefault("TESSDATA_PREFIX", _local_tessdata)
+        _active_tessdata = _local_tessdata
 
 import cv2
 import numpy as np
@@ -73,9 +76,9 @@ class TesseractService:
     """
 
     LANG    = "vie"
-    PSM     = 3   # Fully automatic page segmentation (handles multiple columns like headers better)
+    PSM     = 3   # Fully automatic page segmentation
     OEM     = 1   # Neural nets LSTM only
-    CONFIG  = f"--psm {PSM} --oem {OEM}"
+    CONFIG  = f"--tessdata-dir {_active_tessdata} --psm {PSM} --oem {OEM}" if _active_tessdata else f"--psm {PSM} --oem {OEM}"
     VERSION = "5.3.0"
 
     def __init__(self) -> None:
@@ -107,7 +110,9 @@ class TesseractService:
 
         # Kiểm tra ngôn ngữ 'vie'
         try:
-            langs = pytesseract.get_languages()
+            langs = pytesseract.get_languages(config=f'--tessdata-dir {_active_tessdata}') if _active_tessdata else pytesseract.get_languages()
+            if not langs and _active_tessdata and os.path.exists(os.path.join(_active_tessdata, "vie.traineddata")):
+                langs = ["vie"]
             if "vie" not in langs:
                 raise EngineUnavailableError(
                     "tesseract",
@@ -158,15 +163,6 @@ class TesseractService:
                 if cv2.countNonZero(mask_red) > 0:
                     img_np = cv2.inpaint(img_np, mask_red, 3, cv2.INPAINT_TELEA)
                 
-                # Blue mask (handwriting)
-                lower_blue = np.array([90, 50, 50])
-                upper_blue = np.array([140, 255, 255])
-                mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
-                mask_blue = cv2.dilate(mask_blue, kernel, iterations=2)
-                
-                # Erase blue ink to prevent Tesseract from hallucinating digits
-                img_np[mask_blue > 0] = [255, 255, 255]
-                
                 gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
             else:
                 gray = img_np.copy()
@@ -195,8 +191,8 @@ class TesseractService:
     def _ocr_image(self, pil_image: Image.Image) -> str:
         """
         OCR toàn bộ một trang ảnh bằng Tesseract PSM 3, OEM 1.
-        Sử dụng image_to_data để lấy thông tin block/par/line/word và confidence.
-        Lọc nhiễu và giữ nguyên cấu trúc đoạn văn.
+        Phân tách 2 cột ở phần Header văn bản hành chính (Cơ quan bên trái, Quốc hiệu bên phải)
+        để tránh ghép nhầm 2 cột thành 1 hàng ngang làm hỏng cấu trúc.
         """
         self.check_availability()
         processed = self.preprocess_for_tesseract(pil_image)
@@ -209,78 +205,141 @@ class TesseractService:
             output_type=pytesseract.Output.DICT,
         )
         
-        lines = []
-        current_block = -1
-        current_par = -1
-        current_line = -1
-        
-        current_line_words = []
-        current_line_confs = []
-        
-        import re
-        
-        def flush_line():
-            if not current_line_words:
-                return
-            
-            line_text = " ".join(current_line_words)
-            mean_conf = sum(current_line_confs) / len(current_line_confs)
-            
-            # Step 4: Noise filtering on line level
-            letters = sum(1 for c in line_text if c.isalpha())
-            non_letters = sum(1 for c in line_text if not c.isalpha() and not c.isspace())
-            ratio = non_letters / max(len(line_text), 1)
-            
-            # Drop lines with low mean conf (< 40) or high non-letter ratio (> 0.5) if not a very short bullet
-            if len(line_text) >= 5 and ratio > 0.5:
-                return
-            if mean_conf < 40:
-                return
-                
-            # Step 5: normalize bullet points: "—" to "–"
-            line_text = line_text.replace("—", "–")
-            
-            # Ensure paragraph breaks before "+", "–", "-", "1."
-            if re.match(r'^(\+|–|-|\d+\.)\s', line_text):
-                if lines and lines[-1] != "":
-                    lines.append("")
-                    
-            lines.append(line_text)
+        w_page, h_page = processed.width, processed.height
+        header_cutoff_y = h_page * 0.145
+        mid_x = w_page * 0.42
 
-        for i in range(len(data['level'])):
-            level = data['level'][i]
-            if level == 5: # Word level
+        header_left_words = []
+        header_right_words = []
+        body_words = []
+
+        import re
+
+        total_tokens = len(data.get('text', []))
+        for i in range(total_tokens):
+            if data['level'][i] == 5: # Word level
                 text = data['text'][i].strip()
+                if not text:
+                    continue
                 try:
                     conf = float(data['conf'][i])
-                except:
+                except Exception:
                     conf = 0.0
-                    
-                block_num = data['block_num'][i]
-                par_num = data['par_num'][i]
-                line_num = data['line_num'][i]
-                
-                if (block_num != current_block or par_num != current_par or line_num != current_line):
-                    flush_line()
-                    
-                    if (block_num != current_block or par_num != current_par) and current_line != -1:
-                        if lines and lines[-1] != "":
-                            lines.append("") # paragraph break
-                            
-                    current_block = block_num
-                    current_par = par_num
-                    current_line = line_num
-                    current_line_words = []
-                    current_line_confs = []
-                
-                # Step 4: Drop words with conf < 40
-                if text and conf >= 40:
-                    current_line_words.append(text)
-                    current_line_confs.append(conf)
-                    
-        flush_line()
-        
-        raw_text = "\n".join(lines)
+
+                # Giữ lại các token có ý nghĩa (số hiệu, chữ viết tắt) nếu conf >= 25
+                if conf < 25:
+                    continue
+
+                x = data['left'][i]
+                y = data['top'][i]
+                w = data['width'][i]
+                h = data['height'][i]
+
+                xc = x + w / 2.0
+                yc = y + h / 2.0
+
+                if yc < header_cutoff_y:
+                    if xc < mid_x:
+                        header_left_words.append((yc, x, text, conf))
+                    else:
+                        header_right_words.append((yc, x, text, conf))
+                else:
+                    body_words.append({
+                        'block_num': data['block_num'][i],
+                        'par_num': data['par_num'][i],
+                        'line_num': data['line_num'][i],
+                        'x': x,
+                        'y': y,
+                        'yc': yc,
+                        'text': text,
+                        'conf': conf,
+                    })
+
+        def cluster_header_column(words: list[tuple[float, int, str, float]], y_tol: int = 15) -> list[str]:
+            if not words:
+                return []
+            ws = sorted(words, key=lambda it: it[0])
+            clustered = []
+            curr_line = [ws[0]]
+            cur_y = ws[0][0]
+            for w in ws[1:]:
+                if abs(w[0] - cur_y) <= y_tol:
+                    curr_line.append(w)
+                    cur_y = sum(item[0] for item in curr_line) / len(curr_line)
+                else:
+                    curr_line.sort(key=lambda item: item[1])
+                    clustered.append(" ".join(item[2] for item in curr_line))
+                    curr_line = [w]
+                    cur_y = w[0]
+            if curr_line:
+                curr_line.sort(key=lambda item: item[1])
+                clustered.append(" ".join(item[2] for item in curr_line))
+            return clustered
+
+        header_left_lines = cluster_header_column(header_left_words)
+        header_right_lines = cluster_header_column(header_right_words)
+
+        body_lines = []
+        if body_words:
+            current_block = -1
+            current_par = -1
+            current_line = -1
+            curr_line_words = []
+            curr_line_confs = []
+
+            def flush_body_line():
+                if not curr_line_words:
+                    return
+                line_text = " ".join(curr_line_words)
+                mean_conf = sum(curr_line_confs) / len(curr_line_confs)
+
+                letters = sum(1 for c in line_text if c.isalpha())
+                non_letters = sum(1 for c in line_text if not c.isalpha() and not c.isspace())
+                ratio = non_letters / max(len(line_text), 1)
+
+                if len(line_text) >= 5 and ratio > 0.6:
+                    return
+                if mean_conf < 40:
+                    return
+
+                line_text = line_text.replace("—", "–")
+                if re.match(r'^(\+|–|-|\d+\.)\s', line_text):
+                    if body_lines and body_lines[-1] != "":
+                        body_lines.append("")
+
+                body_lines.append(line_text)
+
+            for w in body_words:
+                b_num = w['block_num']
+                p_num = w['par_num']
+                l_num = w['line_num']
+
+                if (b_num != current_block or p_num != current_par or l_num != current_line):
+                    flush_body_line()
+                    if (b_num != current_block or p_num != current_par) and current_line != -1:
+                        if body_lines and body_lines[-1] != "":
+                            body_lines.append("")
+                    current_block = b_num
+                    current_par = p_num
+                    current_line = l_num
+                    curr_line_words = []
+                    curr_line_confs = []
+
+                curr_line_words.append(w['text'])
+                curr_line_confs.append(w['conf'])
+
+            flush_body_line()
+
+        # Ghép thành dòng thô có thứ tự rõ ràng: Khối Trái -> Khối Phải -> Phần Thân
+        all_lines = []
+        if header_left_lines:
+            all_lines.extend(header_left_lines)
+        if header_right_lines:
+            all_lines.extend(header_right_lines)
+        if body_lines:
+            all_lines.extend(body_lines)
+
+        raw_text = "\n".join(all_lines)
         return unicodedata.normalize("NFC", raw_text).strip()
 
     # ── Hậu xử lý ─────────────────────────────────────────────────────────────

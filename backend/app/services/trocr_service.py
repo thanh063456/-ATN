@@ -35,7 +35,7 @@ except ImportError:
 class TrOCRService:
     """Service chuyên biệt điều phối pipeline cho Microsoft TrOCR."""
 
-    VERSION = "trocr-base-printed"
+    VERSION = "trocr-vi-finetuned"
 
     def __init__(self) -> None:
         self._settings = None
@@ -57,42 +57,26 @@ class TrOCRService:
     # ── Tiền xử lý ảnh ────────────────────────────────────────────────────────
     def preprocess_image(self, pil_image: Image.Image) -> Image.Image:
         """
-        Tiền xử lý ảnh toàn trang:
-        Grayscale → CLAHE (tăng tương phản) → GaussianBlur (khử nhiễu nhẹ).
+        Bảo toàn độ nét và màu sắc tự nhiên của ảnh gốc cho detector EasyOCR và TrOCR.
+        Không áp dụng CLAHE hay GaussianBlur toàn trang làm vỡ nét chữ và gây đứt đoạn dòng văn bản.
         """
-        if cv2 is None:
-            return pil_image
-        try:
-            img_np = np.array(pil_image)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            enhanced = clahe.apply(gray)
-            blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
-            return Image.fromarray(blurred)
-        except Exception as exc:
-            logger.debug("preprocess_image fallback: {err}", err=str(exc))
-            return pil_image
+        return pil_image
 
     def preprocess_handwriting(self, pil_image: Image.Image) -> Image.Image:
         """
-        Tiền xử lý từng dòng ảnh:
-        Upscale nếu < 48px cao → CLAHE → Padding chống cắt dấu tiếng Việt.
+        Tiền xử lý từng dòng ảnh cho TrOCR:
+        Bảo toàn ảnh RGB sắc nét. Upscale nếu dòng quá thấp (< 32px) để mô hình nhận diện rõ dấu tiếng Việt.
         """
-        if cv2 is None:
+        if cv2 is None or np is None:
             return pil_image
         try:
             img_np = np.array(pil_image)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np
-
-            h, w = gray.shape[:2]
-            if h < 48 and h > 0:
-                scale = min(2.0, max(1.5, 56.0 / float(h)))
-                gray = cv2.resize(gray, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-
-            clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(4, 4))
-            enhanced = clahe.apply(gray)
-            padded = cv2.copyMakeBorder(enhanced, 4, 4, 6, 6, cv2.BORDER_CONSTANT, value=255)
-            return Image.fromarray(padded)
+            h, w = img_np.shape[:2]
+            if 0 < h < 32:
+                scale = min(2.0, 36.0 / float(h))
+                resized = cv2.resize(img_np, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+                return Image.fromarray(resized)
+            return pil_image
         except Exception as exc:
             logger.debug("preprocess_handwriting fallback: {err}", err=str(exc))
             return pil_image
@@ -212,7 +196,7 @@ class TrOCRService:
             (raw_text, processed_text, confidence_score, page_count)
         """
         file_ext = file_type.lower().replace(".", "")
-        _render_dpi = 150
+        _render_dpi = 200
 
         raw_pages: list[str] = []
         proc_pages: list[str] = []
@@ -293,17 +277,22 @@ class TrOCRService:
         results: dict[str, Any] = {}
         for eng_key, eng_name in [
             ("vietocr", "VietOCR (vgg_transformer)"),
-            ("trocr", "TrOCR (English baseline, not fine-tuned for Vietnamese)"),
+            ("trocr", "TrOCR-Vi (Fine-tuned Transformer)"),
             ("tesseract", "Tesseract 5 (LSTM Baseline)"),
         ]:
             t0 = time.time()
             try:
                 if eng_key == "tesseract":
-                    raw, proc, conf, pc = tesseract_service.extract_text_from_file(file_bytes, file_type)
+                    res_tuple = tesseract_service.extract_text_from_file(file_bytes, file_type)
                 elif eng_key == "trocr":
-                    raw, proc, conf, pc = self.extract_text_from_file(file_bytes, file_type)
+                    res_tuple = self.extract_text_from_file(file_bytes, file_type)
                 else:
-                    raw, proc, conf, pc = vietocr_service.extract_text_from_file(file_bytes, file_type, "vietocr")
+                    res_tuple = vietocr_service.extract_text_from_file(file_bytes, file_type, "vietocr")
+
+                raw = res_tuple[0] if len(res_tuple) > 0 else ""
+                proc = res_tuple[1] if len(res_tuple) > 1 else ""
+                conf = res_tuple[2] if len(res_tuple) > 2 else 0.0
+                pc = res_tuple[3] if len(res_tuple) > 3 else 1
 
                 text = proc or raw
                 results[eng_key] = {

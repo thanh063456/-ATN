@@ -51,7 +51,7 @@ import { useToastStore } from "../stores/useToastStore";
 
 export const OCR_ENGINES = [
   { id: "vietocr", label: "VietOCR", name: "VietOCR v2.0", subtitle: "Seq2Seq Transformer (PyTorch)", version: "vgg_transformer-2.0" },
-  { id: "trocr", label: "TrOCR", name: "TrOCR (English baseline, not fine-tuned for Vietnamese)", subtitle: "Vision Transformer (ViT)", version: "trocr-base-printed" },
+  { id: "trocr", label: "TrOCR", name: "TrOCR-Vi (Fine-tuned Transformer)", subtitle: "Vision Transformer (ViT)", version: "trocr-vi-finetuned" },
   { id: "tesseract", label: "Tesseract", name: "Tesseract", subtitle: "LSTM Baseline", version: "dynamic" },
 ];
 
@@ -114,7 +114,9 @@ export const DocumentDetailPage: React.FC = () => {
   const [benchmarkData, setBenchmarkData] = useState<ModelComparisonResponse | null>(null);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [selectedOcrEngine, setSelectedOcrEngine] = useState<string>("vietocr");
-  const [ocrTextMode, setOcrTextMode] = useState<"processed" | "raw">("processed");
+  const [ocrTextMode, setOcrTextMode] = useState<"processed" | "raw">(() => {
+    return (localStorage.getItem("preferred_ocr_text_mode") as "processed" | "raw") || "raw";
+  });
   const [runningEngine, setRunningEngine] = useState<string | null>(null);
   const [isCompareMode, setIsCompareMode] = useState<boolean>(false);
   const [compareEngineA, setCompareEngineA] = useState<string>("vietocr");
@@ -133,7 +135,8 @@ export const DocumentDetailPage: React.FC = () => {
       setDoc(data);
       if (data.all_ocr_results && data.all_ocr_results.length > 0) {
         const engineResult = data.all_ocr_results.find(r => r.ocr_engine === selectedOcrEngine);
-        setCorrectedText(engineResult?.corrected_text || engineResult?.raw_text || "");
+        const preferredMode = localStorage.getItem("preferred_ocr_text_mode") || "raw";
+        setCorrectedText(preferredMode === "raw" ? (engineResult?.raw_text || engineResult?.corrected_text || "") : (engineResult?.corrected_text || engineResult?.raw_text || ""));
         if (runningEngine) {
           const eng = data.all_ocr_results.find(r => r.ocr_engine === runningEngine);
           if (eng && (eng.status === "DONE" || eng.status === "LOW_QUALITY" || eng.status === "FAILED")) {
@@ -215,7 +218,7 @@ export const DocumentDetailPage: React.FC = () => {
     setIsEditingOCR(false);
     if (doc?.all_ocr_results) {
       const engineResult = doc.all_ocr_results.find((r: any) => r.ocr_engine === engine);
-      setCorrectedText(engineResult?.corrected_text || engineResult?.raw_text || "");
+      setCorrectedText(ocrTextMode === "raw" ? (engineResult?.raw_text || engineResult?.corrected_text || "") : (engineResult?.corrected_text || engineResult?.raw_text || ""));
     } else {
       setCorrectedText("");
     }
@@ -225,38 +228,67 @@ export const DocumentDetailPage: React.FC = () => {
     loadDoc(true);
   }, [id]);
 
-  // Real-time polling nếu tài liệu đang xử lý hoặc engine đang quét lại
+  // Real-time polling nếu tài liệu đang xử lý, hoặc có engine đang quét lại/chờ xử lý
   useEffect(() => {
     if (!doc && !runningEngine) return;
     const isDocProcessing = doc?.ocr_status === "PROCESSING" || doc?.ocr_status === "PENDING";
     const isEngineRunning = runningEngine !== null;
+    const hasPendingOrRunning = doc?.all_ocr_results?.some(
+      (r: any) => r.status === "PROCESSING" || r.status === "RUNNING" || r.status === "PENDING"
+    );
+    const hasMissingEngines = doc?.ocr_status === "DONE" && (doc?.all_ocr_results?.length || 0) < OCR_ENGINES.length;
 
-    if (!isDocProcessing && !isEngineRunning) return;
+    if (!isDocProcessing && !isEngineRunning && !hasPendingOrRunning && !hasMissingEngines) return;
 
     const interval = setInterval(async () => {
       if (!id) return;
       try {
         const data = await documentsApi.getById(id);
         setDoc(data);
+
+        // Đồng bộ text cho tab đang chọn nếu tab đó vừa quét xong
+        if (data.all_ocr_results) {
+          const currentEngRes = data.all_ocr_results.find((r: any) => r.ocr_engine === selectedOcrEngine);
+          if (currentEngRes && (currentEngRes.status === "DONE" || currentEngRes.status === "LOW_QUALITY") && !isEditingOCR) {
+            setCorrectedText((prev) => prev || currentEngRes.corrected_text || currentEngRes.raw_text || "");
+          }
+        }
+
         if (runningEngine) {
-          const eng = data.all_ocr_results?.find(r => r.ocr_engine === runningEngine);
-          if (eng && (eng.status === "DONE" || eng.status === "LOW_QUALITY" || eng.status === "FAILED")) {
-            setRunningEngine(null);
-            if (eng.status === "DONE" || eng.status === "LOW_QUALITY") {
+          if (runningEngine === "all") {
+            const results = data.all_ocr_results || [];
+            const allFinished = results.length > 0 && OCR_ENGINES.every((eng) => {
+              const r = results.find((item: any) => item.ocr_engine === eng.id);
+              return r && (r.status === "DONE" || r.status === "LOW_QUALITY" || r.status === "FAILED");
+            });
+            if (allFinished) {
+              setRunningEngine(null);
               addToast({
-                type: eng.status === "LOW_QUALITY" ? "warning" : "success",
-                title: eng.status === "LOW_QUALITY" ? "Hoàn thành OCR (Độ tin cậy thấp)" : "Hoàn thành OCR",
-                message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} đã quét xong.`,
+                type: "success",
+                title: "Hoàn thành quét toàn bộ",
+                message: "Tất cả mô hình OCR (VietOCR, TrOCR, Tesseract) đã hoàn tất quét văn bản.",
               });
-              if (selectedOcrEngine === runningEngine) {
-                setCorrectedText(eng.corrected_text || eng.raw_text || "");
+            }
+          } else {
+            const eng = data.all_ocr_results?.find(r => r.ocr_engine === runningEngine);
+            if (eng && (eng.status === "DONE" || eng.status === "LOW_QUALITY" || eng.status === "FAILED")) {
+              setRunningEngine(null);
+              if (eng.status === "DONE" || eng.status === "LOW_QUALITY") {
+                addToast({
+                  type: eng.status === "LOW_QUALITY" ? "warning" : "success",
+                  title: eng.status === "LOW_QUALITY" ? "Hoàn thành OCR (Độ tin cậy thấp)" : "Hoàn thành OCR",
+                  message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} đã quét xong.`,
+                });
+                if (selectedOcrEngine === runningEngine) {
+                  setCorrectedText(eng.corrected_text || eng.raw_text || "");
+                }
+              } else {
+                addToast({
+                  type: "error",
+                  title: "OCR thất bại",
+                  message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} gặp lỗi khi quét.`,
+                });
               }
-            } else {
-              addToast({
-                type: "error",
-                title: "OCR thất bại",
-                message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} gặp lỗi khi quét.`,
-              });
             }
           }
         }
@@ -266,7 +298,7 @@ export const DocumentDetailPage: React.FC = () => {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [id, doc?.ocr_status, runningEngine, selectedOcrEngine]);
+  }, [id, doc?.ocr_status, doc?.all_ocr_results, runningEngine, selectedOcrEngine, isEditingOCR]);
 
   const handleSaveCorrection = async () => {
     if (!id || !correctedText.trim()) return;
@@ -475,8 +507,8 @@ export const DocumentDetailPage: React.FC = () => {
     if (t.startsWith("#SO_") || /^#[0-9]/.test(t)) {
       return { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" };
     }
-    // 2. Loại đơn / Loại văn bản (#KeHoach, #QuyetDinh, #MienGiamHocPhi...) -> Amber / Orange
-    if (t.includes("KEHOACH") || t.includes("QUYETDINH") || t.includes("THONGBAO") || t.includes("MIENGIAM") || t.includes("HOCBONG") || t.includes("BAOLUU") || t.includes("XACNHAN")) {
+    // 2. Thể loại văn bản chính (#KeHoach, #QuyetDinh, #ThongBao, #DonTu...) -> Amber / Orange
+    if (["#THONGBAO", "#KEHOACH", "#QUYETDINH", "#HUONGDAN", "#TOTRINH", "#BAOCAO", "#CONGVAN", "#GIAYMOI", "#BIENBAN", "#DANHSACH", "#DONTU"].includes(t)) {
       return { bg: "#fef3c7", text: "#b45309", border: "#fde68a" };
     }
     // 3. Ngành (#Nganh...) -> Green
@@ -491,7 +523,8 @@ export const DocumentDetailPage: React.FC = () => {
     if (/^#K[0-9]{2}/.test(t)) {
       return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
     }
-    return { bg: "#f3f4f6", text: "#4b5563", border: "#e5e7eb" };
+    // 6. Chủ đề / Nội dung chi tiết (Thông báo về gì, Kế hoạch gì, Đơn gì) -> Teal / Cyan nổi bật
+    return { bg: "#ccfbf1", text: "#0f766e", border: "#99f6e4" };
   };
 
   const renderHighlightedOCRText = (text: string) => {
@@ -686,12 +719,17 @@ export const DocumentDetailPage: React.FC = () => {
     if (!id) return;
     try {
       setRunningEngine(engine);
-      setSelectedOcrEngine(engine);
+      if (engine !== "all") {
+        setSelectedOcrEngine(engine);
+      }
       await documentsApi.reprocessOCR(id, engine);
       addToast({
         type: "info",
-        title: "Đang quét lại OCR",
-        message: `Hệ thống đang quét lại văn bản bằng ${engine.toUpperCase()}...`,
+        title: engine === "all" ? "Đang quét tất cả mô hình" : "Đang quét lại OCR",
+        message:
+          engine === "all"
+            ? "Hệ thống đang quét lại văn bản bằng toàn bộ mô hình (VietOCR, TrOCR, Tesseract)..."
+            : `Hệ thống đang quét lại văn bản bằng ${engine.toUpperCase()}...`,
       });
       loadDoc(false);
     } catch (err: any) {
@@ -816,7 +854,7 @@ export const DocumentDetailPage: React.FC = () => {
               leftIcon={<RefreshCw size={14} className={runningEngine ? "animate-spin" : ""} />}
               rightIcon={<ChevronDown size={14} />}
             >
-              {runningEngine ? `Đang chạy ${runningEngine.toUpperCase()}...` : "Chạy lại OCR..."}
+              {runningEngine ? (runningEngine === "all" ? "Đang quét 3 model..." : `Đang chạy ${runningEngine.toUpperCase()}...`) : "Chạy lại OCR..."}
             </Button>
             {isRerunMenuOpen && (
               <div
@@ -830,10 +868,34 @@ export const DocumentDetailPage: React.FC = () => {
                   boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
                   border: "1px solid var(--border-color)",
                   zIndex: 50,
-                  minWidth: "240px",
+                  minWidth: "260px",
                   padding: "4px 0",
                 }}
               >
+                <button
+                  onClick={() => {
+                    setIsRerunMenuOpen(false);
+                    handleReprocessOCR("all");
+                  }}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "8px 12px",
+                    fontSize: "0.8rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    backgroundColor: "#f0fdf4",
+                    border: "none",
+                    borderBottom: "1px solid var(--border-color)",
+                    cursor: "pointer",
+                    transition: "background-color 0.15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#dcfce7")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f0fdf4")}
+                >
+                  <span style={{ fontWeight: 800, color: "#15803d" }}>⚡ Quét lại toàn bộ (3 Model)</span>
+                  <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>VietOCR + TrOCR-Vi + Tesseract</span>
+                </button>
                 {OCR_ENGINES.map((eng) => (
                   <button
                     key={eng.id}
@@ -878,7 +940,12 @@ export const DocumentDetailPage: React.FC = () => {
                   Phê duyệt hồ sơ
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={handleTriggerOcrFull} leftIcon={<RefreshCw size={14} />}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleReprocessOCR("all")}
+                leftIcon={<RefreshCw size={14} className={runningEngine === "all" ? "animate-spin" : ""} />}
+              >
                 Quét OCR Toàn Bộ
               </Button>
               {!isRejected && (
@@ -1010,7 +1077,7 @@ export const DocumentDetailPage: React.FC = () => {
                   })()}
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.15rem" }}>
-                  AI tự động phân loại theo 5 nhóm ưu tiên: 1.Số hiệu ➔ 2.Loại đơn/VB ➔ 3.Ngành ➔ 4.Khoa ➔ 5.Khóa.
+                  AI tự động phân loại theo 6 nhóm ưu tiên: 1.Số hiệu ➔ 2.Loại VB/Đơn ➔ 3.Chủ đề nội dung ➔ 4.Ngành ➔ 5.Khoa ➔ 6.Khóa.
                 </div>
               </div>
             </div>
@@ -1096,7 +1163,7 @@ export const DocumentDetailPage: React.FC = () => {
                       handleAddTag();
                     }
                   }}
-                  placeholder="Nhập nhãn mới (vd: #K49, #NganhCNTT)..."
+                  placeholder="Nhập nhãn mới (vd: #AnNinhTratTu, #HocPhi, #K49)..."
                   style={{
                     padding: "0.35rem 0.65rem",
                     borderRadius: "0.375rem",
@@ -1113,7 +1180,10 @@ export const DocumentDetailPage: React.FC = () => {
               {/* Quick Suggestion Chips */}
               <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>Gợi ý nhanh:</span>
-                {["#KeHoach", "#QuyetDinh", "#ThongBao", "#MienGiamHocPhi", "#NganhGDMN", "#NganhCNTT", "#KhoaSuPham", "#KhoaCNTT", "#K49", "#K48"].map((suggest) => {
+                {[
+                  "#KeHoach", "#ThongBao", "#AnNinhTratTu", "#HocPhi", "#DiemRenLuyen",
+                  "#KhaiGiang", "#MienGiamHocPhi", "#BaoLuu", "#NganhCNTT", "#KhoaCNTT", "#K49"
+                ].map((suggest) => {
                   const alreadyHas = doc.tags?.includes(suggest);
                   if (alreadyHas) return null;
                   return (
@@ -1392,10 +1462,19 @@ export const DocumentDetailPage: React.FC = () => {
               <div style={{ display: "flex", flex: 1, overflowX: "auto" }}>
                 {OCR_ENGINES.map((eng) => {
                   const res = doc?.all_ocr_results?.find((r: any) => r.ocr_engine === eng.id);
-                  const isRunning = (runningEngine === eng.id && (!res || res.status === "PROCESSING" || res.status === "PENDING")) || (doc?.ocr_status === "PROCESSING" && eng.id === "vietocr" && !res);
+                  const isResRunning = res?.status === "PROCESSING" || res?.status === "RUNNING";
+                  const isResPending = res?.status === "PENDING";
+                  const isRunning =
+                    (runningEngine === eng.id && (!res || isResRunning || isResPending)) ||
+                    (runningEngine === "all" && (!res || isResRunning || isResPending)) ||
+                    isResRunning ||
+                    (doc?.ocr_status === "PROCESSING" && eng.id === "vietocr" && (!res || res.status === "PROCESSING"));
+                  const isPending =
+                    !isRunning &&
+                    (isResPending || (doc?.ocr_status === "PROCESSING" && !res && eng.id !== "vietocr"));
                   const isFailed = res?.status === "FAILED";
-                  const isDone = res?.status === "DONE" || (res && !isFailed);
-                  const isNotRun = !res && !isRunning;
+                  const isDone = (res?.status === "DONE" || res?.status === "LOW_QUALITY") && !isRunning && !isPending;
+                  const isNotRun = !res && !isRunning && !isPending;
                   const isSelected = selectedOcrEngine === eng.id && !isCompareMode;
 
                   return (
@@ -1425,6 +1504,11 @@ export const DocumentDetailPage: React.FC = () => {
                       {isRunning && (
                         <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#dbeafe", color: "#1d4ed8", display: "inline-flex", alignItems: "center", gap: "3px" }}>
                           <RotateCw size={10} className="animate-spin" /> Đang chạy
+                        </span>
+                      )}
+                      {isPending && (
+                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#fef3c7", color: "#b45309", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                          <Clock size={10} /> Đang chờ
                         </span>
                       )}
                       {isFailed && (
@@ -1653,7 +1737,12 @@ export const DocumentDetailPage: React.FC = () => {
                     {!isEditingOCR && getSelectedEngineResult() && (
                       <div style={{ display: "inline-flex", padding: "2px", backgroundColor: "#e2e8f0", borderRadius: "6px" }}>
                         <button
-                          onClick={() => setOcrTextMode("processed")}
+                          onClick={() => {
+                            setOcrTextMode("processed");
+                            localStorage.setItem("preferred_ocr_text_mode", "processed");
+                            const engRes = getSelectedEngineResult();
+                            setCorrectedText(engRes?.corrected_text || engRes?.raw_text || "");
+                          }}
                           style={{
                             padding: "2px 8px",
                             fontSize: "0.72rem",
@@ -1671,7 +1760,12 @@ export const DocumentDetailPage: React.FC = () => {
                           ✨ Chuẩn hóa
                         </button>
                         <button
-                          onClick={() => setOcrTextMode("raw")}
+                          onClick={() => {
+                            setOcrTextMode("raw");
+                            localStorage.setItem("preferred_ocr_text_mode", "raw");
+                            const engRes = getSelectedEngineResult();
+                            setCorrectedText(engRes?.raw_text || engRes?.corrected_text || "");
+                          }}
                           style={{
                             padding: "2px 8px",
                             fontSize: "0.72rem",
@@ -1684,7 +1778,7 @@ export const DocumentDetailPage: React.FC = () => {
                             boxShadow: ocrTextMode === "raw" ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
                             transition: "all 0.15s ease"
                           }}
-                          title="Hiển thị văn bản thô trực tiếp từ mô hình OCR (chưa qua chuẩn hóa từ điển)"
+                          title="Hiển thị văn bản thô trực tiếp từ mô hình OCR (bảo toàn 100% dòng, cấu trúc gốc)"
                         >
                           ⚡ Gốc (Raw OCR)
                         </button>
@@ -1766,7 +1860,11 @@ export const DocumentDetailPage: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setOcrTextMode("processed");
+                            const engRes = getSelectedEngineResult();
+                            const currentText = ocrTextMode === "raw"
+                              ? (engRes?.raw_text || "")
+                              : (engRes?.corrected_text || engRes?.raw_text || "");
+                            setCorrectedText(currentText);
                             setIsEditingOCR(true);
                           }}
                           leftIcon={<Edit3 size={13} />}

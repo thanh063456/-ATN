@@ -8,9 +8,14 @@ Write-Host "========================================================" -Foregroun
 Write-Host "  DANG KHOI DONG TOAN BO DU AN DOCUCTSV (DAI HOC DA LAT)" -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 
-$PythonExe = "C:\Users\ADMIN\AppData\Local\Programs\Python\Python313\python.exe"
+$PythonExe = "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
 if (-not (Test-Path $PythonExe)) {
-    $PythonExe = "python"
+    $cmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($cmd) {
+        $PythonExe = $cmd.Source
+    } else {
+        $PythonExe = "python"
+    }
 }
 
 # 1. Khoi dong Backend FastAPI

@@ -37,9 +37,12 @@ async def test_unauthenticated_file_download_rejected(async_client: httpx.AsyncC
 
 @pytest.mark.asyncio
 async def test_unauthenticated_search_rejected(async_client: httpx.AsyncClient):
-    """Kiểm tra tìm kiếm /search không có token -> 401 Unauthorized."""
-    response = await async_client.get("/api/v1/search?q=sinhvien")
+    """Kiểm tra tìm kiếm nhạy cảm /search/analytics không có token -> 401 Unauthorized."""
+    response = await async_client.get("/api/v1/search/analytics/trending-topics")
     assert response.status_code == 401
+    # Tìm kiếm công khai thông thường cho phép truy cập với PII masking
+    pub_res = await async_client.get("/api/v1/search?q=sinhvien")
+    assert pub_res.status_code == 200
 
 
 @pytest.mark.asyncio

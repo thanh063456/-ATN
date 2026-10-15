@@ -144,9 +144,11 @@ class VietOCRService:
             
             # Load EasyOCR only when needed
             import easyocr
+            import torch
             if not hasattr(self, '_easy_ocr'):
                 logger.info("Initializing EasyOCR...")
-                self._easy_ocr = easyocr.Reader(['vi'], gpu=False, verbose=False)
+                use_gpu = torch.cuda.is_available()
+                self._easy_ocr = easyocr.Reader(['vi'], gpu=use_gpu, verbose=False)
                 
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR) if len(img_np.shape) == 3 else img_np
             # Detect returns (horizontal_list, free_list)
@@ -1111,11 +1113,16 @@ class VietOCRService:
                 if eng_key == "tesseract":
                     try:
                         from app.services.tesseract_service import tesseract_service
-                        raw_text, processed_text, conf, pc = tesseract_service.extract_text_from_file(file_bytes, file_type)
+                        res_tuple = tesseract_service.extract_text_from_file(file_bytes, file_type)
                     except Exception:
-                        raw_text, processed_text, conf, pc = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                        res_tuple = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
                 else:
-                    raw_text, processed_text, conf, pc = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                    res_tuple = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+                
+                raw_text = res_tuple[0] if len(res_tuple) > 0 else ""
+                processed_text = res_tuple[1] if len(res_tuple) > 1 else ""
+                conf = res_tuple[2] if len(res_tuple) > 2 else 0.0
+                pc = res_tuple[3] if len(res_tuple) > 3 else 1
                 
                 text = processed_text or raw_text
                 results[eng_key] = {

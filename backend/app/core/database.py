@@ -36,7 +36,11 @@ class Base(DeclarativeBase):
 
 # ── Engine & Session ───────────────────────────────────────────────────────────
 SQLITE_DB_PATH = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../data.db")))
-SQLITE_URL = f"sqlite+aiosqlite:///{SQLITE_DB_PATH.as_posix()}"
+SQLITE_URL = (
+    settings.database_url
+    if getattr(settings, "database_url", None) and settings.database_url.startswith("sqlite")
+    else f"sqlite+aiosqlite:///{SQLITE_DB_PATH.as_posix()}"
+)
 
 try:
     if "postgresql" in settings.database_url:
@@ -56,13 +60,12 @@ try:
             connect_args=connect_args,
         )
     else:
-        engine = create_async_engine(SQLITE_URL, echo=False)
+        engine = create_async_engine(SQLITE_URL, echo=False, connect_args={"timeout": 30})
 except Exception:
     try:
-        engine = create_async_engine(SQLITE_URL, echo=False)
+        engine = create_async_engine(SQLITE_URL, echo=False, connect_args={"timeout": 30})
     except Exception:
         engine = None  # type: ignore
-
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -111,7 +114,7 @@ async def init_db() -> None:
             logger.warning(
                 f"PostgreSQL connection failed ({exc}). Using SQLite local DB: {SQLITE_DB_PATH}"
             )
-            engine = create_async_engine(SQLITE_URL, echo=False)
+            engine = create_async_engine(SQLITE_URL, echo=False, connect_args={"timeout": 30})
             AsyncSessionLocal.configure(bind=engine)
     else:
         if settings.app_env != "development":
@@ -119,7 +122,7 @@ async def init_db() -> None:
             raise RuntimeError(
                 f"Chỉ cho phép sử dụng SQLite ở môi trường development. Môi trường hiện tại: {settings.app_env}"
             )
-        engine = create_async_engine(SQLITE_URL, echo=False)
+        engine = create_async_engine(SQLITE_URL, echo=False, connect_args={"timeout": 30})
         AsyncSessionLocal.configure(bind=engine)
 
     # Tạo bảng tự động và cập nhật cột
@@ -216,6 +219,10 @@ async def init_db() -> None:
                 else:
                     await session.commit()
                     logger.info("Database initialized default roles for production/staging (no demo users seeded).")
+
+                # Ensure document categories are seeded
+                from app.core.doc_types_config import seed_document_categories
+                await seed_document_categories(session)
             except Exception as seed_exc:
                 await session.rollback()
                 logger.warning(f"Seed initialization note: {seed_exc}")

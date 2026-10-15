@@ -56,16 +56,17 @@ async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depend
         )
 
     # 2. Kiểm tra tài khoản đã tồn tại trong DB chưa -> Không ghi đè, trả 409 Conflict
+    username = email_clean.split("@")[0]
     stmt = (
         select(User)
-        .where(User.email == email_clean)
+        .where((User.email == email_clean) | (User.username == username))
         .options(selectinload(User.role))
     )
     res = await db.execute(stmt)
     existing_user = res.scalars().first()
     if existing_user:
         raise AppException(
-            message="Email này đã được đăng ký tài khoản. Vui lòng đăng nhập.",
+            message="Email hoặc tài khoản này đã được đăng ký. Vui lòng đăng nhập.",
             status_code=status.HTTP_409_CONFLICT,
         )
 

@@ -150,6 +150,14 @@ class StorageService:
                     key=object_key,
                     size=len(data_bytes),
                 )
+                # Lưu đồng thời bản sao local cache để tăng tốc đọc cho pipeline sau (VietOCR, TrOCR, Tesseract, Preview)
+                try:
+                    local_path = LOCAL_STORAGE_DIR / object_key
+                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(local_path, "wb") as f:
+                        f.write(data_bytes)
+                except Exception as cache_err:
+                    logger.debug("Failed to write local cache: {err}", err=str(cache_err))
                 return object_key
             except Exception as exc:
                 logger.warning(
@@ -177,25 +185,49 @@ class StorageService:
     def get_file(self, object_key: str, bucket_name: str | None = None) -> bytes:
         """
         Đọc toàn bộ nội dung file theo object key.
-        Ưu tiên local (nếu tồn tại), sau đó Supabase Storage.
+        Ưu tiên local (nếu tồn tại), sau đó Supabase Storage kèm retry tự động.
         """
-        # 1. Kiểm tra local trước
+        # 1. Kiểm tra local trước (nhanh nhất, không tốn băng thông)
         local_path = LOCAL_STORAGE_DIR / object_key
         if local_path.exists():
-            with open(local_path, "rb") as f:
-                return f.read()
+            try:
+                with open(local_path, "rb") as f:
+                    return f.read()
+            except Exception as exc:
+                logger.debug("Local file read failed, falling back to Supabase: {err}", err=str(exc))
 
-        # 2. Đọc từ Supabase Storage
+        # 2. Đọc từ Supabase Storage với retry phòng ngừa lỗi socket non-blocking trên Windows
         bucket = bucket_name or self.documents_bucket
         if self._client:
-            try:
-                data = self._client.storage.from_(bucket).download(object_key)
-                return data
-            except Exception as exc:
+            last_err = None
+            for attempt in range(1, 4):
+                try:
+                    data = self._client.storage.from_(bucket).download(object_key)
+                    # Cache lại vào local disk
+                    try:
+                        local_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(local_path, "wb") as f:
+                            f.write(data)
+                    except Exception as cache_err:
+                        logger.debug("Failed to cache downloaded file locally: {err}", err=str(cache_err))
+                    return data
+                except Exception as exc:
+                    last_err = exc
+                    logger.warning(
+                        "Attempt {attempt}/3 failed to read {key} from Supabase Storage: {err}",
+                        attempt=attempt,
+                        key=object_key,
+                        err=str(exc),
+                    )
+                    if attempt < 3:
+                        import time
+                        time.sleep(0.4 * attempt)
+
+            if last_err:
                 logger.error(
-                    "Failed to read {key} from Supabase Storage: {err}",
+                    "All retry attempts failed to read {key} from Supabase Storage: {err}",
                     key=object_key,
-                    err=str(exc),
+                    err=str(last_err),
                 )
 
         raise StorageException(f"Không tìm thấy file: {object_key}")
@@ -227,17 +259,21 @@ class StorageService:
     ) -> str | None:
         """
         Tạo signed URL để download file (hết hạn sau `expires_in` giây).
-        Phù hợp với private bucket.
+        Phù hợp với private bucket. Có retry tự động nếu gặp lỗi socket.
         """
         bucket = bucket_name or self.documents_bucket
         if self._client:
-            try:
-                res = self._client.storage.from_(bucket).create_signed_url(
-                    object_key, expires_in
-                )
-                return res.get("signedURL")
-            except Exception as exc:
-                logger.warning("Could not create signed URL: {err}", err=str(exc))
+            for attempt in range(1, 3):
+                try:
+                    res = self._client.storage.from_(bucket).create_signed_url(
+                        object_key, expires_in
+                    )
+                    return res.get("signedURL")
+                except Exception as exc:
+                    logger.warning("Could not create signed URL (attempt {att}/2): {err}", att=attempt, err=str(exc))
+                    if attempt < 2:
+                        import time
+                        time.sleep(0.3)
         return None
 
     def delete_file(self, object_key: str, bucket_name: str | None = None) -> bool:

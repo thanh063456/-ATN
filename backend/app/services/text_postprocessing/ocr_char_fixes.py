@@ -105,6 +105,44 @@ OCR_CHAR_RULES: list[tuple[str, str, int, str]] = [
         0,
         'roman_IIL_to_III: "IIL." hoặc "IIL " → "III."',
     ),
+    # Số La Mã đầu mục bị đọc nhầm chữ L: "L MỤC ĐÍCH" -> "I. MỤC ĐÍCH"
+    (
+        r'(?m)^\s*L[\.\s]+(?=(?:MỤC\s+ĐÍCH|NỘI\s+DUNG|ĐỐI\s+TƯỢNG|KẾ\s+HOẠCH|THỜI\s+GIAN|ĐỊA\s+ĐIỂM|TỔ\s+CHỨC|QUY\s+ĐỊNH|NGUYÊN\s+TẮC)\b)',
+        r'I. ',
+        re.IGNORECASE,
+        'roman_L_to_I: "L MỤC ĐÍCH" → "I. MỤC ĐÍCH"',
+    ),
+    (
+        r'(?m)^\s*II[\.\s]+(?=(?:ĐỐI\s+TƯỢNG|NỘI\s+DUNG|THỜI\s+GIAN|KẾ\s+HOẠCH)\b)',
+        r'II. ',
+        re.IGNORECASE,
+        'roman_II_spacing: "II ĐỐI TƯỢNG" → "II. ĐỐI TƯỢNG"',
+    ),
+    (
+        r'(?m)^\s*III[\.\s]+(?=(?:NỘI\s+DUNG|TỔ\s+CHỨC|THỰC\s+HIỆN)\b)',
+        r'III. ',
+        re.IGNORECASE,
+        'roman_III_spacing: "III NỘI DUNG" → "III. NỘI DUNG"',
+    ),
+    # Cụm từ hành chính CTSV Đại học: Tuần sinh hoạt công dân - HSSV
+    (
+        r'(?i)Tuần\s+sinh\s+hoạt\s+(?:6\s*ất\s+công\s+dân|\?*công\s+dân|\?*)\s*[\?\"]*\s*HSS[S]?V\?*',
+        r'Tuần sinh hoạt công dân - HSSV',
+        0,
+        'tuan_shcd_hssv: "Tuần sinh hoạt 6 ất công dân HSSSV" → "Tuần sinh hoạt công dân - HSSV"',
+    ),
+    (
+        r'(?i)\bTổ\s+chức\s*[\?\"]*\s*(Tuần\s+sinh\s+hoạt\s+công\s+dân\s*[-–]\s*HSSV)\b',
+        r'Tổ chức "\1"',
+        0,
+        'to_chuc_quote_tuan_shcd: Thêm ngoặc kép chuẩn cho tiêu đề Tuần sinh hoạt công dân',
+    ),
+    (
+        r'(?i)\bHSSSV\b',
+        r'HSSV',
+        0,
+        'hsssv_to_hssv: HSSSV → HSSV (Học sinh sinh viên)',
+    ),
     (
         r'\bCăn\s+cứ\?',
         r'Căn cứ',

@@ -37,6 +37,15 @@ class VietOCREngine:
     def get_predictor(self):
         """Lazy-load VietOCR predictor. Tìm fine-tuned weights nếu có."""
         if self._predictor is not None:
+            _s = self._get_settings()
+            _req = getattr(_s, "ocr_device", "cuda") if _s else "cuda"
+            import torch
+            _target = "cuda" if (_req in ("cuda", "auto") and torch.cuda.is_available()) else "cpu"
+            if self._predictor.config.get("device") != _target:
+                logger.info("Migrating VietOCR predictor to {dev}...", dev=_target)
+                self._predictor.config["device"] = _target
+                if hasattr(self._predictor, "model") and self._predictor.model is not None:
+                    self._predictor.model = self._predictor.model.to(_target)
             return self._predictor
 
         orig_requests_get = None
@@ -63,12 +72,18 @@ class VietOCREngine:
             config = Cfg.load_config_from_name("vgg_transformer")
 
             _s = self._get_settings()
-            _device     = getattr(_s, "ocr_device", "cpu")           if _s else "cpu"
+            _device     = getattr(_s, "ocr_device", "cuda")           if _s else "cuda"
             _beamsearch = getattr(_s, "ocr_beamsearch_enabled", False) if _s else False
             _beam_size  = getattr(_s, "ocr_beam_size", 4)             if _s else 4
             _fast_mode  = getattr(_s, "ocr_fast_mode", False)         if _s else False
 
-            _fast_mode  = getattr(_s, "ocr_fast_mode", False)         if _s else False
+            if _device in ("cuda", "auto"):
+                import torch
+                if not torch.cuda.is_available():
+                    logger.warning("CUDA không khả dụng cho VietOCR, tự động fallback sang CPU")
+                    _device = "cpu"
+                else:
+                    _device = "cuda"
 
             if _fast_mode:
                 _beamsearch = False

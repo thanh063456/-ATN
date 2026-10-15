@@ -43,21 +43,29 @@ class TrOCREngine:
     # ── Model Load ────────────────────────────────────────────────────────────
     def get_model(self):
         """Lazy-load TrOCR processors và model. Trả về (image_processor, tokenizer, model)."""
+        import torch
+        _s = self._get_settings()
+        model_name = getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
+        req_device = getattr(_s, "trocr_device", "cuda")                                if _s else "cuda"
+
+        device = "cpu"
+        if req_device in ("cuda", "auto"):
+            if torch.cuda.is_available():
+                device = "cuda"
+            else:
+                logger.warning("CUDA không khả dụng trên hệ thống, tự động fallback sang CPU cho TrOCR")
+
+        # Nếu model đã được load nhưng đang ở thiết bị khác, tự động migrate sang device mới
+        if self._model is not None and self._image_processor is not None and self._tokenizer is not None:
+            if self._device != device or str(self._model.device) != device:
+                logger.info("Migrating TrOCR model from {old} to {new}...", old=self._device, new=device)
+                self._model = self._model.to(device)
+                self._device = device
+            return self._image_processor, self._tokenizer, self._model
+
         if self._model is None or self._image_processor is None or self._tokenizer is None:
             try:
-                import torch
                 from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer, RobertaTokenizer
-
-                _s = self._get_settings()
-                model_name = getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
-                req_device = getattr(_s, "trocr_device", "cpu")                                if _s else "cpu"
-
-                device = "cpu"
-                if req_device == "cuda":
-                    if torch.cuda.is_available():
-                        device = "cuda"
-                    else:
-                        logger.warning("CUDA không khả dụng trên hệ thống, tự động fallback sang CPU cho TrOCR")
 
                 self._device = device
 
@@ -78,6 +86,8 @@ class TrOCREngine:
                 self._model = (
                     VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
                 )
+                if hasattr(self._model, "generation_config") and self._model.generation_config is not None:
+                    self._model.generation_config.max_length = None
                 self._model.eval()
                 self._init_error = None
                 logger.info("Initialized Microsoft TrOCR Vision Transformer successfully")
@@ -120,12 +130,26 @@ class TrOCREngine:
                 generated_ids = model.generate(
                     pixel_values, 
                     max_new_tokens=64,
-                    num_beams=1,
+                    num_beams=2,
+                    early_stopping=True,
                     do_sample=False
                 )
 
             generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-            cleaned_texts = [str(t).strip() for t in generated_texts]
+            cleaned_texts = []
+            for t in generated_texts:
+                s = str(t).strip()
+                # Repair broken multi-byte BPE token decodings (\ufffd)
+                s = re.sub(r'(?i)\bh\ufffd\b', 'hệ', s)
+                s = re.sub(r'(?i)\bc\ufffda\b', 'của', s)
+                s = re.sub(r'(?i)\bs\ufffd\b', 'số', s)
+                s = re.sub(r'(?i)\bL\ufffd\b', 'Lễ', s)
+                s = re.sub(r'(?i)TH\ufffdC\b', 'THỨC', s)
+                s = re.sub(r'(?i)\bt\ufffdp\b', 'tập', s)
+                s = re.sub(r'(?i)\bs\ufffdng\b', 'sáng', s)
+                s = re.sub(r'(?i)\bnh\ufffdp\b', 'nhập', s)
+                s = s.replace('\ufffd', '')
+                cleaned_texts.append(s)
             return cleaned_texts
 
         except Exception as exc:
@@ -148,7 +172,7 @@ class TrOCREngine:
 
         _s = self._get_settings()
         _max_lines  = getattr(_s, "trocr_max_lines_per_page", 60) if _s else 60
-        _batch_size = getattr(_s, "trocr_batch_size", 8)         if _s else 8
+        _batch_size = getattr(_s, "trocr_batch_size", 4)         if _s else 4
 
         imgs = line_images[:_max_lines] if _max_lines > 0 else line_images
         cleaned = [preprocess_fn(li) if preprocess_fn else li for li in imgs]

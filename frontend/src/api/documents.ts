@@ -149,6 +149,7 @@ export interface ListDocumentsParams {
   page?: number;
   pageSize?: number;
   ocrStatus?: string;
+  approvalStatus?: string;
   categoryId?: string;
   tag?: string;
   search?: string;
@@ -209,10 +210,11 @@ export const documentsApi = {
       params: {
         page: params?.page || 1,
         page_size: params?.pageSize || 20,
-        ocr_status: params?.ocrStatus,
+        ocr_status: params?.ocrStatus && params.ocrStatus !== "ALL" ? params.ocrStatus : undefined,
+        approval_status: params?.approvalStatus && params.approvalStatus !== "ALL" ? params.approvalStatus : undefined,
         category_id: params?.categoryId,
-        tag: params?.tag,
-        search: params?.search,
+        tag: params?.tag && params.tag !== "ALL" ? params.tag : undefined,
+        search: params?.search?.trim() || undefined,
       },
     });
     return res.data;

@@ -372,34 +372,29 @@ export const SearchPage: React.FC = () => {
           </div>
 
           {/* Facets Chips */}
-          {searchResponse.facets?.doc_type_code && Object.keys(searchResponse.facets.doc_type_code).length > 0 && (
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.25rem 0" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Lọc theo loại:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setDocTypeCode("");
-                  performSearch(query, 1);
-                }}
-                style={{
-                  padding: "0.2rem 0.6rem",
-                  borderRadius: "9999px",
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  backgroundColor: !docTypeCode ? "var(--primary-600)" : "var(--gray-100)",
-                  color: !docTypeCode ? "white" : "var(--gray-700)",
-                  border: "1px solid var(--border-color)",
-                  cursor: "pointer",
-                }}
-              >
-                Tất cả ({searchResponse.total_hits})
-              </button>
-              {Object.entries(searchResponse.facets.doc_type_code).map(([code, count]) => (
+          {(() => {
+            const rawFacets = searchResponse.facets?.doc_type_code || searchResponse.facets?.categories;
+            if (!rawFacets) return null;
+
+            const facetList: { code: string; count: number }[] = Array.isArray(rawFacets)
+              ? rawFacets.map((item: any) => ({
+                  code: typeof item === "object" ? (item.code || item.key || String(item)) : String(item),
+                  count: typeof item === "object" ? (item.count ?? item.doc_count ?? 0) : 0,
+                }))
+              : Object.entries(rawFacets).map(([code, count]) => ({
+                  code,
+                  count: typeof count === "number" ? count : Number((count as any)?.count || 0),
+                }));
+
+            if (facetList.length === 0) return null;
+
+            return (
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.25rem 0" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Lọc theo loại:</span>
                 <button
-                  key={code}
                   type="button"
                   onClick={() => {
-                    setDocTypeCode(code);
+                    setDocTypeCode("");
                     performSearch(query, 1);
                   }}
                   style={{
@@ -407,17 +402,39 @@ export const SearchPage: React.FC = () => {
                     borderRadius: "9999px",
                     fontSize: "0.75rem",
                     fontWeight: 600,
-                    backgroundColor: docTypeCode === code ? "var(--primary-600)" : "var(--gray-100)",
-                    color: docTypeCode === code ? "white" : "var(--gray-700)",
+                    backgroundColor: !docTypeCode ? "var(--primary-600)" : "var(--gray-100)",
+                    color: !docTypeCode ? "white" : "var(--gray-700)",
                     border: "1px solid var(--border-color)",
                     cursor: "pointer",
                   }}
                 >
-                  {code} ({count})
+                  Tất cả ({searchResponse.total_hits})
                 </button>
-              ))}
-            </div>
-          )}
+                {facetList.map(({ code, count }) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => {
+                      setDocTypeCode(code);
+                      performSearch(query, 1);
+                    }}
+                    style={{
+                      padding: "0.2rem 0.6rem",
+                      borderRadius: "9999px",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      backgroundColor: docTypeCode === code ? "var(--primary-600)" : "var(--gray-100)",
+                      color: docTypeCode === code ? "white" : "var(--gray-700)",
+                      border: "1px solid var(--border-color)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {code} ({count})
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
 
           {searchResponse.results.length === 0 ? (
             /* Empty state */

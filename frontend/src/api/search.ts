@@ -29,6 +29,15 @@ export interface SearchHit {
   created_at?: string;
 }
 
+export interface FacetItem {
+  code?: string;
+  category?: string;
+  status?: string;
+  tag?: string;
+  year?: string;
+  count: number;
+}
+
 export interface SearchResponse {
   query: string;
   total_hits: number;
@@ -36,7 +45,15 @@ export interface SearchResponse {
   page_size: number;
   total_pages: number;
   took_ms: number;
-  facets?: Record<string, Record<string, number>>;
+  facets?: {
+    categories?: FacetItem[];
+    statuses?: FacetItem[];
+    tags?: FacetItem[];
+    years?: FacetItem[];
+    doc_type_code?: FacetItem[];
+    doc_group?: FacetItem[];
+    [key: string]: any;
+  };
   results: SearchHit[];
 }
 

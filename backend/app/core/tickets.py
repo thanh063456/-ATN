@@ -26,20 +26,35 @@ def create_file_ticket(document_id: str, user_id: str | None = None, ttl_seconds
     return ticket
 
 
-def validate_and_consume_file_ticket(ticket: str, document_id: str) -> bool:
+def validate_and_consume_file_ticket(ticket: str, document_id: str, is_head: bool = False) -> bool:
     """
-    Xác minh và tiêu thụ vé xem file (chỉ được dùng duy nhất 1 lần).
+    Xác minh và tiêu thụ vé xem file (dùng 1 lần cho download GET, hỗ trợ HEAD probe từ trình duyệt).
     Trả về True nếu vé hợp lệ và chưa hết hạn, ngược lại False.
     """
     if not ticket:
         return False
 
     now = time.time()
-    data = _tickets.pop(ticket, None)
+    data = _tickets.get(ticket)
     if not data:
         return False
 
     if data["expires_at"] < now:
+        _tickets.pop(ticket, None)
         return False
 
-    return data["document_id"] == str(document_id)
+    if data["document_id"] != str(document_id):
+        return False
+
+    if is_head:
+        # HEAD request không tiêu thụ vé, cho phép trình duyệt kiểm tra header / content-length
+        return True
+
+    # Đối với GET request (tải file thực tế)
+    if data.get("consumed_at"):
+        # Đã bị tiêu thụ trước đó -> từ chối tải lại
+        return False
+
+    # Đánh dấu đã tiêu thụ
+    data["consumed_at"] = now
+    return True

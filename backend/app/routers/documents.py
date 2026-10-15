@@ -28,7 +28,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from loguru import logger
-from sqlalchemy import func, select, update
+from sqlalchemy import cast, func, select, String, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -77,7 +77,12 @@ from app.services.vietocr_service import vietocr_service
 from app.services.search_index_service import search_index_service
 from app.services.storage_service import storage_service
 from app.services.tag_service import tag_service
-from app.worker.tasks import async_process_ocr, process_ocr_task
+from app.worker.tasks import (
+    async_process_ocr,
+    process_ocr_task,
+    async_process_all_ocr_engines,
+    process_all_ocr_task,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -124,8 +129,9 @@ def _validate_magic_bytes(data: bytes, ext: str) -> bool:
 )
 async def list_documents(
     page: int = Query(1, ge=1, description="Trang hiện tại"),
-    page_size: int = Query(10, ge=1, le=100, description="Số mục trên mỗi trang"),
+    page_size: int = Query(20, ge=1, le=500, description="Số mục trên mỗi trang"),
     ocr_status: str | None = Query(None, description="Lọc theo trạng thái OCR"),
+    approval_status: str | None = Query(None, description="Lọc theo trạng thái phê duyệt (APPROVED | PENDING | REJECTED)"),
     category_id: UUID | None = Query(None, description="Lọc theo danh mục"),
     doc_type_code: str | None = Query(None, description="Lọc theo mã loại văn bản (vd: THONG_BAO, DON_TU)"),
     doc_group: str | None = Query(None, description="Lọc theo nhóm văn bản (vd: VAN_BAN_HANH_CHINH)"),
@@ -164,6 +170,18 @@ async def list_documents(
 
     if ocr_status:
         stmt = stmt.where(Document.ocr_status == ocr_status.upper())
+    if approval_status:
+        appr_upper = approval_status.strip().upper()
+        if appr_upper == "APPROVED":
+            stmt = stmt.where(Document.ocr_status == "APPROVED")
+        elif appr_upper == "PENDING":
+            stmt = stmt.where(Document.ocr_status.notin_(["APPROVED", "REJECTED"]))
+        elif appr_upper == "REJECTED":
+            stmt = stmt.where(Document.ocr_status == "REJECTED")
+    if tag:
+        tag_val = tag.strip()
+        tag_clean = tag_val if tag_val.startswith("#") else f"#{tag_val}"
+        stmt = stmt.join(Document.metadata_).where(cast(DocumentMetadata.extra, String).ilike(f"%{tag_clean}%"))
     if category_id:
         stmt = stmt.where(Document.category_id == category_id)
     if doc_type_code:
@@ -301,7 +319,7 @@ async def list_documents(
 
     total_pages = math.ceil(total / page_size) if total > 0 else 0
     return DocumentListResponse(
-        total=len(items) if target_tag else total,
+        total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages,
@@ -471,8 +489,12 @@ async def upload_document(
     )
 
     celery_task_id = None
-    # Khởi chạy tác vụ OCR nền
-    asyncio.create_task(async_process_ocr(str(document.id), task_id="async_worker"))
+    # Khởi chạy tác vụ OCR nền tự động cho toàn bộ các engine (VietOCR, TrOCR, Tesseract)
+    if _is_redis_available():
+        task = process_all_ocr_task.delay(str(document.id))
+        celery_task_id = task.id
+    else:
+        asyncio.create_task(async_process_all_ocr_engines(str(document.id), task_id="async_worker"))
 
     return DocumentUploadResponse(
         id=document.id,
@@ -573,29 +595,33 @@ async def get_document_file_url(
     summary="Xem trực tiếp file gốc của tài liệu (PDF / Hình ảnh - Có kiểm soát RBAC)",
 )
 async def view_document_file(
+    request: Request,
     document_id: UUID,
     ticket: str | None = Query(None, description="Single-use file ticket ngắn hạn"),
     token: str | None = Query(None, description="Auth Bearer token (hỗ trợ cho iframe/img preview từ trình duyệt)"),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    """Truy xuất file nhị phân gốc từ Storage kèm xác thực quyền truy cập RBAC."""
-    doc = await db.get(Document, document_id)
-    if not doc or doc.is_deleted:
-        raise DocumentNotFoundException(str(document_id))
-
     # Nếu truy cập qua thẻ <img> hoặc <iframe> không gửi được Authorization header, giải mã token từ Query
     if not current_user and token:
         from app.core.dependencies import _resolve_user_from_token
         current_user = await _resolve_user_from_token(token, db)
+
+    if not current_user and not ticket:
+        raise AppException("Yêu cầu xác thực tài khoản để truy cập tệp tài liệu này.", status_code=status.HTTP_401_UNAUTHORIZED)
+
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
 
     # Quyền xem tệp tài liệu (P0 Rule 9):
     # 1. Vé dùng một lần (ticket) hợp lệ và chưa hết hạn (TTL 60-300s)
     # 2. Hoặc tài liệu APPROVED và được đánh dấu public
     # 3. Hoặc người dùng đăng nhập là ADMIN/STAFF hoặc chính người upload
     # Lưu ý: Tài liệu uploaded_by is None KHÔNG được mặc định công khai.
+    is_head = (request.method == "HEAD")
     is_allowed = False
-    if ticket and validate_and_consume_file_ticket(ticket, str(document_id)):
+    if ticket and validate_and_consume_file_ticket(ticket, str(document_id), is_head=is_head):
         is_allowed = True
     elif doc.ocr_status == "APPROVED" and getattr(doc, "is_public", False):
         is_allowed = True
@@ -763,20 +789,33 @@ async def correct_ocr_text(
 )
 async def reprocess_document_ocr(
     document_id: UUID,
-    engine: str | None = Query(None, description="vietocr, trocr, hoặc tesseract"),
+    engine: str | None = Query(None, description="vietocr, trocr, tesseract, hoặc all"),
     current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """Kích hoạt lại tác vụ OCR nền cho một engine cụ thể (hoặc mặc định vietocr)."""
-    if engine is not None and engine not in OCR_ENGINES:
+    """Kích hoạt lại tác vụ OCR nền cho một engine cụ thể hoặc toàn bộ các engine."""
+    allowed_engines = set(OCR_ENGINES) | {"all"}
+    if engine is not None and engine not in allowed_engines:
         raise ValidationException(
-            f"Engine '{engine}' không hợp lệ. Các engine được hỗ trợ: {', '.join(OCR_ENGINES)}",
+            f"Engine '{engine}' không hợp lệ. Các engine được hỗ trợ: {', '.join(OCR_ENGINES)}, all",
             status_code=422,
         )
 
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
+
+    if engine == "all":
+        if _is_redis_available():
+            process_all_ocr_task.delay(str(document_id))
+        else:
+            asyncio.create_task(async_process_all_ocr_engines(str(document_id), task_id="reprocess_all_worker"))
+        return {
+            "message": "Đang chạy lại toàn bộ mô hình OCR (VietOCR, TrOCR, Tesseract) cho tài liệu",
+            "document_id": document_id,
+            "status": "PROCESSING",
+            "engine": "all",
+        }
 
     target_engine = engine or DEFAULT_OCR_ENGINE
     asyncio.create_task(async_process_ocr(str(document_id), task_id="reprocess_worker", engine=target_engine))
@@ -1204,9 +1243,27 @@ async def trigger_extract_fields(
     ocr = res.scalars().first()
     text = (ocr.corrected_text or ocr.raw_text or "") if ocr else ""
 
-    extracted = extraction_service.extract_metadata(text)
+    stmt_meta = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
+    meta_res = await db.execute(stmt_meta)
+    meta_obj = meta_res.scalars().first()
 
-    # Tự động gán nhãn
+    stmt_doc = select(Document).where(Document.id == document_id)
+    doc_res = await db.execute(stmt_doc)
+    doc_obj = doc_res.scalars().first()
+
+    extracted = extraction_service.extract_metadata(text)
+    if meta_obj:
+        if meta_obj.document_number and not extracted.get("document_number"):
+            extracted["document_number"] = meta_obj.document_number
+        if meta_obj.extra:
+            curr_extra = dict(meta_obj.extra)
+            extracted["extra"] = curr_extra
+            if curr_extra.get("trich_yeu"):
+                extracted["trich_yeu"] = curr_extra.get("trich_yeu")
+    if doc_obj and doc_obj.title:
+        extracted["title"] = doc_obj.title
+
+    # Tự động gán nhãn thông minh đa chiều
     auto_tags = tag_service.generate_auto_tags(
         text=text,
         metadata=extracted,
@@ -1214,10 +1271,7 @@ async def trigger_extract_fields(
     )
     extra_payload = dict(extracted.get("extra") or {})
     extra_payload["tags"] = auto_tags
-
-    stmt_meta = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
-    meta_res = await db.execute(stmt_meta)
-    meta_obj = meta_res.scalars().first()
+    extra_payload["priority_score"] = tag_service.calculate_priority_score(auto_tags)
 
     if not meta_obj:
         meta_obj = DocumentMetadata(
