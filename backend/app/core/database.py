@@ -128,8 +128,7 @@ async def init_db() -> None:
     # Tạo bảng tự động và cập nhật cột
     try:
         from app.models import (
-            Role, User, DocumentCategory, Document, OCRResult,
-            DocumentMetadata, ProcessingJob, SearchHistory, AuditLog
+            Role, User
         )
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

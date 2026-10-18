@@ -47,7 +47,7 @@ def print_metrics(y_true, y_pred, title):
     classes = sorted(list(set(y_true) | set(y_pred)))
     
     # Confusion Matrix
-    print("\nConfusion Matrix (True \ Predicted):")
+    print("\nConfusion Matrix (True \\ Predicted):")
     print(f"{'True Label':<20} | " + " | ".join(f"{c:<15}" for c in classes))
     print("-" * 120)
     

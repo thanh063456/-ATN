@@ -17,7 +17,6 @@ except ImportError:
     logger = logging.getLogger("search_index_service")
 logger: Any = logger
 
-from app.core.config import settings
 from app.core.elasticsearch import INDEX_NAME, get_es_client, is_es_available
 from app.core.exceptions import SearchIndexException
 from app.services.embedding_service import embedding_service

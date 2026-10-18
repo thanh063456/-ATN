@@ -729,8 +729,6 @@ async def search_documents(
 
             st_name = (doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else "")) or ""
             st_id = (doc.metadata_.student_id if doc.metadata_ and doc.metadata_.student_id else (doc.uploader.mssv if doc.uploader else "")) or ""
-            doc_num = (doc.metadata_.document_number if doc.metadata_ else "") or ""
-            cat_name = doc.category.name if doc.category else ""
             title = doc.title or ""
 
             title_ascii = _strip_accents(title)

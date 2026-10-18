@@ -1,6 +1,3 @@
-import os
-import json
-import unicodedata
 from PIL import Image, ImageOps
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel

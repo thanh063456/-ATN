@@ -26,9 +26,8 @@ import urllib.parse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
-from fastapi.responses import StreamingResponse
 from loguru import logger
-from sqlalchemy import cast, func, select, String, update
+from sqlalchemy import cast, func, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -61,7 +60,6 @@ from app.schemas.documents import (
     DocumentListResponse,
     DocumentMetadataResponse,
     DocumentUploadResponse,
-    FieldExtractionUpdateRequest,
     OCRCorrectionRequest,
     OCRResultResponse,
     TagSummaryItem,
@@ -79,7 +77,6 @@ from app.services.storage_service import storage_service
 from app.services.tag_service import tag_service
 from app.worker.tasks import (
     async_process_ocr,
-    process_ocr_task,
     async_process_all_ocr_engines,
     process_all_ocr_task,
 )

@@ -13,7 +13,7 @@ Luồng xử lý chuẩn theo .ai/AGENTS.md:
 9. Backend chủ động index sang Elasticsearch (search_index_service).
 """
 import asyncio
-from datetime import date, datetime
+from datetime import datetime
 import time
 from uuid import UUID
 
@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.models.audit_logs import AuditLog
 from app.models.document_metadata import DocumentMetadata
 from app.models.documents import Document
 from app.models.ocr_results import OCRResult

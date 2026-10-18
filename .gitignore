@@ -72,8 +72,11 @@ dataset/raw/
 dataset/raw_new/
 dataset/crops/
 dataset/crops_new/
+dataset/line_crops/
+dataset/labels/
 dataset/synth_crops/
 dataset/splits/
+right_edge_test.png
 dataset/processed/
 dataset/augmented/
 train_data/

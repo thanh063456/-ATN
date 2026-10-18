@@ -20,14 +20,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import DocumentNotFoundException
 from app.models.documents import Document, OCR_STATUS_PENDING
-from app.models.ocr_results import OCRResult
 from app.models.processing_jobs import ProcessingJob, JOB_STATUS_PENDING
 from app.models.roles import Role
 from app.models.users import User
 from app.schemas.documents import (
     DocumentDetailResponse,
     DocumentMetadataResponse,
-    DocumentUploadResponse,
     OCRResultResponse,
     ProcessingJobResponse,
 )

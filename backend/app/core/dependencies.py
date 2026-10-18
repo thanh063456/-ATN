@@ -6,7 +6,7 @@ Cung cấp:
 - get_current_user_optional: Xác thực nếu có token, không bắt buộc
 - require_roles: RBAC Guard chặn theo vai trò (ADMIN, STAFF, STUDENT)
 """
-from typing import Any, Sequence
+from typing import Any
 from uuid import UUID
 
 from fastapi import Depends, status

@@ -293,7 +293,6 @@ class TesseractService:
                 line_text = " ".join(curr_line_words)
                 mean_conf = sum(curr_line_confs) / len(curr_line_confs)
 
-                letters = sum(1 for c in line_text if c.isalpha())
                 non_letters = sum(1 for c in line_text if not c.isalpha() and not c.isspace())
                 ratio = non_letters / max(len(line_text), 1)
 

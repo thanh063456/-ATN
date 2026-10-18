@@ -1,8 +1,5 @@
-import os
 import re
-import yaml
 from dataclasses import dataclass, field
-from loguru import logger
 from rapidfuzz import fuzz
 
 from app.core.doc_types_config import DOC_TYPES_CONFIG

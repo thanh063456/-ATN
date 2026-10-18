@@ -9,8 +9,7 @@ Cung cấp các endpoints:
 - POST /auth/login: Đăng nhập trực tiếp (backward-compatible)
 """
 import uuid
-from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials

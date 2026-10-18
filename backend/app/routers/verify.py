@@ -4,7 +4,6 @@ backend/app/routers/verify.py — Public Document Verification Endpoint
 Cho phép quét mã QR hoặc truy cập đường link xác minh công khai để kiểm tra tính hợp lệ
 của văn bản/hồ sơ sinh viên đã được Phòng Công tác Sinh viên (DLU) phê duyệt.
 """
-from datetime import datetime
 import hashlib
 from uuid import UUID
 
