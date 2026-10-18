@@ -220,10 +220,10 @@ class VietOCRService:
             boxes = merge_boxes(boxes)
                 
             # Sắp xếp thứ tự đọc (Reading Order):
-            # Phần Header (top 16% trang): Cột trái trước (từ trên xuống dưới),
+            # Phần Header (top 20% trang): Cột trái trước (từ trên xuống dưới),
             # sau đó Cột phải (từ trên xuống dưới).
             # Phần Thân: tuần tự theo trục Y từ trên xuống dưới.
-            header_threshold_y = 0.12 * img_h
+            header_threshold_y = 0.20 * img_h
             split_x = 0.46 * img_w
             
             header_left = []
@@ -256,13 +256,14 @@ class VietOCRService:
                 x, y = x_min, y_min
                 w, h = x_max - x_min, y_max - y_min
                 
-                if w < 5 or h < 5:
+                # Bỏ qua các đốm nhiễu, vết mực đơn lẻ (isolated noise components)
+                if (w < 22 and h < 16) or w < 8 or h < 8:
                     continue
                 
-                # Căn lề nhẹ thêm vì detector cắt rất khít
-                pad_top = max(2, int(0.15 * h))
-                pad_bot = max(2, int(0.10 * h))
-                pad_h   = max(3, int(0.15 * h))
+                # Căn lề ngang dãn rộng ~5-8% chiều cao + margin để không bao giờ cắt cụt nét glyphs
+                pad_top = max(3, int(0.15 * h))
+                pad_bot = max(3, int(0.12 * h))
+                pad_h   = max(10, int(0.20 * h)) + 8
                 
                 t  = max(0, y - pad_top)
                 b  = min(img_np.shape[0], y + h + pad_bot)
@@ -270,8 +271,8 @@ class VietOCRService:
                 ro = min(img_np.shape[1], x + w + pad_h)
                 
                 crop_np = img_np[t:b, lo:ro].copy()
-                if stamp_mask is not None:
-                    crop_np = self._clean_stamp_in_crop(crop_np, stamp_mask[t:b, lo:ro])
+                sub_mask = stamp_mask[t:b, lo:ro] if stamp_mask is not None else None
+                crop_np = self._clean_stamp_in_crop(crop_np, sub_mask)
                     
                 line_img = Image.fromarray(crop_np)
                 lines_with_boxes.append((line_img, (x, y, w, h)))
@@ -318,29 +319,35 @@ class VietOCRService:
         Xóa pixel con dấu đỏ khỏi crop ảnh, giữ nguyên:
           - Pixel đen (chữ đen bên dưới/cạnh con dấu)  
           - Pixel xanh dương (chữ tay xanh: số, chữ ký)
-        Chỉ fill WHITE cho pixel đỏ trong vùng stamp_mask.
+        Fill WHITE cho pixel đỏ dấu, bảo vệ tuyệt đối chữ in đen và chữ viết tay xanh.
         """
-        if crop_stamp_mask is None or crop_np is None:
+        if crop_np is None:
             return crop_np
         try:
-            if len(crop_np.shape) < 3:
+            if len(crop_np.shape) < 3 or crop_np.shape[2] < 3:
                 return crop_np
-            hsv = cv2.cvtColor(crop_np, cv2.COLOR_RGB2HSV)
-            # Đỏ: hue 0-12 hoặc 160-180, saturation cao (>= 80), value cao (>= 60)
-            red_low  = cv2.inRange(hsv, np.array([0, 80, 60]),   np.array([12, 255, 255]))
-            red_high = cv2.inRange(hsv, np.array([160, 80, 60]), np.array([180, 255, 255]))
-            is_red_pixel = cv2.bitwise_or(red_low, red_high)
-            # Blue (handwriting): hue 100-130, sat >= 60
-            is_blue_pixel = cv2.inRange(hsv, np.array([100, 60, 60]), np.array([130, 255, 255]))
-            # Dark pixels (black text): value < 80
-            is_dark_pixel = (hsv[:, :, 2] < 80).astype(np.uint8) * 255
+                
+            out = crop_np.copy()
+            r = out[:, :, 0].astype(int)
+            g = out[:, :, 1].astype(int)
+            b = out[:, :, 2].astype(int)
 
-            # Within stamp mask: fill red pixels with white, keep dark+blue
-            in_stamp = (crop_stamp_mask > 0)
-            fill_white = in_stamp & (is_red_pixel > 0) & (is_dark_pixel == 0) & (is_blue_pixel == 0)
-            result = crop_np.copy()
-            result[fill_white] = [255, 255, 255]
-            return result
+            # Red stamp pixel criteria
+            is_red = (r > 125) & ((r - g) > 28) & ((r - b) > 28)
+            # Blue handwriting protection (Blue channel clearly higher than red)
+            is_blue = (b > r + 15) & (b > 60)
+            # Dark black text protection (low luminance across all channels)
+            is_black = (r < 80) & (g < 80) & (b < 80)
+
+            if crop_stamp_mask is not None and np.any(crop_stamp_mask > 0):
+                # Within stamp mask: clear red pixels
+                fill_white = (crop_stamp_mask > 0) & is_red & (~is_blue) & (~is_black)
+            else:
+                # Direct color channel filtering for red seal strokes
+                fill_white = is_red & (~is_blue) & (~is_black)
+
+            out[fill_white] = [255, 255, 255]
+            return out
         except Exception:
             return crop_np
 
@@ -1131,6 +1138,7 @@ class VietOCRService:
                     "raw_text": raw_text,
                     "processed_text": processed_text,
                     "confidence": conf,
+                    "page_count": pc,
                     "inference_time_seconds": round(time.time() - t0, 3),
                     "char_count": len(text),
                     "word_count": len(text.split()),

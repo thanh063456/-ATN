@@ -90,11 +90,13 @@ class TrOCRService:
     # ── Lọc nhiễu ─────────────────────────────────────────────────────────────
     @staticmethod
     def _is_noise_line(line: str) -> bool:
-        """Kiểm tra dòng nhiễu."""
+        """Kiểm tra dòng nhiễu (lọc bỏ các đốm nhiễu, số '1' lẻ loi, ký tự rác đơn lẻ)."""
         s = line.strip()
         if not s:
             return True
-        if len(s) <= 2 and not s.isalnum():
+        if len(s) == 1:
+            return True
+        if len(s) <= 2 and (not s.isalnum() or s.isdigit()):
             return True
         return False
 
@@ -124,11 +126,11 @@ class TrOCRService:
         return False, ""
 
     # ── Hậu xử lý ─────────────────────────────────────────────────────────────
-    def post_process_vietnamese(self, text: str) -> str:
-        """Gọi pipeline hậu xử lý tiếng Việt dùng chung."""
+    def post_process_vietnamese(self, text: str, line_preserving: bool = True) -> str:
+        """Gọi pipeline hậu xử lý tiếng Việt dùng chung với chế độ bảo toàn dòng."""
         try:
             from app.services.text_postprocessing import post_process_vietnamese as _pp
-            return _pp(text)
+            return _pp(text, line_preserving=line_preserving)
         except ImportError:
             return unicodedata.normalize("NFC", text).strip()
 
@@ -146,6 +148,7 @@ class TrOCRService:
     def _ocr_image(self, image: Image.Image) -> tuple[str, str]:
         """
         OCR 1 ảnh trang: trả về (raw_text, processed_text).
+        Đảm bảo bảo toàn 100% dòng, định tuyến chữ viết tay số hiệu & ngày tháng.
         """
         t_start = time.time()
         
@@ -161,6 +164,33 @@ class TrOCRService:
             line_images = line_images[:MAX_LINES_TROCR]
 
         line_results = self._trocr().ocr_lines(line_images, preprocess_fn=self.preprocess_handwriting)
+        
+        # Routing chữ viết tay cho vùng số hiệu văn bản và ngày tháng (header zone)
+        try:
+            from app.services.vietocr_engine import vietocr_engine
+            for i, (pred_txt, conf) in enumerate(line_results):
+                if i < 8 and (re.search(r'S[oố]\s*:', pred_txt, re.IGNORECASE) or re.search(r'ng[àaá]y', pred_txt, re.IGNORECASE)):
+                    # Kiểm tra xem có chữ viết tay cần đối chiếu
+                    v_preds = vietocr_engine.predict_batch_padded([line_images[i]])
+                    if v_preds and v_preds[0].strip():
+                        v_txt = v_preds[0].strip()
+                        # Đối chiếu số hiệu văn bản: Số: 1395/KH-ĐHĐL
+                        m_v_num = re.search(r'(\d{3,5})(/[A-Za-zĐđ0-9\-_]+)', v_txt)
+                        if m_v_num:
+                            doc_digits = m_v_num.group(1)
+                            doc_code = m_v_num.group(2)
+                            line_results[i] = (f"Số: <hw>{doc_digits}</hw>{doc_code}", 0.98)
+                        
+                        # Đối chiếu ngày tháng: ngày 22 tháng 8 năm 2025
+                        m_v_date = re.search(r'ng[àaá]y\s*(\d{1,2})\s*th[áa]ng\s*(\d{1,2})\s*n[ăa]m\s*(\d{4})', v_txt, re.IGNORECASE)
+                        if m_v_date:
+                            day, mo, yr = m_v_date.group(1), m_v_date.group(2), m_v_date.group(3)
+                            prefix = "Lâm Đồng, " if any(x in pred_txt.lower() for x in ["lâm", "đồng", "lam", "dong"]) else ""
+                            fixed_date = f"{prefix}ngày <hw>{day}</hw> tháng {mo} năm {yr}"
+                            line_results[i] = (fixed_date, 0.98)
+        except Exception as ex_hw:
+            logger.debug("Handwriting routing fallback: {err}", err=str(ex_hw))
+
         valid_lines = [t for t, _ in line_results if not self._is_noise_line(t)]
         raw_text = "\n".join(valid_lines).strip()
         t_infer = time.time()
@@ -168,7 +198,7 @@ class TrOCRService:
         processed_text = ""
         if raw_text:
             try:
-                processed_text = self.post_process_vietnamese(raw_text)
+                processed_text = self.post_process_vietnamese(raw_text, line_preserving=True)
             except Exception as e:
                 logger.error("TrOCR post-processing failed: {err}", err=str(e))
                 processed_text = raw_text
@@ -301,6 +331,7 @@ class TrOCRService:
                     "raw_text": raw,
                     "processed_text": proc,
                     "confidence": conf,
+                    "page_count": pc,
                     "inference_time_seconds": round(time.time() - t0, 3),
                     "char_count": len(text),
                     "word_count": len(text.split()),

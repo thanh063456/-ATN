@@ -83,7 +83,7 @@ def rejoin_paragraphs(text: str) -> str:
 
     return '\n'.join(result)
 
-def post_process_vietnamese(text: str) -> str:
+def post_process_vietnamese(text: str, line_preserving: bool = False) -> str:
     """
     Pipeline hậu xử lý văn bản OCR tiếng Việt hành chính.
 
@@ -92,11 +92,12 @@ def post_process_vietnamese(text: str) -> str:
         2. OCR character fixes (lỗi quang học tổng quát)
         3. Admin dictionary corrections (domain hành chính)
         4. Document header normalization (Quốc hiệu/Số hiệu/Ngày tháng)
-        5. Rejoin paragraphs
+        5. Rejoin paragraphs (chỉ khi line_preserving=False)
         6. Cleanup khoảng trắng thừa
 
     Args:
         text: Văn bản OCR thô
+        line_preserving: Mặc định False (tương thích ngược các unit test). Đặt True để bảo toàn 1-1 từng dòng thô.
 
     Returns:
         Văn bản đã được chuẩn hóa
@@ -113,14 +114,15 @@ def post_process_vietnamese(text: str) -> str:
     # Bước 3: Sửa lỗi từ vựng hành chính (từ JSON dictionary)
     text = apply_admin_corrections(text)
 
-    # Bước 4: Dọn dẹp khoảng trắng thừa trong phần nội dung
-    text = re.sub(r'[ \t]+', ' ', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    # Bước 4: Dọn dẹp khoảng trắng thừa trong mỗi dòng
+    lines = [re.sub(r'[ \t]+', ' ', l).strip() for l in text.splitlines()]
+    text = '\n'.join(lines)
 
-    # Bước 5: Chuẩn hóa và tái cấu trúc header văn bản hành chính (2 cột chuẩn)
-    text = normalize_document_header(text)
+    # Bước 5: Chuẩn hóa header văn bản hành chính
+    text = normalize_document_header(text, line_preserving=line_preserving)
     
-    # Bước 6: Nối dòng
-    text = rejoin_paragraphs(text)
+    # Bước 6: Nối dòng (chỉ kích hoạt khi không yêu cầu bảo toàn từng dòng)
+    if not line_preserving:
+        text = rejoin_paragraphs(text)
 
     return text.strip()

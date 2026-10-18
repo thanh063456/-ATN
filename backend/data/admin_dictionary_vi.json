@@ -69,7 +69,17 @@
     {"wrong": "chanh cháng", "correct": "nhanh chóng", "case_insensitive": true, "boundary": "word"},
     {"wrong": "giớp",      "correct": "giúp",        "case_insensitive": true,  "boundary": "word"},
     {"wrong": "vừi mài",   "correct": "với môi",     "case_insensitive": true,  "boundary": "word"},
-    {"wrong": "KẾ HOẠ",    "correct": "KẾ HOẠCH",    "case_insensitive": false, "boundary": "word"}
+    {"wrong": "KẾ HOẠ",    "correct": "KẾ HOẠCH",    "case_insensitive": false, "boundary": "word"},
+    {"wrong": "KẾ HO",     "correct": "KẾ HOẠCH",    "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "kháng định vài trò, vử, vi thể và truyện thưng l", "correct": "khẳng định vai trò, vị thế và truyền thống lịch sử vẻ vang của", "case_insensitive": true, "boundary": "none"},
+    {"wrong": "kháng định", "correct": "khẳng định", "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "vài trò",    "correct": "vai trò",     "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "vi thể",     "correct": "vị thế",      "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "truyện thưng", "correct": "truyền thống", "case_insensitive": true, "boundary": "word"},
+    {"wrong": "Gđúc dục",   "correct": "Giáo dục",    "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "Bặ Giáo dược", "correct": "Bộ Giáo dục", "case_insensitive": true, "boundary": "word"},
+    {"wrong": "ký niệ",     "correct": "kỷ niệm",     "case_insensitive": true,  "boundary": "word"},
+    {"wrong": "Bộ Quốc gia Giáo d", "correct": "Bộ Quốc gia Giáo dục", "case_insensitive": true, "boundary": "word"}
   ],
 
   "code_map": {

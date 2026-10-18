@@ -18,9 +18,7 @@ GIỚI HẠN ĐÃ BIẾT (liệt kê trong báo cáo):
 """
 
 import re
-import unicodedata
 
-from loguru import logger
 
 from .admin_dictionary import normalize_document_code
 
@@ -62,10 +60,10 @@ _DOC_NO_PATTERN = re.compile(
 )
 
 # ─── Pattern ngày tháng ──────────────────────────────────────────────────────
-# Bắt mọi biến thể: "Lâm Đồng, ngày 22 tháng 8 năm 2025", "Lâm Đồng, ngày, 28 tháng 8 năm 2025", "ngày 22/8/2025"
+# Bắt mọi biến thể: "Lâm Đồng, ngày 22 tháng 8 năm 2025", "Lâm Đồng, ngày/ tháng 8 năm 2025", "Lâm Đồng, ngày, 28 tháng 8 năm 2025", "ngày 22/8/2025"
 _DATE_PATTERN = re.compile(
     r'(?:(?:Lâm\s*[ĐD][oồôeèé]ng|[ĐD][aàá]\s*L[aạ]t|[A-ZÀ-Ỹa-zà-ỹ\s]{2,20})[\s,]*)?'
-    r'ng[àaá]y[\s,\.:\-_]*([0-9\?\)\.\_]{1,4})\s*'
+    r'ng[àaá]y[\s,\.:\-_/]*([0-9\?\)\.\_\/]{0,6})\s*'
     r'th[áa]ng[\s,\.:\-_]*([0-9\?\)\.\_\/]{1,6})\s*'
     r'(?:[/\\]|\bn[ăa]m\b)?[\s,\.:\-_]*'
     r'(\d{4}|\d{2})',
@@ -363,19 +361,19 @@ def _rebuild_header_block(
     return ""
 
 
-def normalize_document_header(text: str) -> str:
+def normalize_document_header(text: str, line_preserving: bool = False) -> str:
     """
     Chuẩn hóa toàn bộ phần header của văn bản hành chính (theo Nghị định 30/2020/NĐ-CP):
-    - Tách biệt rõ ràng khối Header (trước tiêu đề) và khối Thân văn bản (Body).
-    - Tái cấu trúc Header 2 cột chuẩn ở đầu văn bản.
-    - BẢO TOÀN 100% nội dung phần thân văn bản, tuyệt đối không cắt xén dòng nội dung.
+    - line_preserving=True: BẢO TOÀN 100% SỐ DÒNG (1 visual input line = 1 output line),
+      không xóa dòng ngày tháng, không ghép reflow các cột.
+    - line_preserving=False: Tái cấu trúc Header 2 cột theo bảng trình bày chuẩn.
     """
     if not text:
         return text
 
     lines = text.splitlines()
     
-    # 1. Tìm vị trí tiêu đề văn bản chính (CHỈ tìm trong 14 dòng đầu, tiêu đề ngắn <= 5 từ)
+    # 1. Tìm vị trí tiêu đề văn bản chính (CHỈ tìm trong 14 dòng đầu)
     title_idx = -1
     for i, line in enumerate(lines[:14]):
         line_clean = line.strip()
@@ -384,77 +382,106 @@ def normalize_document_header(text: str) -> str:
             title_idx = i
             break
             
-    if title_idx != -1:
-        header_lines = lines[:title_idx]
-        body_lines = lines[title_idx:]
-    else:
-        # Nếu không có tiêu đề rõ ràng, chỉ coi 8 dòng đầu là vùng header
-        header_lines = lines[:8]
-        body_lines = lines[8:]
-        
+    header_end = title_idx if title_idx != -1 else min(8, len(lines))
+
+    if line_preserving:
+        # CHẾ ĐỘ AN TOÀN BẢO TOÀN DÒNG (PHASE F REQUIREMENT: One input line -> exactly one output line)
+        processed_lines = []
+        for i, line in enumerate(lines):
+            line_clean = line.strip()
+            if not line_clean:
+                processed_lines.append("")
+                continue
+
+            if i <= header_end:
+                line_upper = line_clean.upper()
+                
+                # Quốc hiệu & Tiêu ngữ
+                if any(kw in line_upper for kw in ["CỘNG HÒA", "CỘNG HOÀ", "CONG HOA", "CHỦ NGHĨA VIỆT NAM"]):
+                    processed_lines.append("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
+                    continue
+                if any(kw in line_upper for kw in ["ĐỘC LẬP", "DOC LAP", "TỰ DO", "HẠNH PHÚC"]):
+                    processed_lines.append("Độc lập - Tự do - Hạnh phúc")
+                    continue
+                if any(kw in line_upper for kw in ["BỘ GIÁO DỤC", "BO GIAO DUC"]):
+                    processed_lines.append("BỘ GIÁO DỤC VÀ ĐÀO TẠO")
+                    continue
+                if any(kw in line_upper for kw in ["TRƯỜNG ĐẠI HỌC ĐÀ LẠT", "ĐẠI HỌC ĐÀ LẠT", "ĐẠI HỌC ĐA LẠT", "ĐẠI HỌC ĐÀ LẬT"]):
+                    processed_lines.append("TRƯỜNG ĐẠI HỌC ĐÀ LẠT")
+                    continue
+                if any(kw in line_upper for kw in ["PHÒNG CÔNG TÁC SINH VIÊN", "PHONG CONG TAC"]):
+                    processed_lines.append("PHÒNG CÔNG TÁC SINH VIÊN")
+                    continue
+                    
+                # Số hiệu văn bản
+                m_doc = _DOC_NO_PATTERN.search(line_clean)
+                if m_doc or re.search(r'(?:Số|So|SỐ)\s*[:\-]?\s*(\d{1,5})', line_clean):
+                    _, doc_no = _normalize_doc_number(line_clean)
+                    if doc_no and "[chưa đọc được]" not in doc_no:
+                        # Gắn thẻ <hw> cho số hiệu viết tay
+                        doc_no_tagged = re.sub(r'Số:\s*(\d+)/', r'Số: <hw>\1</hw>/', doc_no)
+                        processed_lines.append(doc_no_tagged)
+                    else:
+                        processed_lines.append(line_clean)
+                    continue
+
+                # Ngày tháng ban hành
+                m_date = _DATE_PATTERN.search(line_clean)
+                if m_date or re.search(r'ng[àaá]y[\s,\.:\-_/]', line_clean, re.IGNORECASE):
+                    _, date_str = _normalize_date(line_clean)
+                    if date_str and "[chưa đọc được]" not in date_str:
+                        # Gắn thẻ <hw> cho ngày tháng viết tay
+                        date_str_tagged = re.sub(r'(ng[àaá]y\s+)(\d{1,2})(\s+th[áa]ng)', r'\1<hw>\2</hw>\3', date_str)
+                        processed_lines.append(date_str_tagged)
+                    else:
+                        processed_lines.append(line_clean)
+                    continue
+
+                # Tiêu đề văn bản tại title_idx
+                if i == title_idx:
+                    if re.search(r'K[ẾÊEÉÈeếêéè]?\s*H[OÒÓỌÔỐỒỘAÀÁẠaàáạoòóọôốồộ]{1,2}[AĂÂaăâ]?CH?', line_clean, re.IGNORECASE):
+                        processed_lines.append("KẾ HOẠCH")
+                    elif re.search(r'QUY[ẾÊEếêe]?T\s*[ĐDđd][ỊIÌiịì]?NH', line_clean, re.IGNORECASE):
+                        processed_lines.append("QUYẾT ĐỊNH")
+                    elif re.search(r'TH[OÔÔNGông]+\s*B[AÁaá][OÔoô]', line_clean, re.IGNORECASE):
+                        processed_lines.append("THÔNG BÁO")
+                    else:
+                        processed_lines.append(line_clean)
+                    continue
+
+            # Các dòng thân văn bản được giữ nguyên 100%
+            processed_lines.append(line)
+
+        return "\n".join(processed_lines).strip()
+
+    # Chế độ cũ: Tái cấu trúc 2 cột
+    header_lines = lines[:header_end]
+    body_lines = lines[header_end:]
     header_text = '\n'.join(header_lines)
 
-    # 2. Chuẩn hóa Quốc hiệu / Tiêu ngữ / Số hiệu / Ngày tháng CHỈ trong phạm vi header_lines
     header_text = _normalize_national_header(header_text)
     header_text, doc_no = _normalize_doc_number(header_text)
     header_text, date_str = _normalize_date(header_text)
     
     header_text_upper = header_text.upper()
-    
     is_admin_doc = []
     if "BỘ GIÁO DỤC VÀ ĐÀO TẠO" in header_text_upper or "BO GIAO DUC VA DAO TAO" in header_text_upper:
         is_admin_doc.append("BỘ GIÁO DỤC VÀ ĐÀO TẠO")
-    if (
-        "TRƯỜNG ĐẠI HỌC ĐÀ LẠT" in header_text_upper
-        or "ĐẠI HỌC ĐÀ LẠT" in header_text_upper
-        or "ĐẠI HỌC ĐA LẠT" in header_text_upper
-        or "ĐẠI HỌC ĐÀ LẬT" in header_text_upper
-        or "ĐẠI HỌC ĐÃ LẠT" in header_text_upper
-    ):
+    if any(k in header_text_upper for k in ["TRƯỜNG ĐẠI HỌC ĐÀ LẠT", "ĐẠI HỌC ĐÀ LẠT", "ĐẠI HỌC ĐA LẠT", "ĐẠI HỌC ĐÀ LẬT"]):
         is_admin_doc.append("TRƯỜNG ĐẠI HỌC ĐÀ LẠT")
-    elif "PHÒNG CÔNG TÁC SINH VIÊN" in header_text_upper or "PHONG CONG TAC SINH VIEN" in header_text_upper:
+    elif "PHÒNG CÔNG TÁC SINH VIÊN" in header_text_upper:
         is_admin_doc.append("PHÒNG CÔNG TÁC SINH VIÊN")
         
     has_national_header = []
-    if (
-        "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM" in header_text_upper
-        or "CỘNG HÒA" in header_text_upper
-        or "CỘNG HOÀ" in header_text_upper
-        or "CÔNG HÒA" in header_text_upper
-        or "CONG HOA" in header_text_upper
-        or "CHỦ NGHĨA VIỆT NAM" in header_text_upper
-        or ("CHỦ NGHĨ" in header_text_upper and "VIỆT NAM" in header_text_upper)
-    ):
+    if any(k in header_text_upper for k in ["CỘNG HÒA", "CỘNG HOÀ", "CHỦ NGHĨA VIỆT NAM"]):
         has_national_header.append("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM")
-    if (
-        "Độc lập - Tự do - Hạnh phúc".upper() in header_text_upper
-        or "ĐỘC LẬP" in header_text_upper
-        or "DOC LAP" in header_text_upper
-        or "HẠNH PHÚC" in header_text_upper
-        or "HANH PHUC" in header_text_upper
-        or "TỰ DO" in header_text_upper
-    ):
+    if any(k in header_text_upper for k in ["ĐỘC LẬP", "TỰ DO", "HẠNH PHÚC"]):
         has_national_header.append("Độc lập - Tự do - Hạnh phúc")
 
     if not (is_admin_doc or has_national_header):
-        # Không có header cơ quan / quốc hiệu để tái cấu trúc 2 cột → trả về header đã chuẩn hóa ngày/số hiệu kèm thân văn bản
-        res = header_text + ("\n" + "\n".join(body_lines) if body_lines else "")
-        return res.strip()
+        return (header_text + ("\n" + "\n".join(body_lines) if body_lines else "")).strip()
 
-    # 3. Tái cấu trúc Header chuẩn 2 cột
     header_block = _rebuild_header_block(doc_no, date_str, is_admin_doc, has_national_header)
-
-    # 4. Chuẩn hóa tên tiêu đề (nếu có)
-    if title_idx != -1 and body_lines:
-        t_line = body_lines[0].strip()
-        if re.search(r'K[ẾÊEÉÈeếêéè]?\s*H[OÒÓỌÔỐỒỘAÀÁẠaàáạoòóọôốồộ]{1,2}[AĂÂaăâ]?CH?', t_line, re.IGNORECASE):
-            body_lines[0] = "KẾ HOẠCH"
-        elif re.search(r'QUY[ẾÊEếêe]?T\s*[ĐDđd][ỊIÌiịì]?NH', t_line, re.IGNORECASE):
-            body_lines[0] = "QUYẾT ĐỊNH"
-        elif re.search(r'TH[OÔÔNGông]+\s*B[AÁaá][OÔoô]', t_line, re.IGNORECASE):
-            body_lines[0] = "THÔNG BÁO"
-
-    # 5. Ghép Header đã chuẩn hóa với TOÀN BỘ thân văn bản (bảo toàn 100% dòng nội dung)
     final_text = header_block + "\n".join(body_lines)
     return final_text.strip()
 
