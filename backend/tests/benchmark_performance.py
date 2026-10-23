@@ -95,6 +95,21 @@ async def seed_benchmark_elasticsearch(count: int = 1000) -> int:
     ]
     sample_names = ["Nguyễn Văn A", "Trần Thị B", "Lê Hoàng C", "Phạm Minh D", "Vũ Hải E"]
 
+    print(f"Checking Elasticsearch connection at {settings.es_url}...")
+    try:
+        ping_ok = await es.ping()
+        if not ping_ok:
+            print("[WARN] Elasticsearch is not responding at localhost:9200. Skipping live ES seed.")
+            await es.close()
+            return 0
+    except Exception as exc:
+        print(f"[WARN] Cannot connect to Elasticsearch ({exc}). Running benchmark in Fallback Engine mode.")
+        try:
+            await es.close()
+        except Exception:
+            pass
+        return 0
+
     print(f"Seeding {count} simulated documents into Elasticsearch index '{settings.es_index_documents}'...")
     operations = []
     for i in range(count):

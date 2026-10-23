@@ -547,5 +547,480 @@ async def test_spatial_highlight_locations_endpoint(async_client: httpx.AsyncCli
     assert res_404.status_code == 404
 
 
+# ==============================================================================
+# TESTS CHO 5 TÍNH NĂNG ĐỀ XUẤT MỚI
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_faq_ask_endpoint(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Hỏi đáp Quy chế CTSV bằng ngôn ngữ tự nhiên (NLP FAQ)."""
+    # 1. Hỏi về học bổng và điểm F thể dục
+    res1 = await async_client.get(
+        "/api/v1/search/faq/ask",
+        params={"q": "Bị điểm F môn thể dục có được xét học bổng không?"},
+    )
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert "matched_article" in data1
+    assert "summary_answer" in data1
+    assert "required_forms" in data1
+    assert data1["confidence_score"] >= 0.8
+    assert "688" in data1["matched_article"] or "Quy chế" in data1["regulation_title"]
+    assert any("BM-01-HBKK" in f["form_code"] for f in data1["required_forms"])
+
+    # 2. Hỏi về miễn giảm học phí hộ nghèo
+    res2 = await async_client.get(
+        "/api/v1/search/faq/ask",
+        params={"q": "Hồ sơ miễn giảm học phí cho sinh viên hộ nghèo gồm giấy tờ gì?"},
+    )
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert "81/2021" in data2["matched_article"] or "học phí" in data2["regulation_title"]
+    assert any("BM-02-MGHP" in f["form_code"] for f in data2["required_forms"])
+
+
+@pytest.mark.asyncio
+async def test_policy_auto_audit_endpoint(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Thẩm định Hồ sơ Chính sách Tự động (Policy Auto-Audit)."""
+    # 1. Tìm tài liệu có sẵn
+    search_res = await async_client.get("/api/v1/search", params={"q": "sinh viên", "page_size": 1})
+    assert search_res.status_code == 200
+    hits = search_res.json().get("results", [])
+
+    if hits:
+        doc_id = hits[0]["document_id"]
+        # Audit theo Nghị định 81
+        res = await async_client.get(
+            f"/api/v1/search/documents/{doc_id}/policy-audit",
+            params={"policy_code": "NGHI_DINH_81"},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["policy_code"] == "NGHI_DINH_81"
+        assert data["status"] in ("ELIGIBLE", "INCOMPLETE", "INELIGIBLE")
+        assert len(data["criteria_checks"]) >= 3
+        assert "score" in data
+        assert "recommendation" in data
+
+        # Audit theo Học bổng KKHT
+        res_hb = await async_client.get(
+            f"/api/v1/search/documents/{doc_id}/policy-audit",
+            params={"policy_code": "HOC_BONG_KKHT"},
+        )
+        assert res_hb.status_code == 200
+        assert res_hb.json()["policy_code"] == "HOC_BONG_KKHT"
+
+    # Kiểm tra 404
+    fake_uuid = "00000000-0000-0000-0000-000000000000"
+    res_404 = await async_client.get(f"/api/v1/search/documents/{fake_uuid}/policy-audit")
+    assert res_404.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cross_document_fraud_detection_endpoint(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Phát hiện Xung đột & Gian lận Liên văn bản (Anti-Fraud)."""
+    res = await async_client.get("/api/v1/search/fraud-detection/audit")
+    assert res.status_code == 200
+    data = res.json()
+    assert "risk_level" in data
+    assert data["risk_level"] in ("SAFE", "WARNING", "CRITICAL")
+    assert "tamper_score" in data
+    assert isinstance(data["detected_collisions"], list)
+    assert "conclusion" in data
+    assert "audited_at" in data
+
+
+@pytest.mark.asyncio
+async def test_structured_tables_query_endpoint(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Tìm kiếm Bảng biểu Cấu trúc (Nested Table Search)."""
+    # 1. Tìm theo điều kiện điểm GPA và điểm rèn luyện
+    body = {
+        "min_gpa": 3.2,
+        "min_drl": 80,
+        "page": 1,
+        "page_size": 10,
+    }
+    res = await async_client.post("/api/v1/search/tables/query", json=body)
+    assert res.status_code == 200
+    data = res.json()
+    assert "total_hits" in data
+    assert "rows" in data
+    assert isinstance(data["rows"], list)
+    assert data["page"] == 1
+    assert data["page_size"] == 10
+
+    if data["rows"]:
+        row = data["rows"][0]
+        assert "mssv" in row
+        assert "student_name" in row
+        if row.get("gpa") is not None:
+            assert row["gpa"] >= 3.2
+
+    # 2. Tìm theo MSSV cụ thể
+    body_mssv = {"student_id": "2112345"}
+    res_mssv = await async_client.post("/api/v1/search/tables/query", json=body_mssv)
+    assert res_mssv.status_code == 200
+    data_mssv = res_mssv.json()
+    assert "rows" in data_mssv
+
+
+@pytest.mark.asyncio
+async def test_pii_security_audit_summary_endpoint(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Giám sát An toàn Thông tin PII & SIEM."""
+    res = await async_client.get("/api/v1/search/security/pii-audit-summary", params={"window_minutes": 60})
+    assert res.status_code == 200
+    data = res.json()
+    assert "total_pii_accesses" in data
+    assert "unique_documents_accessed" in data
+    assert "top_accessors" in data
+    assert isinstance(data["top_accessors"], list)
+    assert "anomalies" in data
+    assert isinstance(data["anomalies"], list)
+    assert "recent_accesses" in data
+    assert isinstance(data["recent_accesses"], list)
+
+
+@pytest.mark.asyncio
+async def test_ctsv_percolate_routing_endpoint(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Phân luồng hồ sơ tự động bằng Elasticsearch Percolator (Reverse Search)."""
+    # 1. Lấy 1 tài liệu có sẵn trong hệ thống
+    search_res = await async_client.get("/api/v1/search", params={"page_size": 1})
+    assert search_res.status_code == 200
+    search_data = search_res.json()
+
+    if search_data.get("results"):
+        valid_doc_id = search_data["results"][0]["document_id"]
+        res = await async_client.get(f"/api/v1/search/documents/{valid_doc_id}/percolate-routing")
+        assert res.status_code == 200
+        data = res.json()
+
+        assert "document_id" in data
+        assert "document_title" in data
+        assert "matched_rules_count" in data
+        assert data["matched_rules_count"] >= 1
+        assert "primary_route" in data
+        assert "assigned_department" in data
+        assert "priority" in data
+        assert data["priority"] in ("URGENT", "HIGH", "NORMAL")
+        assert "matched_policies" in data
+        assert isinstance(data["matched_policies"], list)
+
+        first_match = data["matched_policies"][0]
+        assert "rule_id" in first_match
+        assert "policy_name" in first_match
+        assert "target_department" in first_match
+        assert "routing_action" in first_match
+        assert "required_checklist" in first_match
+        assert isinstance(first_match["required_checklist"], list)
+
+    # 2. Thử với document_id giả mạo -> 404
+    fake_uuid = "00000000-0000-0000-0000-000000000000"
+    res_404 = await async_client.get(f"/api/v1/search/documents/{fake_uuid}/percolate-routing")
+    assert res_404.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_ctsv_breakdown_analytics_endpoint(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Báo cáo Đa chiều CTSV Toàn trường Thời gian thực (Multi-level Aggregations)."""
+    res = await async_client.get("/api/v1/search/analytics/ctsv-breakdown")
+    assert res.status_code == 200
+    data = res.json()
+
+    assert "total_student_documents" in data
+    assert "total_active_students" in data
+    assert "total_budget_allocated" in data
+    assert data["total_budget_allocated"] > 0
+    assert "avg_processing_sla_days" in data
+    assert "faculty_breakdown" in data
+    assert isinstance(data["faculty_breakdown"], list)
+    assert len(data["faculty_breakdown"]) > 0
+
+    first_faculty = data["faculty_breakdown"][0]
+    assert "faculty_code" in first_faculty
+    assert "faculty_name" in first_faculty
+    assert "total_applications" in first_faculty
+    assert "approved_count" in first_faculty
+    assert "budget_disbursed" in first_faculty
+
+    assert "policy_distribution" in data
+    assert isinstance(data["policy_distribution"], list)
+    assert len(data["policy_distribution"]) > 0
+
+    first_policy = data["policy_distribution"][0]
+    assert "policy_code" in first_policy
+    assert "policy_name" in first_policy
+    assert "percentage" in first_policy
+
+    assert "monthly_application_trend" in data
+    assert isinstance(data["monthly_application_trend"], list)
+
+
+@pytest.mark.asyncio
+async def test_ocr_quality_distribution_and_review_queue(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Thống kê Chất lượng OCR & Hàng đợi Hiệu đính Human-in-the-Loop."""
+    # 1. Thống kê phân bổ chất lượng
+    res_stats = await async_client.get("/api/v1/search/analytics/ocr-quality")
+    assert res_stats.status_code == 200
+    stats = res_stats.json()
+    assert "total_scanned_documents" in stats
+    assert "avg_confidence" in stats
+    assert "excellent_count" in stats
+    assert "review_needed_count" in stats
+    assert "distribution" in stats
+    assert isinstance(stats["distribution"], list)
+    assert len(stats["distribution"]) == 4
+
+    # 2. Hàng đợi hiệu đính
+    res_queue = await async_client.get("/api/v1/search/ocr-quality/review-queue", params={"page_size": 5})
+    assert res_queue.status_code == 200
+    queue = res_queue.json()
+    assert "total_items" in queue
+    assert "items" in queue
+    assert isinstance(queue["items"], list)
+    if queue["items"]:
+        first = queue["items"][0]
+        assert "document_id" in first
+        assert "ocr_confidence" in first
+        assert "urgency" in first
+        assert first["urgency"] in ("URGENT", "HIGH", "NORMAL")
+
+
+@pytest.mark.asyncio
+async def test_document_auto_tags_significant_text(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Tự động gán nhãn thực thể chính sách bằng significant_text."""
+    # Lấy 1 tài liệu có sẵn
+    search_res = await async_client.get("/api/v1/search", params={"page_size": 1})
+    assert search_res.status_code == 200
+    sdata = search_res.json()
+
+    doc_id = sdata["results"][0]["document_id"] if sdata.get("results") else "a69799ce-74f2-46b9-94d3-fe7f1f50b0aa"
+    res = await async_client.post(f"/api/v1/search/documents/{doc_id}/auto-tags")
+    assert res.status_code == 200
+    data = res.json()
+    assert "document_id" in data
+    assert "document_title" in data
+    assert "total_tags" in data
+    assert data["total_tags"] >= 1
+    assert "tags" in data
+    assert isinstance(data["tags"], list)
+    assert "suggested_policy_category" in data
+    assert "extracted_entities" in data
+
+    first_tag = data["tags"][0]
+    assert "tag" in first_tag
+    assert "category" in first_tag
+    assert "significance_score" in first_tag
+    assert "evidence_snippet" in first_tag
+
+
+@pytest.mark.asyncio
+async def test_geo_priority_area_verification(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Thẩm định Địa lý Xã ĐBKK Khu vực III NĐ 81/2021."""
+    # 1. Thẩm định địa chỉ thuộc Xã Đạ Chais, Huyện Lạc Dương (Khu vực III)
+    req_zone_iii = {
+        "address_raw": "Thôn Đạ Tro, Xã Đạ Chais, Huyện Lạc Dương, Tỉnh Lâm Đồng",
+        "commune": "Đạ Chais",
+        "district": "Lạc Dương",
+        "province": "Lâm Đồng",
+    }
+    res_iii = await async_client.post("/api/v1/search/geo/verify-priority-area", json=req_zone_iii)
+    assert res_iii.status_code == 200
+    data_iii = res_iii.json()
+    assert data_iii["is_priority_area"] is True
+    assert data_iii["area_category"] == "KHU_VUC_III"
+    assert data_iii["tuition_reduction_rate"] == 70
+    assert data_iii["subsidy_amount_monthly"] == 1490000.0
+    assert "distance_to_dlu_km" in data_iii
+    assert data_iii["distance_to_dlu_km"] > 0
+    assert "Nghị định 81/2021/NĐ-CP" in data_iii["legal_reference"]
+
+    # 2. Thẩm định địa chỉ đô thị thông thường (Không thuộc diện)
+    req_normal = {
+        "address_raw": "Số 01 Phù Đổng Thiên Vương, Phường 8, TP Đà Lạt, Lâm Đồng",
+        "commune": "Phường 8",
+        "district": "Đà Lạt",
+        "province": "Lâm Đồng",
+    }
+    res_norm = await async_client.post("/api/v1/search/geo/verify-priority-area", json=req_normal)
+    assert res_norm.status_code == 200
+    data_norm = res_norm.json()
+    assert data_norm["is_priority_area"] is False
+    assert data_norm["area_category"] == "KHONG_THUOC_DIEN"
+    assert data_norm["tuition_reduction_rate"] == 0
+
+
+@pytest.mark.asyncio
+async def test_student_entity_graph_and_dropout_risk(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Đồ thị Thực thể Sinh viên 360 & Cảnh báo Nguy cơ Thôi học."""
+    # 1. Sinh viên bình thường
+    res = await async_client.get("/api/v1/search/students/2112463/entity-graph")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["student_id"] == "2112463"
+    assert "student_name" in data
+    assert "faculty" in data
+    assert "nodes" in data
+    assert "edges" in data
+    assert len(data["nodes"]) >= 4
+    assert len(data["edges"]) >= 3
+    assert "dropout_risk" in data
+    assert data["dropout_risk"]["risk_level"] in ("SAFE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
+    assert "risk_score" in data["dropout_risk"]
+
+    # 2. Sinh viên có cảnh báo học vụ (MSSV chứa "warn" hoặc "2020")
+    res_warn = await async_client.get("/api/v1/search/students/2020999_warn/entity-graph")
+    assert res_warn.status_code == 200
+    data_warn = res_warn.json()
+    assert data_warn["dropout_risk"]["risk_level"] == "HIGH"
+    assert data_warn["dropout_risk"]["risk_score"] > 50
+
+
+@pytest.mark.asyncio
+async def test_document_audit_trail_and_diffs(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Nhật ký Phiên bản & So sánh Diffs trước/sau hiệu đính."""
+    search_res = await async_client.get("/api/v1/search", params={"page_size": 1})
+    assert search_res.status_code == 200
+    sdata = search_res.json()
+
+    doc_id = sdata["results"][0]["document_id"] if sdata.get("results") else "a69799ce-74f2-46b9-94d3-fe7f1f50b0aa"
+    res = await async_client.get(f"/api/v1/search/documents/{doc_id}/audit-trail")
+    assert res.status_code == 200
+    data = res.json()
+    assert "document_id" in data
+    assert "title" in data
+    assert "current_version" in data
+    assert "revisions" in data
+    assert isinstance(data["revisions"], list)
+    assert len(data["revisions"]) >= 2
+
+    first_rev = data["revisions"][0]
+    assert "revision_number" in first_rev
+    assert "editor_name" in first_rev
+    assert "diffs" in first_rev
+    assert isinstance(first_rev["diffs"], list)
+    assert len(first_rev["diffs"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_active_watchers_lifecycle(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Hệ thống Watcher & Cảnh báo Sự kiện Thời gian thực."""
+    # 1. Lấy danh sách Watchers hiện tại
+    res_list = await async_client.get("/api/v1/search/watchers")
+    assert res_list.status_code == 200
+    w_list = res_list.json()
+    assert "total_watchers" in w_list
+    assert "watchers" in w_list
+    assert len(w_list["watchers"]) >= 1
+
+    # 2. Tạo mới một Watcher
+    new_w_body = {
+        "name": "Giám sát Đơn xin Miễn giảm Khóa 46",
+        "query_text": "miễn giảm học phí Khóa 46 K46",
+        "category_code": "MIEN_GIAM_HOC_PHI",
+        "min_priority": "HIGH",
+    }
+    res_create = await async_client.post("/api/v1/search/watchers", json=new_w_body)
+    assert res_create.status_code == 200
+    created = res_create.json()
+    assert "watcher_id" in created
+    assert created["name"] == new_w_body["name"]
+    assert created["query_text"] == new_w_body["query_text"]
+
+    # 3. Lấy sự kiện vừa kích hoạt
+    watcher_id = created["watcher_id"]
+    res_evts = await async_client.get(f"/api/v1/search/watchers/{watcher_id}/triggered-events")
+    assert res_evts.status_code == 200
+    evts = res_evts.json()
+    assert isinstance(evts, list)
+    assert len(evts) >= 1
+    assert "event_id" in evts[0]
+    assert "document_title" in evts[0]
+    assert "match_reason" in evts[0]
+
+
+# ==============================================================================
+# TESTS CHO 2 ĐỀ XUẤT NÂNG CAO: HYBRID RRF & KIBANA CANVAS DASHBOARD
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_hybrid_search_rrf_scoring(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Tìm kiếm Lai RRF (BM25 + kNN Reciprocal Rank Fusion - ES 8.9+)."""
+    # 1. Truy vấn chuẩn k = 20
+    payload = {
+        "query": "nghị định 81 miễn giảm học phí sv nghèo khó khăn",
+        "rank_constant_k": 20,
+        "limit": 10,
+    }
+    res = await async_client.post("/api/v1/search/hybrid-rrf", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+
+    assert data["query"] == payload["query"]
+    assert data["rank_constant_k"] == 20
+    assert "total_results" in data
+    assert "results" in data
+    assert "metrics" in data
+    assert len(data["results"]) >= 1
+
+    first_hit = data["results"][0]
+    assert "document_id" in first_hit
+    assert "title" in first_hit
+    assert "rrf_score" in first_hit
+    assert first_hit["rrf_score"] > 0
+    assert first_hit["match_type"] in ("HYBRID_BOTH", "KEYWORD_ONLY", "SEMANTIC_ONLY")
+    assert "explanation" in first_hit
+
+    # 2. Truy vấn với k = 60 (chuẩn bài báo Cormack et al. 2009)
+    payload_k60 = {
+        "query": "học bổng khuyến khích học tập",
+        "rank_constant_k": 60,
+        "limit": 5,
+    }
+    res_k60 = await async_client.post("/api/v1/search/hybrid-rrf", json=payload_k60)
+    assert res_k60.status_code == 200
+    data_k60 = res_k60.json()
+    assert data_k60["rank_constant_k"] == 60
+    assert len(data_k60["results"]) <= 5
+
+
+@pytest.mark.asyncio
+async def test_kibana_canvas_preview_and_export(async_client: httpx.AsyncClient):
+    """Kiểm tra Endpoint Báo cáo Điều hành Kibana Canvas & Xuất gói Saved Objects .ndjson."""
+    # 1. Xem trước số liệu động Canvas Workpad
+    res_preview = await async_client.get("/api/v1/search/kibana/canvas-preview")
+    assert res_preview.status_code == 200
+    pdata = res_preview.json()
+
+    assert "Đại học Đà Lạt" in pdata["title"]
+    assert "executive_kpis" in pdata
+    kpis = pdata["executive_kpis"]
+    assert kpis["total_documents"] >= 400
+    assert kpis["active_beneficiaries"] >= 300
+    assert "Tỷ VNĐ" in kpis["total_budget_disbursed"]
+
+    assert "faculty_budget_distribution" in pdata
+    assert len(pdata["faculty_budget_distribution"]) == 8  # 8 khoa của ĐH Đà Lạt
+    faculty_names = [f["faculty"] for f in pdata["faculty_budget_distribution"]]
+    assert any("Công nghệ Thông tin" in fn for fn in faculty_names)
+    assert any("Sư phạm" in fn for fn in faculty_names)
+
+    assert "policy_share_metrics" in pdata
+    assert len(pdata["policy_share_metrics"]) >= 4
+
+    assert "ocr_quality_gauge" in pdata
+    assert pdata["ocr_quality_gauge"]["status"] == "HEALTHY"
+
+    # 2. Xuất gói Saved Objects NDJSON
+    res_export = await async_client.get("/api/v1/search/kibana/export-dashboard")
+    assert res_export.status_code == 200
+    assert "attachment" in res_export.headers.get("content-disposition", "")
+    assert "docuctsv_kibana_dashboard.ndjson" in res_export.headers.get("content-disposition", "")
+
+    # Nội dung tải về phải chứa các object của Kibana (dashboard, canvas-workpad, index-pattern)
+    ndjson_text = res_export.text
+    assert "dashboard-docuctsv-overview" in ndjson_text
+    assert "workpad-docuctsv-executive" in ndjson_text
+    assert "index-pattern" in ndjson_text
+
 
 

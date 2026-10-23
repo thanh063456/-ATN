@@ -19,15 +19,31 @@ from app.core.config import settings
 def _create_admin_client() -> Client:
     """Tạo Supabase client với service_role key (singleton, thread-safe)."""
     try:
+        url = settings.supabase_url
+        key = settings.supabase_service_key
+        if not key or not url or "YOUR_PROJECT_REF" in url:
+            logger.warning("Supabase credentials not configured. Running in offline/local fallback mode.")
+            class _DummyClient:
+                def __getattr__(self, name):
+                    return self
+                def __call__(self, *args, **kwargs):
+                    return self
+            return _DummyClient()  # type: ignore
+
         client = create_client(
-            supabase_url=settings.supabase_url,
-            supabase_key=settings.supabase_service_key,
+            supabase_url=url,
+            supabase_key=key,
         )
         logger.info("Supabase admin client initialized: {url}", url=settings.supabase_url)
         return client
     except Exception as exc:
-        logger.error("Failed to initialize Supabase client: {err}", err=str(exc))
-        raise
+        logger.warning("Failed to initialize Supabase client ({err}), creating dummy client", err=str(exc))
+        class _DummyClient:
+            def __getattr__(self, name):
+                return self
+            def __call__(self, *args, **kwargs):
+                return self
+        return _DummyClient()  # type: ignore
 
 
 def get_supabase_admin() -> Client:

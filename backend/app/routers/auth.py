@@ -8,6 +8,7 @@ Cung cấp các endpoints:
 - GET /auth/me: Lấy thông tin tài khoản hiện tại kèm vai trò và MSSV
 - POST /auth/login: Đăng nhập trực tiếp (backward-compatible)
 """
+from typing import Any
 import uuid
 from datetime import datetime, timedelta
 
@@ -114,8 +115,11 @@ async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depend
 
     stmt = select(User).where(User.id == user.id).options(selectinload(User.role))
     res = await db.execute(stmt)
-    user = res.scalars().first()
-    role_name = user.role.name if user.role else "STUDENT"
+    loaded_user = res.scalars().first()
+    if loaded_user is not None:
+        user = loaded_user
+    role_obj: Any = getattr(user, "role", None)
+    role_name = getattr(role_obj, "name", "STUDENT") if role_obj else "STUDENT"
 
     return UserResponse(
         id=user.id,
@@ -124,7 +128,7 @@ async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depend
         email=user.email,
         full_name=user.full_name,
         mssv=user.mssv,
-        role_name=role_name,
+        role_name=str(role_name),
         is_active=user.is_active,
         created_at=user.created_at,
     )
@@ -254,9 +258,12 @@ async def register(
 
     stmt = select(User).where(User.id == user.id).options(selectinload(User.role))
     res = await db.execute(stmt)
-    user = res.scalars().first()
+    loaded_user = res.scalars().first()
+    if loaded_user is not None:
+        user = loaded_user
 
-    role_name = user.role.name if user.role else "STUDENT"
+    role_obj: Any = getattr(user, "role", None)
+    role_name = getattr(role_obj, "name", "STUDENT") if role_obj else "STUDENT"
     return UserResponse(
         id=user.id,
         supabase_uid=user.supabase_uid,
@@ -264,7 +271,7 @@ async def register(
         email=user.email,
         full_name=user.full_name,
         mssv=user.mssv,
-        role_name=role_name,
+        role_name=str(role_name),
         is_active=user.is_active,
         created_at=user.created_at,
     )

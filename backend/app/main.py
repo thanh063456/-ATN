@@ -105,12 +105,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if torch.cuda.is_available():
             device_name = torch.cuda.get_device_name(0)
             vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            logger.info("PyTorch CUDA ready: {gpu} (VRAM: {mem:.1f} GB)", gpu=device_name, mem=vram_gb)
+            logger.info(f"PyTorch CUDA ready: {device_name} (VRAM: {vram_gb:.1f} GB)")
             _ = torch.zeros(1, device="cuda")
         else:
             logger.info("PyTorch running on CPU")
     except Exception as exc:
-        logger.warning("CUDA check on startup: {err}", err=str(exc))
+        logger.warning(f"CUDA check on startup: {exc}")
 
     # Khởi tạo Elasticsearch index và mapping tiếng Việt nếu chưa tồn tại
     try:

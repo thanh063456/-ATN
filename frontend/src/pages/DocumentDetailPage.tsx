@@ -802,11 +802,12 @@ export const DocumentDetailPage: React.FC = () => {
   const isApproved = doc.ocr_status === "APPROVED";
   const isRejected = doc.ocr_status === "REJECTED";
 
+  const currentToken = token || localStorage.getItem("access_token");
   let filePreviewUrl = doc.file_url
     ? (doc.file_url.startsWith("http") ? doc.file_url : `${API_BASE_URL.replace("/api/v1", "")}${doc.file_url}`)
     : `${API_BASE_URL}/documents/${doc.id}/file`;
-  if (token && !filePreviewUrl.includes("token=") && !filePreviewUrl.includes("ticket=")) {
-    filePreviewUrl += (filePreviewUrl.includes("?") ? "&" : "?") + `token=${encodeURIComponent(token)}`;
+  if (currentToken && !filePreviewUrl.includes("token=") && !filePreviewUrl.includes("ticket=")) {
+    filePreviewUrl += (filePreviewUrl.includes("?") ? "&" : "?") + `token=${encodeURIComponent(currentToken)}`;
   }
 
   return (

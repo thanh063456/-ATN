@@ -19,8 +19,8 @@ def create_file_ticket(document_id: str, user_id: str | None = None, ttl_seconds
 
     ticket = secrets.token_urlsafe(32)
     _tickets[ticket] = {
-        "document_id": str(document_id),
-        "user_id": str(user_id) if user_id else None,
+        "document_id": document_id,
+        "user_id": user_id,
         "expires_at": now + ttl_seconds,
     }
     return ticket
@@ -28,7 +28,8 @@ def create_file_ticket(document_id: str, user_id: str | None = None, ttl_seconds
 
 def validate_and_consume_file_ticket(ticket: str, document_id: str, is_head: bool = False) -> bool:
     """
-    Xác minh và tiêu thụ vé xem file (dùng 1 lần cho download GET, hỗ trợ HEAD probe từ trình duyệt).
+    Xác minh vé xem file ngắn hạn (TTL 180 giây).
+    Cho phép trình duyệt gửi nhiều request (HEAD probe, Range GET, PDF reader worker) trong suốt thời gian TTL.
     Trả về True nếu vé hợp lệ và chưa hết hạn, ngược lại False.
     """
     if not ticket:
@@ -43,18 +44,9 @@ def validate_and_consume_file_ticket(ticket: str, document_id: str, is_head: boo
         _tickets.pop(ticket, None)
         return False
 
-    if data["document_id"] != str(document_id):
+    if data["document_id"] != document_id:
         return False
 
-    if is_head:
-        # HEAD request không tiêu thụ vé, cho phép trình duyệt kiểm tra header / content-length
-        return True
-
-    # Đối với GET request (tải file thực tế)
-    if data.get("consumed_at"):
-        # Đã bị tiêu thụ trước đó -> từ chối tải lại
-        return False
-
-    # Đánh dấu đã tiêu thụ
-    data["consumed_at"] = now
+    data["last_accessed_at"] = now
     return True
+
