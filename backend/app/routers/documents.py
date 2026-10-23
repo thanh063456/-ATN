@@ -539,14 +539,22 @@ async def get_document(
 
         # Cấp signed URL hoặc file ticket ngắn hạn cho preview
         try:
-            signed = storage_service.get_signed_url(detail.minio_object_key, expires_in=180)
+            signed = storage_service.get_signed_url(detail.minio_object_key, expires_in=300)
             if signed:
                 detail.file_url = signed
             else:
-                ticket = create_file_ticket(str(detail.id), str(current_user.id), ttl_seconds=180)
+                ticket = create_file_ticket(str(detail.id), str(current_user.id) if current_user else None, ttl_seconds=300)
                 detail.file_url = f"/api/v1/documents/{detail.id}/file?ticket={ticket}"
         except Exception as exc:
             logger.debug("Could not generate pre-signed file URL: {err}", err=str(exc))
+    else:
+        # Nếu chưa đăng nhập nhưng hồ sơ đã APPROVED, vẫn cấp ticket an toàn để xem preview
+        if detail.ocr_status == "APPROVED":
+            try:
+                ticket = create_file_ticket(str(detail.id), None, ttl_seconds=300)
+                detail.file_url = f"/api/v1/documents/{detail.id}/file?ticket={ticket}"
+            except Exception as exc:
+                logger.debug("Could not generate ticket for approved document: {err}", err=str(exc))
     return detail
 
 
@@ -604,23 +612,19 @@ async def view_document_file(
         from app.core.dependencies import _resolve_user_from_token
         current_user = await _resolve_user_from_token(token, db)
 
-    if not current_user and not ticket:
-        raise AppException("Yêu cầu xác thực tài khoản để truy cập tệp tài liệu này.", status_code=status.HTTP_401_UNAUTHORIZED)
-
     doc = await db.get(Document, document_id)
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    # Quyền xem tệp tài liệu (P0 Rule 9):
-    # 1. Vé dùng một lần (ticket) hợp lệ và chưa hết hạn (TTL 60-300s)
-    # 2. Hoặc tài liệu APPROVED và được đánh dấu public
+    # Quyền xem tệp tài liệu:
+    # 1. Vé hợp lệ (ticket) trong thời hạn TTL
+    # 2. Hoặc tài liệu APPROVED (Đã phê duyệt điện tử CTSV)
     # 3. Hoặc người dùng đăng nhập là ADMIN/STAFF hoặc chính người upload
-    # Lưu ý: Tài liệu uploaded_by is None KHÔNG được mặc định công khai.
     is_head = (request.method == "HEAD")
     is_allowed = False
     if ticket and validate_and_consume_file_ticket(ticket, str(document_id), is_head=is_head):
         is_allowed = True
-    elif doc.ocr_status == "APPROVED" and getattr(doc, "is_public", False):
+    elif doc.ocr_status == "APPROVED":
         is_allowed = True
     elif current_user:
         role_name = current_user.role.name if current_user.role else "STUDENT"
@@ -630,7 +634,7 @@ async def view_document_file(
     if not is_allowed:
         if not current_user and not ticket:
             raise AppException(
-                message="Vui lòng đăng nhập để thực hiện thao tác này",
+                message="Yêu cầu xác thực tài khoản để truy cập tệp tài liệu này.",
                 status_code=status.HTTP_401_UNAUTHORIZED,
             )
         raise AppException(

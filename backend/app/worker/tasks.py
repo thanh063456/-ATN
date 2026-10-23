@@ -15,6 +15,7 @@ Luồng xử lý chuẩn theo .ai/AGENTS.md:
 import asyncio
 from datetime import datetime
 import time
+from typing import Any
 from uuid import UUID
 
 from loguru import logger
@@ -129,7 +130,7 @@ async def _process_secondary_engine(doc_uuid: UUID, engine_name: str) -> None:
             logger.warning("Secondary OCR engine {eng} failed for doc {id}: {err}",
                            eng=engine_name, id=doc_uuid, err=ocr_err_msg)
 
-    processing_time_ms = int(round((time.perf_counter() - t_start) * 1000))
+    processing_time_ms = round((time.perf_counter() - t_start) * 1000)
 
     async with AsyncSessionLocal() as session:
         stmt = (
@@ -357,7 +358,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 session.add(new_meta)
 
             # ── 8. Cập nhật Document và Job hoàn thành (progress: 100%) ────────
-            doc_update_values = {"ocr_status": "DONE", "updated_at": now}
+            doc_update_values: dict[str, Any] = {"ocr_status": "DONE", "updated_at": now}
             if page_count and page_count > 0:
                 doc_update_values["page_count"] = page_count
 

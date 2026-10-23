@@ -101,7 +101,7 @@ export const DashboardPage: React.FC = () => {
         return {
           name: cat.name,
           count: cat.count,
-          percent: percent || (i === 0 ? 35 : 20),
+          percent: percent,
           color: colors[i % colors.length],
         };
       })

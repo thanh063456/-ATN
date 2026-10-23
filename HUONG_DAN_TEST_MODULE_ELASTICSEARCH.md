@@ -30,13 +30,13 @@ Sau khi server chạy, truy cập tài liệu API trực quan tại:
 Để kiểm chứng toàn bộ mã nguồn hoạt động chính xác 100%, bạn chỉ cần chạy lệnh sau trong thư mục dự án:
 
 ```powershell
-# 1. Chạy 25 test chuyên sâu cho phân hệ Elasticsearch & Search API
+# 1. Chạy 38 test chuyên sâu cho phân hệ Elasticsearch & Search API
 pytest backend/tests/test_search.py -v
 
-# 2. Chạy toàn bộ 124 test của cả hệ thống Backend
+# 2. Chạy toàn bộ test của hệ thống Backend
 pytest backend/tests -v
 ```
-> **Kết quả chuẩn**: `25/25 PASSED (100%)` cho test_search.py và `124/124 PASSED (100%)` cho toàn bộ Backend.
+> **Kết quả chuẩn**: `38/38 PASSED (100%)` cho test_search.py với độ phủ toàn bộ 11 chức năng chuyên sâu cho Đề tài CTSV.
 
 ---
 
@@ -186,21 +186,171 @@ Tất cả các API dưới đây đều nằm trong nhóm thẻ **`search`** tr
 
 ---
 
-## IV. TỔNG HỢP DANH SÁCH FILE ĐƯỢC CẬP NHẬT TRONG MODULE 3 & 4
-
-Toàn bộ các thay đổi được gói gọn trong phân hệ Module 3 & 4 mà **không làm ảnh hưởng hay xung đột với code OCR hoặc Frontend**:
-1. `backend/app/core/elasticsearch.py`: Cấu hình kết nối ES 8.x, Custom Vietnamese Analyzer, ICU Tokenizer, Stopwords & Synonym Graph.
-2. `backend/app/routers/search.py`: Toàn bộ 16 endpoint nghiệp vụ và tìm kiếm toàn văn.
-3. `backend/app/schemas/search.py`: Tất cả Pydantic response/request models chuẩn hóa.
-4. `backend/app/models/documents.py`: Bổ sung mapping trường `is_verified`, `verification_code`, `qr_code_url`.
-5. `backend/app/services/search_index_service.py`: Dịch vụ lập chỉ mục và Partial Update tài liệu.
-6. `backend/app/services/embedding_service.py`: Dịch vụ Dense Vector Embedding cho Hybrid Search.
-7. `backend/app/worker/tasks.py`: Celery Task đồng bộ chỉ mục sau khi OCR hoàn tất.
-8. `backend/tests/test_search.py`: Bộ 25 bài test tự động bao phủ 100% chức năng.
-9. `scripts/sync_es_index.py`: Script quét và đồng bộ dữ liệu PostgreSQL sang Elasticsearch.
-10. `scripts/backup_restore_es.py`: Script sao lưu snapshot và phục hồi chỉ mục.
-11. `run_app.bat` & `run_app.ps1`: Script chạy nhanh một cú click cho Windows.
-12. `update_module_elasticsearch_phat.zip`: Gói nén sạch (66.5 KB) để chia sẻ nhanh.
+### 15. Phân luồng Hồ sơ Tự động bằng Elasticsearch Percolator (Reverse Document Routing)
+- **Endpoint**: `GET /api/v1/search/documents/{document_id}/percolate-routing`
+- **Ý nghĩa Đề tài**: Thay vì người dùng nhập từ khóa tìm hồ sơ, Percolator đăng ký trước toàn bộ các bộ luật chính sách (NĐ 81/2021/NĐ-CP, QĐ 1121/1997/QĐ-TTg, QĐ 688/QĐ-ĐHĐL...). Khi một văn bản OCR được đẩy vào, Elasticsearch tự động khớp và định tuyến văn bản đến đúng bàn xử lý của chuyên viên phụ trách.
+- **7 Quy tắc phân luồng chuẩn hóa**:
+  1. `RULE_MIEN_100`: Miễn 100% học phí (mồ côi cả cha lẫn mẹ, khuyết tật nặng, dân tộc thiểu số rất ít người) -> `PHONG_CTSV_CHINH_SACH`, Mức ưu tiên: `HIGH`.
+  2. `RULE_GIAM_70`: Giảm 70% học phí (dân tộc thiểu số ở thôn/bản ĐBKK) -> `PHONG_CTSV_CHINH_SACH`, Mức ưu tiên: `NORMAL`.
+  3. `RULE_GIAM_50`: Giảm 50% học phí (con cán bộ/công nhân viên bị TNLĐ) -> `PHONG_CTSV_CHINH_SACH`, Mức ưu tiên: `NORMAL`.
+  4. `RULE_TRO_CAP_XH`: Trợ cấp xã hội QĐ 1121 (hộ nghèo, mồ côi) -> `PHONG_CTSV_CHINH_SACH`, Mức ưu tiên: `HIGH`.
+  5. `RULE_HOC_BONG_KKHT`: Học bổng khuyến khích học tập -> `TO_QUAN_LY_HOC_BONG`, Mức ưu tiên: `URGENT` trong mùa xét duyệt.
+  6. `RULE_CANH_BAO_HOC_VU`: Đơn cứu xét điểm, tạm hoãn nghĩa vụ quân sự -> `BAN_CO_VAN_HOC_TAP`, Mức ưu tiên: `URGENT`.
+  7. `RULE_KY_TUC_XA`: Đơn đăng ký nội trú, tạm trú KTX -> `BAN_QUAN_LY_KTX`, Mức ưu tiên: `NORMAL`.
+- **Kiểm thử bằng cURL**:
+  ```bash
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/documents/a69799ce-74f2-46b9-94d3-fe7f1f50b0aa/percolate-routing"
+  ```
+- **Kết quả kỳ vọng**: Trả về `routing_status: "SUCCESS"`, `primary_route`, `assigned_department`, `priority`, danh sách các quy tắc khớp (`matched_rules`), và danh mục giấy tờ cần kiểm tra (`required_checklist`).
 
 ---
-*Tài liệu được soạn thảo và kiểm thử bởi Phan Thành Phát (MSSV: 2212463) phục vụ dự án DocuCTSV.*
+
+### 16. Thống kê Phân bổ Đa chiều CTSV theo 8 Khoa & Ngân sách Miễn giảm (Multi-faceted CTSV Analytics)
+- **Endpoint**: `GET /api/v1/search/analytics/ctsv-breakdown`
+- **Ý nghĩa Đề tài**: Sử dụng sức mạnh Nested Aggregations và Filter Aggregations của Elasticsearch để phân tích tức thì tình hình miễn giảm học phí và học bổng trên toàn trường Đại học Đà Lạt theo thời gian thực mà không cần chạy câu truy vấn SQL quét toàn bảng chậm chạp.
+- **Dữ liệu phân tích**:
+  - `total_documents`: Tổng số hồ sơ được thụ lý.
+  - `total_budget_allocated`: Tổng ngân sách đã phê duyệt và chi trả (VNĐ).
+  - `faculty_breakdown`: Phân bổ hồ sơ theo 8 Khoa (CNTT, Kinh tế - QTKD, Sư phạm, Luật học, Sinh học, Hóa học, Ngoại ngữ, Du lịch) kèm ngân sách và tỷ lệ đã giải quyết.
+  - `policy_distribution`: Tỷ lệ phần trăm và ngân sách theo từng chính sách (Nghị định 81, Trợ cấp xã hội, Học bổng KKHT, Hỗ trợ chi phí học tập).
+  - `monthly_histogram`: Biểu đồ cột phân bổ hồ sơ và giải ngân theo từng tháng.
+- **Kiểm thử bằng cURL**:
+  ```bash
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/analytics/ctsv-breakdown"
+  ```
+
+---
+
+### 17. Hướng dẫn Trải nghiệm Trực quan trên Giao diện Web (SearchPage)
+Truy cập: 👉 [http://localhost:3000/search](http://localhost:3000/search)
+
+1. **Thanh Switcher 8 Tab Chuyên biệt**:
+   - `Tra cứu Toàn văn & Hồ sơ`: Tìm kiếm văn bản, xem danh sách kết quả, lọc theo Khoa/Năm/Độ tin cậy OCR.
+   - `Hỏi đáp Quy chế CTSV (FAQ AI)`: Hỏi đáp thông minh trích dẫn điều khoản Quyết định 688/QĐ-ĐHĐL.
+   - `Bảng biểu Quyết định (Nested)`: Tra cứu theo từng dòng sinh viên trong bảng danh sách PDF scan.
+   - `Giám sát An toàn PII (NĐ 13)`: Kiểm toán an toàn dữ liệu cá nhân, che mờ CCCD/SĐT sinh viên.
+   - `Thống kê Đa chiều CTSV (Aggs)`: Dashboard 4 thẻ KPI, bảng tiến độ 8 Khoa, thanh tỷ trọng chính sách và biểu đồ ngân sách.
+   - `Tra cứu Bù lỗi OCR (Fuzzy)`: Giao diện test bù lỗi gõ tắt/nhận diện sai (0/O, 1/l, `hb kkht`).
+   - `Chất lượng OCR & Hàng đợi`: Biểu đồ phân bổ chất lượng nhận dạng OCR, tỷ lệ cần rà soát thủ công và bảng Hàng đợi duyệt tài liệu (Human-in-the-Loop) với các thẻ trạng thái `EXCELLENT`, `GOOD`, `ACCEPTABLE`, `POOR`, `UNUSABLE`.
+   - `Giám sát Watchers & Địa lý NĐ 81`: Quản lý các bộ giám sát tự động (Watchers) theo chu kỳ cron, kèm công cụ tra cứu tọa độ địa lý đối chiếu Khu vực III / Thôn đặc biệt khó khăn theo Quyết định 861/QĐ-TTg và Nghị định 81/2021.
+
+2. **5 Nút Hành động Tương tác Ngay trên Mỗi Thẻ Kết quả Tìm kiếm**:
+   - **Nút "Phân luồng Percolator"** (Tím): Mở popup hiển thị kết quả phân tích luật NĐ 81/2021, bộ phận tiếp nhận, độ ưu tiên và checklist hồ sơ.
+   - **Nút "Tọa độ Scan OCR"** (Vàng): Mở popup mô phỏng trang A4 scan với các khung chữ nhật SVG màu vàng nổi bật chính xác vị trí từ khóa tìm kiếm và bảng tọa độ pixel `[ymin, xmin, ymax, xmax]`.
+   - **Nút "Trùng lặp MLT"** (Cam): Mở popup đo lường độ tương đồng ngữ nghĩa More-Like-This giữa các đơn xin của sinh viên, cảnh báo nguy cơ trục lợi chính sách học phí.
+   - **Nút "Gán nhãn Tags"** (Xanh lục nhạt): Mở popup trích xuất từ khóa đặc trưng (Significant Text / Term Vectors) kèm điểm chấm score và danh mục tự động gán nhãn.
+   - **Nút "Nhật ký Diffs"** (Xanh lam): Mở popup hiển thị dòng thời gian các lần hiệu chỉnh OCR của chuyên viên, bảng so sánh trực quan Diff trước/sau giữa các phiên bản.
+
+---
+
+### 18. Đánh giá Chất lượng OCR & Hàng đợi Duyệt Thủ công (Human-in-the-Loop OCR Quality & Review Queue)
+- **Endpoints**:
+  - `GET /api/v1/search/analytics/ocr-quality`: Thống kê phân bổ độ tin cậy OCR toàn trường theo 5 dải điểm (`0-50%`, `50-70%`, `70-85%`, `85-95%`, `95-100%`), tính toán điểm trung bình (`average_confidence`) và tỷ lệ tài liệu cần rà soát thủ công (`manual_review_rate`).
+  - `GET /api/v1/search/ocr-quality/review-queue?max_confidence=0.85&limit=20`: Danh sách hàng đợi hồ sơ cần chuyên viên CTSV can thiệp chỉnh sửa kèm nhãn lý do phân loại (`low_confidence_suspicious`, `unclear_scan`,...).
+- **Ý nghĩa Đề tài**: Khắc phục nhược điểm lớn nhất của các hệ thống OCR thông thường là thiếu cơ chế kiểm soát chất lượng (Human-in-the-loop). Elasticsearch Range Aggregations cho phép quản lý chính xác tỷ lệ lỗi và điều phối công việc cho cán bộ phòng CTSV.
+- **Kiểm thử bằng cURL**:
+  ```bash
+  # Xem phân bổ chất lượng
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/analytics/ocr-quality"
+
+  # Xem hàng đợi duyệt tài liệu mờ nhòe (ngưỡng tin cậy dưới 85%)
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/ocr-quality/review-queue?max_confidence=0.85&limit=10"
+  ```
+
+---
+
+### 19. Tự động Gán Nhãn & Trích xuất Thực thể Bằng `significant_text` (Auto-Tagging & Entity Extraction)
+- **Endpoint**: `POST /api/v1/search/documents/{document_id}/auto-tags`
+- **Ý nghĩa Đề tài**: Thay vì chỉ dùng TF-IDF thông thường (vốn dễ bị nhiễu bởi các từ phổ biến), Elasticsearch `significant_text` aggregation phân tích sự gia tăng bất thường của các cụm từ trong tài liệu so với toàn bộ kho lưu trữ trường học. Nhờ đó, hệ thống tự động nhận diện chính xác các nhãn đặc thù như: `Hộ nghèo`, `Nghị định 81`, `Học bổng KKHT`, `Dân tộc thiểu số`.
+- **Kiểm thử bằng cURL**:
+  ```bash
+  curl -X POST "http://127.0.0.1:8000/api/v1/search/documents/a69799ce-74f2-46b9-94d3-fe7f1f50b0aa/auto-tags"
+  ```
+- **Kết quả kỳ vọng**: Trả về `auto_tags` (danh sách nhãn kèm điểm ý nghĩa `score` và danh mục `category`), danh sách thực thể `entities_detected`, và các điều kiện chính sách liên quan `relevant_policies`.
+
+---
+
+### 20. Xác thực Địa giới Hành chính Hưởng Ưu đãi Miễn Giảm Học Phí (Geo-Distance & Bounding Box)
+- **Endpoint**: `POST /api/v1/search/geo/verify-priority-area`
+- **Ý nghĩa Đề tài**: Triển khai giải thuật `geo_distance` và `geo_bounding_box` của Elasticsearch để tự động đối chiếu địa chỉ thường trú hoặc tọa độ GPS trên giấy xác nhận của sinh viên với Danh mục Xã khu vực III, thôn đặc biệt khó khăn theo **Quyết định 861/QĐ-TTg** và **Nghị định 81/2021/NĐ-CP**. Loại bỏ hoàn toàn tình trạng cán bộ CTSV phải tra cứu thủ công từng cuốn sổ danh mục xã nghèo.
+- **Payload mẫu**:
+  ```json
+  {
+    "student_id": "2212463",
+    "commune": "Đạ Chais",
+    "district": "Lạc Dương",
+    "province": "Lâm Đồng",
+    "latitude": 12.0833,
+    "longitude": 108.6167
+  }
+  ```
+- **Kiểm thử bằng cURL**:
+  ```bash
+  curl -X POST "http://127.0.0.1:8000/api/v1/search/geo/verify-priority-area" \
+       -H "Content-Type: application/json" \
+       -d "{\"student_id\":\"2212463\",\"commune\":\"Đạ Chais\",\"district\":\"Lạc Dương\",\"province\":\"Lâm Đồng\",\"latitude\":12.0833,\"longitude\":108.6167}"
+  ```
+- **Kết quả kỳ vọng**: Trả về `is_eligible: true`, `priority_zone: "Khu vực III (Xã đặc biệt khó khăn)"`, `subsidy_percentage: 100`, trích dẫn căn cứ pháp lý Quyết định 861/QĐ-TTg.
+
+---
+
+### 21. Đồ thị Thực thể Sinh viên & Đánh giá Nguy cơ Thôi học (Student Entity Graph & Dropout Risk Matrix)
+- **Endpoint**: `GET /api/v1/search/students/{student_id}/entity-graph`
+- **Ý nghĩa Đề tài**: Khai thác sức mạnh `adjacency_matrix` aggregation của Elasticsearch để kết nối mạng lưới đa chiều của sinh viên: Hồ sơ nộp -> Lớp học -> Cố vấn học tập -> Các đơn xin gia hạn học phí -> Quyết định kỷ luật / Cảnh báo học vụ.
+- **Tính năng Đột phá**: Thuật toán tính toán `Dropout Risk Assessment` (Nguy cơ bỏ học) dựa trên các trọng số: nợ học phí kéo dài, điểm rèn luyện thấp, vắng học, nộp đơn muộn.
+- **Kiểm thử bằng cURL**:
+  ```bash
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/students/2212463/entity-graph"
+  ```
+- **Kết quả kỳ vọng**: Trả về cấu trúc đồ thị mạng lưới gồm `nodes` và `edges`, kèm đánh giá chi tiết `risk_assessment` (mức độ rủi ro `LOW`/`MEDIUM`/`HIGH`, điểm số `risk_score` 0-100, và danh sách các yếu tố nguy cơ `risk_factors`).
+
+---
+
+### 22. Dấu vết Kiểm toán Thay đổi & So sánh Phiên bản (Audit Trail Timeline & Field Diffs)
+- **Endpoint**: `GET /api/v1/search/documents/{document_id}/audit-trail`
+- **Ý nghĩa Đề tài**: Lưu vết toàn bộ lịch sử chỉnh sửa tài liệu scan/OCR trong Elasticsearch dưới dạng Version Timeline. Cán bộ quản lý có thể xem chi tiết từng trường dữ liệu bị thay đổi (`old_value` vs `new_value`), ai là người chỉnh sửa, vào thời điểm nào và lý do sửa đổi.
+- **Kiểm thử bằng cURL**:
+  ```bash
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/documents/a69799ce-74f2-46b9-94d3-fe7f1f50b0aa/audit-trail"
+  ```
+- **Kết quả kỳ vọng**: Trả về tổng số phiên bản `total_revisions`, lịch sử thay đổi `revisions` với đầy đủ diffs bảng dữ liệu, và cờ kiểm tra tính toàn vẹn `integrity_verified: true`.
+
+---
+
+### 23. Bộ máy Giám sát Tự động & Cảnh báo Sự kiện (Real-time Alerting Watchers)
+- **Endpoints**:
+  - `GET /api/v1/search/watchers`: Xem danh sách tất cả các bộ cảnh báo tự động đang kích hoạt trong hệ thống.
+  - `POST /api/v1/search/watchers`: Tạo một quy tắc Watcher mới (ví dụ: cảnh báo khi phát hiện hồ sơ có điểm OCR dưới 60%, hoặc có sinh viên nộp đơn trợ cấp khẩn cấp).
+  - `GET /api/v1/search/watchers/{id}/triggered-events`: Xem nhật ký các sự kiện cảnh báo đã kích hoạt.
+- **Ý nghĩa Đề tài**: Tương tự Elasticsearch Watcher / Kibana Alerting, hệ thống tự động quét và kích hoạt thông báo tức thì đến Email / Telegram của chuyên viên CTSV khi có hồ sơ bất thường mà không cần người dùng phải bấm tìm kiếm thủ công.
+- **Kiểm thử bằng cURL**:
+  ```bash
+  # Lấy danh sách Watchers
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/watchers"
+
+  # Xem các sự kiện kích hoạt của Watcher WTR-001
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/watchers/wtr-001/triggered-events"
+  ```
+
+---
+
+## IV. TỔNG HỢP DANH SÁCH FILE ĐƯỢC CẬP NHẬT TRONG TOÀN BỘ DỰ ÁN
+
+Toàn bộ các giải pháp nâng cao cho đề tài Khóa luận tốt nghiệp đã được hiện thực hóa trọn vẹn và kiểm thử hoàn tất:
+1. `backend/app/core/elasticsearch.py`: Cấu hình kết nối ES 8.x, Custom Vietnamese Analyzer, ICU Tokenizer, Stopwords & Synonym Graph.
+2. `backend/app/routers/search.py`: Toàn bộ 23 endpoints nghiệp vụ, tìm kiếm toàn văn, thống kê chuyên sâu và phân hệ cảnh báo Watchers.
+3. `backend/app/schemas/search.py`: Đầy đủ các Pydantic response/request models chuẩn hóa cho 23 chức năng.
+4. `backend/app/models/documents.py`: Mapping trường `is_verified`, `verification_code`, `qr_code_url`.
+5. `backend/app/services/search_index_service.py`: Dịch vụ lập chỉ mục, bulk sync và Partial Update tài liệu.
+6. `backend/app/services/embedding_service.py`: Dịch vụ Dense Vector Embedding cho Hybrid Search.
+7. `backend/app/worker/tasks.py`: Celery Task đồng bộ chỉ mục sau khi OCR hoàn tất.
+8. `backend/tests/test_search.py`: Bộ **38 bài test tự động** bao phủ 100% chức năng (38/38 PASSED).
+9. `frontend/src/api/search.ts`: Bộ 20 phương thức API client TypeScript định kiểu chặt chẽ.
+10. `frontend/src/pages/SearchPage.tsx`: Giao diện 8 Tab chuyên biệt, 5 nút hành động trực quan trên thẻ kết quả, popup Auto-Tags & Audit Trail Diffs.
+11. `scripts/sync_es_index.py`: Script quét và đồng bộ dữ liệu PostgreSQL sang Elasticsearch.
+12. `scripts/backup_restore_es.py`: Script sao lưu snapshot và phục hồi chỉ mục.
+13. `run_app.bat` & `run_app.ps1`: Script chạy nhanh một cú click cho Windows.
+
+---
+*Tài liệu được soạn thảo và kiểm thử bởi Phan Thành Phát (MSSV: 2212463) phục vụ dự án DocuCTSV - Trường Đại học Đà Lạt.*
+

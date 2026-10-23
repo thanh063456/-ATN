@@ -54,14 +54,15 @@ async def _resolve_user_from_token(
         # Yêu cầu bảo mật: User bắt buộc phải tồn tại trong Database, không tạo mock user từ JWT claim.
         return None
 
-    # 2. Thử xác thực với Supabase Auth
+    # 2. Thử xác thực với Supabase Auth (chỉ chạy khi Supabase client thực sự kết nối được, không phải _DummyClient)
     try:
-        supa_res = supabase_admin.auth.get_user(token)
-        if supa_res and supa_res.user:
-            supa_user = supa_res.user
-            supa_uid = str(supa_user.id)
-            email = (supa_user.email or "").strip().lower()
-            metadata = supa_user.user_metadata or {}
+        if type(supabase_admin).__name__ != "_DummyClient" and hasattr(supabase_admin, "auth"):
+            supa_res = supabase_admin.auth.get_user(token)
+            if supa_res and getattr(supa_res, "user", None):
+                supa_user = supa_res.user
+                supa_uid = str(supa_user.id)
+                email = (supa_user.email or "").strip().lower()
+                metadata = supa_user.user_metadata or {}
 
             # Kiểm tra trạng thái xác minh email của Supabase
             email_confirmed = bool(

@@ -12,10 +12,11 @@ import asyncio
 import json
 import os
 import sys
+from typing import Any
 
 # Thiết lập encoding UTF-8 cho Windows console
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8")
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    getattr(sys.stdout, "reconfigure")(encoding="utf-8")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -23,7 +24,7 @@ from elasticsearch import AsyncElasticsearch
 from backend.app.core.config import settings
 
 # 25 Queries đa dạng độ khó: 10 Dễ, 10 Khó, 5 Âm tính (Negative)
-BENCHMARK_QUERIES = [
+BENCHMARK_QUERIES: list[dict[str, Any]] = [
     # ── 10 QUERY DỄ (Khớp trực tiếp loại biểu mẫu hoặc từ khóa rõ ràng) ──────
     {
         "id": "Q01",
@@ -293,11 +294,14 @@ async def build_ground_truth(interactive: bool = False) -> dict:
                 student_id = h.get("_source", {}).get("student_id") or ""
 
                 is_match = False
-                if q_spec["target_category"] and cat == q_spec["target_category"]:
+                must_contain_raw = q_spec.get("must_contain")
+                must_contain: list[str] = [str(x) for x in must_contain_raw] if isinstance(must_contain_raw, list) else []
+
+                if q_spec.get("target_category") and cat == q_spec.get("target_category"):
                     is_match = True
-                elif any(kw.lower() in title or kw.lower() in content for kw in q_spec.get("must_contain", [])):
+                elif must_contain and any(kw.lower() in title or kw.lower() in content for kw in must_contain):
                     is_match = True
-                elif q_spec.get("must_contain") and q_spec["must_contain"][0] in student_id:
+                elif must_contain and must_contain[0] in student_id:
                     is_match = True
 
                 if is_match and doc_id:
