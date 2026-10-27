@@ -174,15 +174,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
     """Coroutine thực thi toàn bộ logic OCR, Metadata Extraction và Elasticsearch indexing."""
     doc_uuid = UUID(document_id)
     now = datetime.now()
-    logger.info(f"Starting async OCR processing for document_id={document_id}")
-
-    if engine and engine != "vietocr":
-        await _process_secondary_engine(doc_uuid, engine)
-        return {
-            "status": "SUCCESS",
-            "document_id": document_id,
-            "engine": engine,
-        }
+    logger.info(f"Starting async OCR processing for document_id={document_id}, engine={engine}")
 
     async def _set_progress(session, progress: int) -> None:
         """Cập nhật tiến độ OCR (0-100%) vào ProcessingJob và commit ngay."""
@@ -294,9 +286,23 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             )
             session.add(ocr_result)
 
-            if ocr_failed and (not engine or engine == "vietocr"):
-                # Nếu engine mặc định (VietOCR) thất bại khi upload, raise để đánh dấu Job/Document FAILED
-                raise RuntimeError(f"OCR mặc định ({target_engine}) thất bại: {ocr_err_msg}")
+            if ocr_failed:
+                if target_engine != "vietocr":
+                    await session.commit()
+                    logger.warning(
+                        "Secondary OCR engine {eng} failed for doc {id}: {err}",
+                        eng=target_engine,
+                        id=document_id,
+                        err=ocr_err_msg,
+                    )
+                    return {
+                        "status": "FAILED",
+                        "document_id": document_id,
+                        "engine": target_engine,
+                        "error": ocr_err_msg,
+                    }
+                # Nếu engine chính (vietocr) thất bại khi upload, raise để đánh dấu Job/Document FAILED
+                raise RuntimeError(f"OCR chính ({target_engine}) thất bại: {ocr_err_msg}")
 
             await _set_progress(session, 85)
 
@@ -337,13 +343,18 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 "ai_summary": ai_fields.get("summary"),
             }
 
-            if doc.metadata_:
-                doc.metadata_.student_id = final_student_id or doc.metadata_.student_id
-                doc.metadata_.student_name = final_student_name or doc.metadata_.student_name
-                doc.metadata_.document_date = doc_date or doc.metadata_.document_date
-                doc.metadata_.document_number = final_doc_no or doc.metadata_.document_number
-                doc.metadata_.extra = {**(doc.metadata_.extra or {}), **extra_data}
-                doc.metadata_.updated_at = now
+            # Lấy hoặc tạo metadata mới (truy vấn tươi từ DB để tránh race condition)
+            meta_stmt = select(DocumentMetadata).where(DocumentMetadata.document_id == doc_uuid)
+            meta_res = await session.execute(meta_stmt)
+            existing_meta = meta_res.scalars().first()
+
+            if existing_meta:
+                existing_meta.student_id = final_student_id or existing_meta.student_id
+                existing_meta.student_name = final_student_name or existing_meta.student_name
+                existing_meta.document_date = doc_date or existing_meta.document_date
+                existing_meta.document_number = final_doc_no or existing_meta.document_number
+                existing_meta.extra = {**(existing_meta.extra or {}), **extra_data}
+                existing_meta.updated_at = now
             else:
                 new_meta = DocumentMetadata(
                     document_id=doc_uuid,
@@ -392,6 +403,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                     tags=auto_tags,
                     priority_score=priority_score,
                     metadata_extra=extra_data,
+                    is_public=getattr(doc, "is_public", False),
                     is_deleted=doc.is_deleted,
                     created_at=doc.created_at,
                     updated_at=doc.updated_at,
@@ -446,57 +458,53 @@ async def async_process_all_ocr_engines(document_id: str, task_id: str | None = 
     doc_uuid = UUID(document_id)
     logger.info("Starting ALL OCR engines pipeline for document_id={doc_id}", doc_id=document_id)
 
-    # 1. Đặt placeholder PENDING cho trocr và tesseract
+    # 1. Đặt placeholder PENDING cho các engine phụ
+    primary_engine = getattr(settings, "ocr_engine", "trocr") if hasattr(settings, "ocr_engine") else "trocr"
+    secondary_engines = [e for e in ["trocr", "vietocr", "tesseract"] if e != primary_engine]
+
     async with AsyncSessionLocal() as session:
         try:
             await session.execute(
                 update(OCRResult)
                 .where(OCRResult.document_id == doc_uuid)
-                .where(OCRResult.ocr_engine.in_(["trocr", "tesseract"]))
+                .where(OCRResult.ocr_engine.in_(secondary_engines))
                 .values(is_latest=False)
             )
-            from app.services.tesseract_service import tesseract_service
-            session.add(OCRResult(
-                document_id=doc_uuid,
-                ocr_engine="trocr",
-                ocr_engine_version=getattr(trocr_service, "VERSION", "trocr-vi-finetuned"),
-                status="PENDING",
-                is_latest=True,
-            ))
-            session.add(OCRResult(
-                document_id=doc_uuid,
-                ocr_engine="tesseract",
-                ocr_engine_version=getattr(tesseract_service, "VERSION", "5.3.0"),
-                status="PENDING",
-                is_latest=True,
-            ))
+            for p_eng in secondary_engines:
+                if p_eng == "trocr":
+                    p_ver = getattr(trocr_service, "VERSION", "trocr-vi-finetuned")
+                elif p_eng == "tesseract":
+                    from app.services.tesseract_service import tesseract_service
+                    p_ver = getattr(tesseract_service, "VERSION", "5.3.0")
+                else:
+                    p_ver = getattr(vietocr_service, "VERSION", "vgg_transformer-2.0")
+                session.add(OCRResult(
+                    document_id=doc_uuid,
+                    ocr_engine=p_eng,
+                    ocr_engine_version=p_ver,
+                    status="PENDING",
+                    is_latest=True,
+                ))
             await session.commit()
         except Exception as exc:
             logger.warning("Failed to initialize pending OCRResult records: {err}", err=str(exc))
 
-    # 2. Chạy engine chính: VietOCR
-    logger.info("Pipeline Step 1/3: Running VietOCR for document_id={id}", id=document_id)
-    vietocr_res = await async_process_ocr(document_id, task_id=task_id, engine="vietocr")
+    # 2. Chạy engine chính theo cấu hình (Fast-First: trả kết quả cho người dùng sớm nhất)
+    logger.info("Pipeline Step 1/2: Running primary engine {eng} for document_id={id}", eng=primary_engine, id=document_id)
+    primary_res = await async_process_ocr(document_id, task_id=task_id, engine=primary_engine)
 
-    # 3. Chạy TrOCR
-    logger.info("Pipeline Step 2/3: Running TrOCR for document_id={id}", id=document_id)
+    # 3. Chạy các engine phụ còn lại song song (concurrent) để tiết kiệm 50% thời gian so sánh
+    logger.info("Pipeline Step 2/2: Running secondary engines {engs} concurrently for document_id={id}", engs=secondary_engines, id=document_id)
     try:
-        await _process_secondary_engine(doc_uuid, "trocr")
+        await asyncio.gather(*[_process_secondary_engine(doc_uuid, eng) for eng in secondary_engines], return_exceptions=True)
     except Exception as exc:
-        logger.error("Secondary engine trocr failed on doc {id}: {err}", id=document_id, err=str(exc))
-
-    # 4. Chạy Tesseract
-    logger.info("Pipeline Step 3/3: Running Tesseract for document_id={id}", id=document_id)
-    try:
-        await _process_secondary_engine(doc_uuid, "tesseract")
-    except Exception as exc:
-        logger.error("Secondary engine tesseract failed on doc {id}: {err}", id=document_id, err=str(exc))
+        logger.warning("Secondary engines execution note: {err}", err=str(exc))
 
     logger.info("ALL OCR engines pipeline completed successfully for document_id={id}", id=document_id)
     return {
         "status": "SUCCESS",
         "document_id": document_id,
-        "vietocr": vietocr_res,
+        "primary": primary_res,
     }
 
 
@@ -606,6 +614,7 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
             doc_title_val = doc.title
             doc_uploaded_by_val = doc.uploaded_by
             doc_is_deleted_val = doc.is_deleted
+            doc_is_public_val = getattr(doc, "is_public", False)
             doc_created_at_val = doc.created_at
             cat_code = doc.category.code if doc.category else None
             cat_name = doc.category.name if doc.category else None
@@ -649,6 +658,7 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
                     uploaded_by=doc_uploaded_by_val,
                     ocr_status="DONE",
                     ocr_confidence=(latest_ocr.confidence_score + confidence) / 2 if latest_ocr else confidence,
+                    is_public=doc_is_public_val,
                     is_deleted=doc_is_deleted_val,
                     created_at=doc_created_at_val,
                     updated_at=now,

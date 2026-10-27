@@ -52,7 +52,7 @@ _NATIONAL_HEADER_PATTERNS = [
 # Bắt: "Số: 1328/QĐ-ĐHĐL", "Số : 1328 /QD-DHDL", "Số: 13.28/QĐ-ĐHĐL", "Sề: /KH-PHĐL"
 _DOC_NO_PATTERN = re.compile(
     r'S[oốõọẽeèéẻẹổôềế]\s*[:\-]?\s*'
-    r'([0-9A-Za-z\s\./]{0,9})'
+    r'(?:<hw>)?([0-9A-Za-z\s\./]{0,9})(?:</hw>)?'
     r'\s*[/\\]\s*'
     r'([A-Za-z\u0110\u0111\u00d4\u00f4\u0102\u0103\u00c2\u00e2]'
     r'[A-Za-z\u0110\u0111\u00d4\u00f4\u0102\u0103\u00c2\u00e20-9\-\u2013]{1,20})',
@@ -63,7 +63,7 @@ _DOC_NO_PATTERN = re.compile(
 # Bắt mọi biến thể: "Lâm Đồng, ngày 22 tháng 8 năm 2025", "Lâm Đồng, ngày/ tháng 8 năm 2025", "Lâm Đồng, ngày, 28 tháng 8 năm 2025", "ngày 22/8/2025"
 _DATE_PATTERN = re.compile(
     r'(?:(?:Lâm\s*[ĐD][oồôeèé]ng|[ĐD][aàá]\s*L[aạ]t|[A-ZÀ-Ỹa-zà-ỹ\s]{2,20})[\s,]*)?'
-    r'ng[àaá]y[\s,\.:\-_/]*([0-9\?\)\.\_\/]{0,6})\s*'
+    r'ng[àaá]y[\s,\.:\-_/]*(?:<hw>)?([0-9\?\)\.\_\/]{0,6})(?:</hw>)?\s*'
     r'th[áa]ng[\s,\.:\-_]*([0-9\?\)\.\_\/]{1,6})\s*'
     r'(?:[/\\]|\bn[ăa]m\b)?[\s,\.:\-_]*'
     r'(\d{4}|\d{2})',
@@ -153,7 +153,10 @@ def _normalize_date(header_text: str) -> tuple[str, str | None]:
         day = raw_day.lstrip('0') if raw_day else '22'
         try:
             if int(day) > 31:
-                if len(day) == 2 and day.startswith('4'):
+                if day.startswith('3'):
+                    # Lỗi quang học số 1 nét móc serif nhầm thành 4 hoặc 7 sau số 3 (vd: 34, 37 -> 31)
+                    day = '31'
+                elif len(day) == 2 and day.startswith('4'):
                     # Lỗi quang học phổ biến số 1 nét móc serif nhầm thành 4 (vd: 49 -> 19)
                     day = '1' + day[1]
                 else:

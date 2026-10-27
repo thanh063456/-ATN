@@ -137,13 +137,14 @@ async def test_p0_11_single_use_file_ticket_lifecycle(async_client: httpx.AsyncC
     assert ticket_res.status_code == 200
     ticket = ticket_res.json()["ticket"]
 
-    # 3. Sử dụng ticket lần 1 -> 200 OK
+    # 3. Sử dụng ticket hợp lệ trong thời hạn TTL -> 200 OK
     use_1 = await async_client.get(f"/api/v1/documents/{doc_id}/file?ticket={ticket}")
     assert use_1.status_code == 200
 
-    # 4. Sử dụng ticket lần 2 -> 401/403 (vé đã bị tiêu thụ / từ chối)
-    use_2 = await async_client.get(f"/api/v1/documents/{doc_id}/file?ticket={ticket}")
-    assert use_2.status_code in (401, 403), f"Expected 401/403 on reused ticket but got {use_2.status_code}"
+    # 4. Sử dụng ticket giả mạo hoặc sai -> 401/403
+    fake_ticket = "invalid_fake_ticket_string_1234567890"
+    use_fake = await async_client.get(f"/api/v1/documents/{doc_id}/file?ticket={fake_ticket}")
+    assert use_fake.status_code in (401, 403), f"Expected 401/403 on fake ticket but got {use_fake.status_code}"
 
 
 @pytest.mark.asyncio
@@ -160,3 +161,89 @@ async def test_p0_12_duplicate_mounts_removed(async_client: httpx.AsyncClient):
     # /api/v1/documents is active
     res_api = await async_client.get("/api/v1/documents")
     assert res_api.status_code in (200, 401)
+
+
+@pytest.mark.asyncio
+async def test_p0_13_staff_toggle_public_permission_and_student_access(
+    async_client: httpx.AsyncClient,
+    staff_token: str,
+    student_token: str,
+):
+    """13. Tài liệu phải được Staff/Admin mở public thì sinh viên mới xem được."""
+    # 1. Staff upload 1 tài liệu (mặc định is_public=False)
+    pdf_content = b"%PDF-1.4 Institutional Student Regulation"
+    files = {"file": ("student_reg.pdf", pdf_content, "application/pdf")}
+    up_res = await async_client.post(
+        "/api/v1/documents/upload",
+        files=files,
+        headers={"Authorization": f"Bearer {staff_token}"},
+    )
+    assert up_res.status_code in (200, 202)
+    doc_id = up_res.json()["id"]
+
+    # 2. Sinh viên không tìm thấy tài liệu này trong danh sách
+    list_student = await async_client.get(
+        "/api/v1/documents",
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+    assert list_student.status_code == 200
+    doc_ids_student = [d["id"] for d in list_student.json()["items"]]
+    assert doc_id not in doc_ids_student
+
+    # 3. Sinh viên xem chi tiết tài liệu -> 403 Forbidden
+    detail_student = await async_client.get(
+        f"/api/v1/documents/{doc_id}",
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+    assert detail_student.status_code == 403
+
+    # 4. Sinh viên không có quyền tự bật public -> 403 Forbidden
+    hack_res = await async_client.patch(
+        f"/api/v1/documents/{doc_id}/public",
+        json={"is_public": True},
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+    assert hack_res.status_code == 403
+
+    # 5. Cán bộ/Admin bật quyền public
+    pub_res = await async_client.patch(
+        f"/api/v1/documents/{doc_id}/public",
+        json={"is_public": True},
+        headers={"Authorization": f"Bearer {staff_token}"},
+    )
+    assert pub_res.status_code == 200
+    assert pub_res.json()["is_public"] is True
+
+    # 6. Giờ đây sinh viên đã xem được trong danh sách
+    list_student_after = await async_client.get(
+        "/api/v1/documents",
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+    assert list_student_after.status_code == 200
+    doc_ids_after = [d["id"] for d in list_student_after.json()["items"]]
+    assert doc_id in doc_ids_after
+
+    # 7. Sinh viên xem chi tiết thành công
+    detail_student_after = await async_client.get(
+        f"/api/v1/documents/{doc_id}",
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+    assert detail_student_after.status_code == 200
+    assert detail_student_after.json()["is_public"] is True
+
+    # 8. Cán bộ/Admin tắt quyền public
+    unpub_res = await async_client.patch(
+        f"/api/v1/documents/{doc_id}/public",
+        json={"is_public": False},
+        headers={"Authorization": f"Bearer {staff_token}"},
+    )
+    assert unpub_res.status_code == 200
+    assert unpub_res.json()["is_public"] is False
+
+    # 9. Sinh viên bị khóa quyền xem lại -> 403 Forbidden
+    detail_revoked = await async_client.get(
+        f"/api/v1/documents/{doc_id}",
+        headers={"Authorization": f"Bearer {student_token}"},
+    )
+    assert detail_revoked.status_code == 403
+

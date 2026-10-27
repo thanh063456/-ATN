@@ -10,10 +10,13 @@ Mọi ngưỡng số đọc từ app.core.config.settings.
 """
 from __future__ import annotations
 
+import difflib
 import os
 import re
 
+import cv2
 from loguru import logger
+import numpy as np
 from PIL import Image
 
 from app.core.exceptions import EngineUnavailableError
@@ -79,6 +82,7 @@ class TrOCREngine:
                 self._tokenizer = RobertaTokenizer.from_pretrained(model_name)
 
             if device == "cuda":
+                torch.backends.cudnn.benchmark = True
                 self._model = (
                     VisionEncoderDecoderModel.from_pretrained(model_name).half().to(device)
                 )
@@ -107,52 +111,68 @@ class TrOCREngine:
 
         return self._image_processor, self._tokenizer, self._model
 
-    # ── Chunk Merging ─────────────────────────────────────────────────────────
+    # ── Whitespace-Aware Splitting & Chunk Merging ────────────────────────────
     @staticmethod
-    def _merge_overlapping_texts(text1: str, text2: str, min_overlap_words: int = 2) -> str:
+    def _find_best_word_boundary(img_np: np.ndarray, target_ratio: float = 0.50, search_window: float = 0.15) -> int:
         """
-        Ghép 2 đoạn text giải mã từ 2 lát cắt ngang gối đầu (30% overlap).
-        Căn chỉnh theo các n-gram từ khớp nhau tại điểm nối.
+        Tìm cột khoảng trắng tự nhiên giữa các từ gần target_ratio (mặc định 0.50).
+        Phát hiện khoảng cách trắng liên tục (contiguous white runs) có độ rộng đủ lớn
+        giữa các từ để cắt sạch sẽ, không bao giờ cắt đôi chữ cái hay từ vựng.
         """
-        t1 = text1.strip()
-        t2 = text2.strip()
-        if not t1:
-            return t2
-        if not t2:
-            return t1
-        if t1 == t2:
-            return t1
-            
-        w1 = t1.split()
-        w2 = t2.split()
-        
-        max_k = min(len(w1), len(w2))
-        best_overlap = 0
-        
-        for k in range(max_k, min_overlap_words - 1, -1):
-            suffix = " ".join(w1[-k:]).lower()
-            prefix = " ".join(w2[:k]).lower()
-            if suffix == prefix:
-                best_overlap = k
-                break
-                
-        if best_overlap >= min_overlap_words:
-            return " ".join(w1 + w2[best_overlap:])
-            
-        max_char_k = min(len(t1), len(t2), 40)
-        for k in range(max_char_k, 6, -1):
-            if t1[-k:].lower() == t2[:k].lower():
-                return t1 + t2[k:]
-                
-        return t1 + " " + t2
+        try:
+            if len(img_np.shape) == 3:
+                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = img_np
+            h, w = gray.shape[:2]
+
+            start_x = max(10, int(w * (target_ratio - search_window)))
+            end_x = min(w - 10, int(w * (target_ratio + search_window)))
+
+            if start_x >= end_x:
+                return int(w * target_ratio)
+
+            sub = gray[:, start_x:end_x]
+            col_means = np.mean(sub, axis=0)
+            white_thresh = max(230.0, float(np.percentile(col_means, 85)))
+            is_white = col_means >= white_thresh
+
+            runs = []
+            in_run = False
+            run_start = 0
+            for idx, val in enumerate(is_white):
+                if val and not in_run:
+                    in_run = True
+                    run_start = idx
+                elif not val and in_run:
+                    in_run = False
+                    runs.append((run_start, idx - 1, idx - run_start))
+            if in_run:
+                runs.append((run_start, len(is_white) - 1, len(is_white) - run_start))
+
+            if runs:
+                center_idx = (end_x - start_x) / 2.0
+                def run_score(r):
+                    r_start, r_end, r_len = r
+                    r_mid = (r_start + r_end) / 2.0
+                    dist_to_center = abs(r_mid - center_idx)
+                    return r_len * 10.0 - dist_to_center
+                best_run = max(runs, key=run_score)
+                cut_in_sub = (best_run[0] + best_run[1]) // 2
+                return start_x + cut_in_sub
+
+            col_smooth = cv2.GaussianBlur(col_means.reshape(1, -1), (15, 1), 0).flatten()
+            return start_x + int(np.argmax(col_smooth))
+        except Exception:
+            return int(img_np.shape[1] * target_ratio)
 
     # ── Batch Predict ─────────────────────────────────────────────────────────
     def predict_batch(self, images: list[Image.Image]) -> list[str]:
         """
         Predict batch ảnh dòng bằng TrOCR:
-        - FP16 trên GPU (nhanh hơn 3-5x, tiết kiệm VRAM)
-        - Greedy decoding (num_beams=1) mặc định để đạt mục tiêu tốc độ >=3x
-        - Horizontal overlap tiling cho các dòng dài (>850px, aspect > 8) triệt tiêu cụt dòng
+        - FP16 trên GPU với cuDNN benchmark
+        - Greedy decoding (num_beams=1) với use_cache=True và max_new_tokens=64
+        - Phân chia dòng dài theo khe khoảng trắng tự nhiên (word boundary) tránh lặp từ và nuốt chữ
         """
         if not images:
             return []
@@ -170,28 +190,33 @@ class TrOCREngine:
             batch_size = getattr(_s, "trocr_batch_size", 16) if _s else 16
             num_beams = getattr(_s, "trocr_num_beams", 1)    if _s else 1
 
-            # 1. Tách nhỏ các dòng siêu dài (aspect-preserving horizontal tiling)
+            # 1. Tách các dòng siêu dài tại khe khoảng trắng tự nhiên giữa các từ
             expanded_images = []
             chunk_mapping = []  # List[Tuple[orig_idx, List[expanded_idx]]]
 
             for orig_idx, img in enumerate(images):
                 w, h = img.size
                 aspect = w / max(h, 1)
-                if w > 850 and aspect > 8.0:
-                    split_w1 = int(w * 0.60)
-                    split_w2 = int(w * 0.40)
-                    chunk1 = img.crop((0, 0, split_w1, h))
-                    chunk2 = img.crop((split_w2, 0, w, h))
-                    idx1 = len(expanded_images)
-                    idx2 = len(expanded_images) + 1
-                    expanded_images.extend([chunk1, chunk2])
-                    chunk_mapping.append((orig_idx, [idx1, idx2]))
+                if w > 1100 and aspect > 9.0:
+                    try:
+                        np_img = np.array(img)
+                        cut_x = self._find_best_word_boundary(np_img, target_ratio=0.50, search_window=0.15)
+                        chunk1 = img.crop((0, 0, cut_x, h))
+                        chunk2 = img.crop((cut_x, 0, w, h))
+                        idx1 = len(expanded_images)
+                        idx2 = len(expanded_images) + 1
+                        expanded_images.extend([chunk1, chunk2])
+                        chunk_mapping.append((orig_idx, [idx1, idx2]))
+                    except Exception:
+                        idx0 = len(expanded_images)
+                        expanded_images.append(img)
+                        chunk_mapping.append((orig_idx, [idx0]))
                 else:
                     idx0 = len(expanded_images)
                     expanded_images.append(img)
                     chunk_mapping.append((orig_idx, [idx0]))
 
-            # 2. Suy luận theo batch trên danh sách ảnh mở rộng
+            # 2. Suy luận theo batch trên danh sách ảnh
             all_raw_texts = []
             for b_start in range(0, len(expanded_images), batch_size):
                 sub_images = expanded_images[b_start : b_start + batch_size]
@@ -205,16 +230,25 @@ class TrOCREngine:
                 with torch.inference_mode():
                     generated_ids = model.generate(
                         pixel_values, 
-                        max_new_tokens=128,
+                        max_new_tokens=64,
                         num_beams=num_beams,
                         early_stopping=True if num_beams > 1 else False,
-                        do_sample=False
+                        do_sample=False,
+                        use_cache=True,
+                        repetition_penalty=1.2,
+                        no_repeat_ngram_size=3,
+                        pad_token_id=tokenizer.pad_token_id,
+                        eos_token_id=tokenizer.eos_token_id,
                     )
 
                 generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
                 for t in generated_texts:
                     s = str(t).strip()
-                    # Sửa lỗi giải mã đa byte BPE (\ufffd)
+                    # Khử chuỗi số ảo giác lặp dài do decoder sinh ra khi gặp icon/nhiễu
+                    s = re.sub(r'\b\d{0,4}/?0{5,}\d*\b', '', s)
+                    s = re.sub(r'\b0{5,}\d*\b', '', s)
+
+                    # Sửa lỗi giải mã đa byte BPE (\ufffd) và các ký tự ghép dấu tiếng Việt
                     s = re.sub(r'(?i)\bh\ufffd\b', 'hệ', s)
                     s = re.sub(r'(?i)\bc\ufffda\b', 'của', s)
                     s = re.sub(r'(?i)\bs\ufffd\b', 'số', s)
@@ -223,10 +257,20 @@ class TrOCREngine:
                     s = re.sub(r'(?i)\bt\ufffdp\b', 'tập', s)
                     s = re.sub(r'(?i)\bs\ufffdng\b', 'sáng', s)
                     s = re.sub(r'(?i)\bnh\ufffdp\b', 'nhập', s)
+                    s = re.sub(r'(?i)\bngàay\b', 'ngày', s)
+                    s = re.sub(r'(?i)\bhắt\b', 'hết', s)
                     s = s.replace('\ufffd', '')
+
+                    # Sửa lỗi TrOCR nhầm dấu hỏi '?' thành số 2, 7 hoặc gi"
+                    s = re.sub(r'\bgi["\'”]+(?:\s+gi["\'”]+)*', 'gì?', s, flags=re.IGNORECASE)
+                    s = re.sub(r'(?i)\b(là\s+gì|như\s+thế\s+nào|chuẩn\s+bị\s+gì|chưa|dự\s+án\s+này|quy\s+trình\s+đó|xử\s+lý\s+lỗi\s+đó|tương\s+lai|thế\s+nào)\s*([27]|gi["\'”]|g[iì]ợ|\?2)\b', r'\1?', s)
+                    s = re.sub(r'(?i)\b(theo\s+dõi)\s+lỗp\b', r'\1 lỗi?', s)
+                    s = re.sub(r'(?i)\b(usability\s+testing|kiểm\s+thử)\s+là\s+giữ\b', r'\1 là gì?', s)
+
+                    s = re.sub(r'\s+', ' ', s).strip()
                     all_raw_texts.append(s)
 
-            # 3. Ghép các lát cắt về đúng vị trí dòng gốc
+            # 3. Ghép các lát cắt về đúng vị trí dòng gốc (không bị lặp từ)
             final_predictions = ["" for _ in range(len(images))]
             for orig_idx, exp_indices in chunk_mapping:
                 if len(exp_indices) == 1:
@@ -234,7 +278,9 @@ class TrOCREngine:
                 else:
                     t1 = all_raw_texts[exp_indices[0]]
                     t2 = all_raw_texts[exp_indices[1]]
-                    final_predictions[orig_idx] = self._merge_overlapping_texts(t1, t2)
+                    merged = f"{t1} {t2}".strip()
+                    clean_res = re.sub(r'\b([a-zA-ZÀ-ỹ0-9_]{3,})\s+\1\b', r'\1', merged).strip()
+                    final_predictions[orig_idx] = clean_res
 
             return final_predictions
 

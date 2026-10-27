@@ -55,6 +55,13 @@ class TestOcrCharFixes:
         result = self.fix("ngày 15 tháng 12 năm 2025")
         assert "tháng 12 năm" in result
 
+    def test_invalid_day_34_to_31(self):
+        """ngày 34 tháng / ngày <hw>34</hw> tháng → ngày 31 tháng / ngày <hw>31</hw> tháng"""
+        assert "ngày 31 tháng" in self.fix("ngày 34 tháng 7")
+        assert "ngày <hw>31</hw> tháng" in self.fix("ngày <hw>34</hw> tháng 7")
+        assert "ngày 31 tháng" in self.fix("ngày 37 tháng 7")
+        assert "ngày <hw>31</hw> tháng" in self.fix("ngày <hw>37</hw> tháng 7")
+
     # ── Nhầm ký tự ─────────────────────────────────────────────────────────
 
     def test_l_to_1_in_document_number(self):
@@ -594,6 +601,25 @@ class TestDocumentHeaderNormalizer:
         assert any("KẾ HOẠCH" == l.strip() for l in lines)
         assert any("1. MỤC ĐÍCH, YÊU CẦU" == l.strip() for l in lines)
         assert any("- Nhằm động viên sinh viên hoàn thành tốt nhiệm vụ." == l.strip() for l in lines)
+
+    def test_pipeline_normalizes_handwritten_doc_header(self):
+        from app.services.text_postprocessing import post_process_vietnamese
+        raw = (
+            "BỘ GIÁO DỤC VÀ ĐÀO TẠO\n"
+            "TRƯỜNG ĐẠI HỌC ĐÀ LẬT\n"
+            "Số: <hw>1243</hw>/KH-ĐHĐL\n"
+            "CỘNG HÒA XÃ HỔI CHỦ NGHĨA VIỆT NAM\n"
+            "Độc lập - Tự do - Hạnh phúc\n"
+            "Lâm Đồng, ngày <hw>34</hw> tháng 7 năm 2026\n"
+            "KẾ HO\n"
+            "Về việc đánh giá kết quả rèn luyện sinh viên đại học chính quy"
+        )
+        proc = post_process_vietnamese(raw, line_preserving=True)
+        lines = proc.splitlines()
+        assert lines[1] == "TRƯỜNG ĐẠI HỌC ĐÀ LẠT"
+        assert lines[2] == "Số: <hw>1243</hw>/KH-ĐHĐL"
+        assert lines[5] == "Lâm Đồng, ngày <hw>31</hw> tháng 7 năm 2026"
+        assert lines[6] == "KẾ HOẠCH"
 
 
 

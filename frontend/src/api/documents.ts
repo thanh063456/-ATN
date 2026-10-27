@@ -8,6 +8,7 @@ export interface DocumentSummary {
   file_size_bytes: number;
   ocr_status: "PENDING" | "PROCESSING" | "DONE" | "APPROVED" | "REJECTED" | "FAILED" | "SKIPPED";
   minio_object_key?: string;
+  is_public?: boolean;
   created_at: string;
 }
 
@@ -220,9 +221,21 @@ export const documentsApi = {
     return res.data;
   },
 
-  upload: async (file: File, title?: string, categoryId?: string): Promise<UploadResponse> => {
+  upload: async (
+    file: File | File[],
+    title?: string,
+    categoryId?: string,
+    mergeImages?: boolean
+  ): Promise<UploadResponse> => {
     const formData = new FormData();
-    formData.append("file", file);
+    if (Array.isArray(file)) {
+      file.forEach((f) => formData.append("files", f));
+      if (mergeImages !== undefined) {
+        formData.append("merge_images", String(mergeImages));
+      }
+    } else {
+      formData.append("file", file);
+    }
     if (title) formData.append("title", title);
     if (categoryId) formData.append("category_id", categoryId);
 
@@ -298,6 +311,11 @@ export const documentsApi = {
     return res.data;
   },
 
+  setPublic: async (id: string, isPublic: boolean): Promise<DocumentDetail> => {
+    const res = await apiClient.patch<DocumentDetail>(`/documents/${id}/public`, { is_public: isPublic });
+    return res.data;
+  },
+
   overrideType: async (id: string, category_code: string): Promise<any> => {
     const res = await apiClient.patch(`/documents/${id}/type`, { category_code });
     return res.data;
@@ -318,8 +336,9 @@ export const documentsApi = {
     return res.data;
   },
 
-  autoTag: async (id: string): Promise<DocumentDetail> => {
-    const res = await apiClient.post<DocumentDetail>(`/documents/${id}/auto-tag`);
+  autoTag: async (id: string, engine?: string): Promise<DocumentDetail> => {
+    const params = engine ? `?engine=${encodeURIComponent(engine)}` : "";
+    const res = await apiClient.post<DocumentDetail>(`/documents/${id}/auto-tag${params}`);
     return res.data;
   },
 

@@ -157,11 +157,54 @@ class TagService:
         topic_target = focus_ascii if len(focus_ascii.strip()) > 15 else all_ascii
 
         # ── 1. SỐ HIỆU (NẾU CÓ) ──────────────────────────────────────
-        doc_num = meta.get("document_number") or extra.get("document_number") or meta.get("so_ky_hieu")
+        # Loại bỏ các thẻ định dạng <hw>...</hw> để tránh làm gãy regex bóc tách
+        clean_no_hw = re.sub(r"</?hw>", "", raw_text)
+
+        # Trích xuất Vùng Tiêu Đề (Header Zone - trước các căn cứ pháp lý & nơi nhận)
+        header_lines_for_num = []
+        for line in clean_no_hw.split("\n")[:20]:
+            l_strip = line.strip()
+            l_low = l_strip.lower()
+            if l_low.startswith(("căn cứ", "can cu", "điều 1", "dieu 1")):
+                break
+            header_lines_for_num.append(l_strip)
+        header_text_for_num = "\n".join(header_lines_for_num)
+
+        # 1.1 Luôn ưu tiên tìm số hiệu trực tiếp trong Header Zone của văn bản hiện tại (đặc biệt sau khi hiệu chỉnh)
+        m_num = re.search(
+            r"(?:Số|S[oố0])[\s:\.\-]+([0-9A-Za-z]+[\s]*/[\s]*[A-ZĐa-z0-9\-]+(?:-[A-ZĐa-z0-9]+)*)",
+            header_text_for_num,
+            re.IGNORECASE,
+        )
+        if not m_num:
+            m_num = re.search(
+                r"(?:Số|S[oố0])[\s:\.\-]+([0-9]{1,6}\s*/\s*[A-ZĐa-z0-9\-/]+)",
+                header_text_for_num,
+                re.IGNORECASE,
+            )
+
+        doc_num = None
+        if m_num:
+            doc_num = re.sub(r"\s+", "", m_num.group(1)).strip(".,;: ")
+
+        # 1.2 Nếu trong Header Zone không có 'Số: ...', kiểm tra metadata truyền vào
         if not doc_num:
-            m_num = re.search(r"(?:Số|So)[\s:\.\-]+([0-9]{1,6}\s*/\s*[A-ZĐa-z0-9\-/]+)", raw_text, re.IGNORECASE)
-            if m_num:
-                doc_num = re.sub(r"\s+", "", m_num.group(1))
+            doc_num = meta.get("document_number") or extra.get("document_number") or meta.get("so_ky_hieu")
+
+        # 1.3 Fallback: Tìm trong các dòng ngoài 'căn cứ', 'theo', 'kính gửi', 'nơi nhận'
+        if not doc_num:
+            non_cancu_lines = [
+                l for l in clean_no_hw.split("\n")
+                if not l.strip().lower().startswith(("căn cứ", "can cu", "theo ", "kính gửi", "nơi nhận"))
+            ]
+            non_cancu_text = "\n".join(non_cancu_lines)
+            m_fallback = re.search(
+                r"(?:Số|S[oố0])[\s:\.\-]+([0-9]{1,6}\s*/\s*[A-ZĐa-z0-9\-/]+)",
+                non_cancu_text,
+                re.IGNORECASE,
+            )
+            if m_fallback:
+                doc_num = re.sub(r"\s+", "", m_fallback.group(1)).strip(".,;: ")
 
         if doc_num:
             ascii_num = _strip_accents(doc_num).upper()

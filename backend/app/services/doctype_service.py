@@ -42,8 +42,8 @@ class DocTypeService:
         Returns (full_number, suffix)
         """
         for line in header_lines[:15]:
-            # Chuẩn hóa các lỗi OCR thường gặp ở dòng số hiệu
-            clean_l = line.replace('?', '-').replace('—', '-').replace('–', '-')
+            # Chuẩn hóa các lỗi OCR thường gặp ở dòng số hiệu và loại bỏ thẻ <hw>
+            clean_l = re.sub(r'</?hw>', '', line).replace('?', '-').replace('—', '-').replace('–', '-')
             match = re.search(r'(?:[sS][oốOỐôÔ0][: ]*)\s*([0-9lIoO]+(?:\.[0-9lIoO]+)?\s*[\/\-]\s*([A-Za-zĐđ]+(?:\-[A-Za-zĐđ]+)*))', clean_l)
             if match:
                 full = match.group(1).replace(' ', '')

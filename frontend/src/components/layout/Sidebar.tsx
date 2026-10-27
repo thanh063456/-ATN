@@ -44,11 +44,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       roles: ["ADMIN", "STAFF", "STUDENT"],
     },
     {
-      label: "Phê duyệt & OCR",
+      label: role === "STUDENT" ? "Kho tài liệu công khai" : "Phê duyệt & OCR",
       path: "/documents",
       icon: FileCheck2,
-      roles: ["ADMIN", "STAFF"],
-      badge: "CTSV",
+      roles: ["ADMIN", "STAFF", "STUDENT"],
+      badge: role === "STUDENT" ? undefined : "CTSV",
     },
     {
       label: "Quản trị người dùng",

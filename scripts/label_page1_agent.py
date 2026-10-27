@@ -88,7 +88,7 @@ class Page1LabelingAgent:
         zoom = self.dpi / 72.0
         mat = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat, alpha=False)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         doc.close()
         return img
 
@@ -394,8 +394,8 @@ class Page1LabelingAgent:
 
         num_batches = (total_files + batch_size - 1) // batch_size
         all_results = []
-        files_needing_review = []
-        files_checks_failed = []
+        files_needing_review: List[str] = []
+        files_checks_failed: List[str] = []
         
         # Track TrOCR failure mode occurrences
         trocr_errors = {
@@ -441,10 +441,10 @@ class Page1LabelingAgent:
                     if res["checks_passed"]:
                         b_passed += 1
                     else:
-                        files_checks_failed.append(res["file"])
+                        files_checks_failed.append(str(res["file"]))
                     if res["needs_review"]:
-                        files_needing_review.append(res["file"])
-                    b_uncertain += res["n_uncertain"]
+                        files_needing_review.append(str(res["file"]))
+                    b_uncertain += int(res["n_uncertain"])
                     
                     # Record manifest row
                     with open(self.manifest_file, "a", encoding="utf-8", newline="") as mf:

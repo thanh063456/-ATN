@@ -161,10 +161,14 @@ class DocumentService:
 
         all_ocr_results = list(engine_latest_map.values())
 
-        # ocr_result chính: ưu tiên 'vietocr' mới nhất cho backward compatibility
-        latest_ocr = engine_latest_map.get("vietocr")
-        if not latest_ocr and all_ocr_results:
-            latest_ocr = all_ocr_results[0]
+        # ocr_result chính: ưu tiên kết quả đã hiệu chỉnh (is_corrected=True), sau đó đến 'vietocr'
+        corrected_ocrs = [o for o in all_ocr_results if o.is_corrected]
+        if corrected_ocrs:
+            latest_ocr = sorted(corrected_ocrs, key=lambda o: o.corrected_at or o.created_at, reverse=True)[0]
+        else:
+            latest_ocr = engine_latest_map.get("vietocr")
+            if not latest_ocr and all_ocr_results:
+                latest_ocr = all_ocr_results[0]
 
         # Tìm ProcessingJob mới nhất
         latest_job = None
@@ -219,6 +223,13 @@ class DocumentService:
             )
             doc_priority = tag_service.calculate_priority_score(doc_tags)
 
+        effective_ocr_status = document.ocr_status
+        if effective_ocr_status == "PENDING" and any(r.status == "DONE" for r in all_ocr_results):
+            effective_ocr_status = "DONE"
+            if latest_job and latest_job.ocr_progress < 100:
+                latest_job.ocr_progress = 100
+                latest_job.status = "SUCCESS"
+
         return DocumentDetailResponse(
             id=document.id,
             title=document.title,
@@ -228,8 +239,9 @@ class DocumentService:
             page_count=document.page_count,
             category_id=document.category_id,
             uploaded_by=document.uploaded_by,
-            ocr_status=document.ocr_status,
+            ocr_status=effective_ocr_status,
             minio_object_key=document.minio_object_key,
+            is_public=getattr(document, "is_public", False),
             is_deleted=document.is_deleted,
             created_at=document.created_at,
             updated_at=document.updated_at,

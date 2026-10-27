@@ -70,6 +70,11 @@ class OCRCorrectionRequest(BaseModel):
     engine: str | None = Field(default=None, description="Tên engine đang được hiệu chỉnh (vietocr, trocr, tesseract)")
 
 
+class SetPublicRequest(BaseModel):
+    """Payload cập nhật quyền công khai của tài liệu cho sinh viên."""
+    is_public: bool = Field(..., description="Trạng thái công khai của tài liệu (True: Cho phép sinh viên xem, False: Nội bộ CTSV)")
+
+
 class FieldExtractionUpdateRequest(BaseModel):
     """Payload cập nhật metadata bóc tách thông tin sinh viên."""
     student_id: str | None = None

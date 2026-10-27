@@ -111,6 +111,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("PyTorch running on CPU")
     except Exception as exc:
         logger.warning(f"CUDA check on startup: {exc}")
+    # Khởi động trước OCR models (TrOCR & VietOCR) trong background thread để tránh cold-start delay
+    import asyncio
+    def _warmup_ocr():
+        try:
+            if getattr(settings, "trocr_model_name", None):
+                from app.services.trocr_engine import trocr_engine
+                trocr_engine.get_model()
+            from app.services.vietocr_engine import vietocr_engine
+            vietocr_engine.get_predictor()
+            logger.info("OCR engines (TrOCR & VietOCR) pre-warmed in background")
+        except Exception as _w_err:
+            logger.warning(f"Background OCR pre-warm note: {_w_err}")
+
+    try:
+        asyncio.get_running_loop().run_in_executor(None, _warmup_ocr)
+    except Exception as _th_err:
+        logger.debug(f"Could not schedule OCR warmup: {_th_err}")
 
     # Khởi tạo Elasticsearch index và mapping tiếng Việt nếu chưa tồn tại
     try:

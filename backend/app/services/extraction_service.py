@@ -132,23 +132,53 @@ class ExtractionService:
                     pass
                 break
 
-        # 8. Trích xuất Số hiệu văn bản thực tế (vd: Số: 1353 /KH-ĐHĐL, Số: 245/QĐ-ĐHĐL, Số: 12/TB-CTSV)
+        # 8. Trích xuất Số hiệu văn bản thực tế (vd: Số: 1395/KH-ĐHĐL, Số: 245/QĐ-ĐHĐL, Số: 12/TB-CTSV)
         # Chỉ bóc tách đúng số hiệu có trên giấy, KHÔNG tự sinh số hiệu ngẫu nhiên
+        # 8.1 Loại bỏ thẻ <hw>...</hw> (Handwriting markers từ TrOCR)
+        clean_for_num = re.sub(r"</?hw>", "", clean_text)
+
+        # 8.2 Ưu tiên tìm trong Vùng Tiêu Đề (Header Zone - trước các căn cứ pháp lý & nơi nhận)
+        header_lines = []
+        for line in clean_for_num.split("\n")[:20]:
+            l_strip = line.strip()
+            l_low = l_strip.lower()
+            if l_low.startswith(("căn cứ", "can cu", "điều 1", "dieu 1")):
+                break
+            header_lines.append(l_strip)
+        header_text = "\n".join(header_lines)
+
         doc_num_patterns = [
-            r"(?:Số|S[oố])[\s:\.\-]+([0-9A-Za-z]+[\s]*/[\s]*[A-ZĐa-z0-9\-]+(?:-[A-ZĐa-z0-9]+)*)",
-            r"(?:Số|S[oố])[\s:\.\-]+([0-9]{1,6}\s*/\s*[A-ZĐa-z0-9\-/]+)",
+            r"(?:Số|S[oố0])[\s:\.\-]+([0-9A-Za-z]+[\s]*/[\s]*[A-ZĐa-z0-9\-]+(?:-[A-ZĐa-z0-9]+)*)",
+            r"(?:Số|S[oố0])[\s:\.\-]+([0-9]{1,6}\s*/\s*[A-ZĐa-z0-9\-/]+)",
             r"\b(\d{1,5}/(?:QĐ|KH|TB|HD|TTr|BC|CV|QD)-[A-ZĐa-z0-9\-]+)\b",
         ]
+
+        found_num = None
         for pat in doc_num_patterns:
-            m = re.search(pat, clean_text, re.IGNORECASE)
+            m = re.search(pat, header_text, re.IGNORECASE)
             if m:
-                raw_num = m.group(1).strip()
-                # Chuẩn hóa khoảng trắng quanh dấu gạch chéo
-                clean_doc_num = re.sub(r"\s*/\s*", "/", raw_num)
-                clean_doc_num = re.sub(r"\s*-\s*", "-", clean_doc_num)
-                extracted["document_number"] = clean_doc_num
-                extracted["extra"]["document_number"] = clean_doc_num
+                found_num = m.group(1).strip()
                 break
+
+        # 8.3 Nếu trong header không có, mới tìm ở các dòng không phải 'căn cứ', 'theo', 'kính gửi', 'nơi nhận'
+        if not found_num:
+            non_cancu_lines = [
+                l for l in clean_for_num.split("\n")
+                if not l.strip().lower().startswith(("căn cứ", "can cu", "theo ", "kính gửi", "nơi nhận"))
+            ]
+            non_cancu_text = "\n".join(non_cancu_lines)
+            for pat in doc_num_patterns:
+                m = re.search(pat, non_cancu_text, re.IGNORECASE)
+                if m:
+                    found_num = m.group(1).strip()
+                    break
+
+        if found_num:
+            clean_doc_num = re.sub(r"\s*/\s*", "/", found_num)
+            clean_doc_num = re.sub(r"\s*-\s*", "-", clean_doc_num)
+            clean_doc_num = clean_doc_num.strip(".,;: ")
+            extracted["document_number"] = clean_doc_num
+            extracted["extra"]["document_number"] = clean_doc_num
 
         return extracted
 

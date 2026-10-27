@@ -640,7 +640,7 @@ class DocumentAutoTagsResponse(BaseModel):
 class GeoAreaVerifyRequest(BaseModel):
     """Yêu cầu thẩm định địa giới thường trú hưởng chính sách NĐ 81/2021."""
     student_id: Optional[str] = None
-    address_raw: str
+    address_raw: Optional[str] = ""
     commune: Optional[str] = None
     district: Optional[str] = None
     province: Optional[str] = None

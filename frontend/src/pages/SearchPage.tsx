@@ -16,34 +16,23 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
-  ShieldAlert,
-  Table as TableIcon,
   HelpCircle,
   FileCheck,
-  Download,
   AlertOctagon,
   ShieldCheck,
+  ShieldAlert,
+  Download,
   X,
-  Shield,
   Layers,
-  Award,
   GitBranch,
   Scan,
   BarChart3,
-  Zap,
   CopyCheck,
   Building2,
   TrendingUp,
-  CheckSquare,
   Tag,
   History,
-  MapPin,
-  Activity,
-  Bell,
-  FileCode,
   Cpu,
-  PieChart,
-  ExternalLink,
 } from "lucide-react";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
@@ -56,24 +45,14 @@ import {
   FaqAnswerResponse,
   PolicyAuditResponse,
   CrossDocumentFraudResponse,
-  TableSearchResponse,
-  PiiAuditSummaryResponse,
   PercolateRoutingResponse,
   CtsvMultiDimensionalAnalyticsResponse,
   SpatialHighlightResponse,
-  OcrTolerantSearchResponse,
   DuplicateCheckResponse,
-  OcrQualityDistributionResponse,
-  OcrReviewQueueResponse,
   DocumentAutoTagsResponse,
-  GeoAreaVerifyResponse,
-  StudentEntityGraphResponse,
   DocumentAuditTrailResponse,
-  WatcherItem,
-  WatcherTriggeredEvent,
   HybridRrfHit,
   HybridRrfSearchResponse,
-  KibanaCanvasWorkpadPreview,
 } from "../api/search";
 import { useToastStore } from "../stores/useToastStore";
 
@@ -91,6 +70,24 @@ function formatDisplayTitle(rawTitle: string): { mainTitle: string; code?: strin
     clean = `Văn bản số ${code}`;
   }
   return { mainTitle: clean || rawTitle, code };
+}
+
+// Chuyển đổi một kết quả HybridRrfHit sang SearchHit để tái sử dụng toàn bộ modals công cụ
+function convertHybridHitToSearchHit(h: HybridRrfHit): SearchHit {
+  return {
+    document_id: h.document_id,
+    title: h.title,
+    category_name: h.category_name,
+    doc_type_name: h.category_name,
+    student_name: h.student_name,
+    student_id: h.student_id,
+    content_snippet: h.content_snippet,
+    score: Number(h.rrf_score.toFixed(5)),
+    highlights: {},
+    ocr_status: "DONE",
+    ocr_scope: "full",
+    tags: [],
+  };
 }
 
 export const SearchPage: React.FC = () => {
@@ -121,28 +118,18 @@ export const SearchPage: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [currentPage, setCurrentPage] = useState(initialPage);
 
-  // ── Navigation View Tabs ──────────────────────────────────────────────────
+  // ── Navigation View Tabs (Rút gọn còn 3 tab chính tinh gọn) ──────────────
   const [activeTab, setActiveTab] = useState<
     | "fulltext"
-    | "hybrid_rrf"
     | "faq"
-    | "tables"
-    | "pii"
     | "ctsv_analytics"
-    | "ocr_tolerant"
-    | "ocr_quality"
-    | "realtime_watchers"
   >("fulltext");
 
-  // ── Đề xuất 1: Hybrid Search (BM25 + kNN Reciprocal Rank Fusion) ──────────
-  const [hybridInput, setHybridInput] = useState("nghị định 81 miễn giảm học phí sv nghèo khó khăn");
+  // ── Tìm kiếm Lai RRF (BM25 + kNN Reciprocal Rank Fusion) tích hợp ─────────
+  const [isHybridMode, setIsHybridMode] = useState(true);
   const [hybridConstantK, setHybridConstantK] = useState(20);
   const [hybridData, setHybridData] = useState<HybridRrfSearchResponse | null>(null);
   const [isHybridLoading, setIsHybridLoading] = useState(false);
-
-  // ── Đề xuất 5: Kibana Canvas Dashboard & Workpad Preview ──────────────────
-  const [kibanaPreviewData, setKibanaPreviewData] = useState<KibanaCanvasWorkpadPreview | null>(null);
-  const [isKibanaLoading, setIsKibanaLoading] = useState(false);
 
   // ── Modal 1: Policy Audit Modal ───────────────────────────────────────────
   const [policyModalDoc, setPolicyModalDoc] = useState<SearchHit | null>(null);
@@ -160,20 +147,6 @@ export const SearchPage: React.FC = () => {
   const [faqData, setFaqData] = useState<FaqAnswerResponse | null>(null);
   const [isFaqLoading, setIsFaqLoading] = useState(false);
 
-  // ── Feature 4: Nested Table Structured Search ─────────────────────────────
-  const [tableStudentId, setTableStudentId] = useState("");
-  const [tableStudentName, setTableStudentName] = useState("");
-  const [tableMinGpa, setTableMinGpa] = useState<string>("");
-  const [tableMinDrl, setTableMinDrl] = useState<string>("");
-  const [tableTier, setTableTier] = useState("");
-  const [tableResult, setTableResult] = useState<TableSearchResponse | null>(null);
-  const [isTableLoading, setIsTableLoading] = useState(false);
-
-  // ── Feature 5: PII SIEM Security ──────────────────────────────────────────
-  const [piiWindow, setPiiWindow] = useState(60);
-  const [piiData, setPiiData] = useState<PiiAuditSummaryResponse | null>(null);
-  const [isPiiLoading, setIsPiiLoading] = useState(false);
-
   // ── Đề tài CTSV - Feature 1: Percolator Reverse Routing Modal ──────────────
   const [percolateModalDoc, setPercolateModalDoc] = useState<SearchHit | null>(null);
   const [percolateData, setPercolateData] = useState<PercolateRoutingResponse | null>(null);
@@ -189,34 +162,15 @@ export const SearchPage: React.FC = () => {
   const [ctsvBreakdown, setCtsvBreakdown] = useState<CtsvMultiDimensionalAnalyticsResponse | null>(null);
   const [isBreakdownLoading, setIsBreakdownLoading] = useState(false);
 
-  // ── Đề tài CTSV - Feature 4: OCR Error-Tolerant Search Tab ─────────────────
-  const [ocrTolerantInput, setOcrTolerantInput] = useState("don xin hb kkht sv 2O21");
-  const [ocrTolerantData, setOcrTolerantData] = useState<OcrTolerantSearchResponse | null>(null);
-  const [isOcrTolerantLoading, setIsOcrTolerantLoading] = useState(false);
-
   // ── Đề tài CTSV - Feature 5: Cross-Document MLT Duplicate Modal ────────────
   const [duplicateModalDoc, setDuplicateModalDoc] = useState<SearchHit | null>(null);
   const [duplicateData, setDuplicateData] = useState<DuplicateCheckResponse | null>(null);
   const [isDuplicateLoading, setIsDuplicateLoading] = useState(false);
 
-  // ── Đề tài CTSV Nâng cao 1: OCR Quality & Review Queue ────────────────────
-  const [ocrQualityData, setOcrQualityData] = useState<OcrQualityDistributionResponse | null>(null);
-  const [isQualityLoading, setIsQualityLoading] = useState(false);
-  const [reviewQueueData, setReviewQueueData] = useState<OcrReviewQueueResponse | null>(null);
-  const [isQueueLoading, setIsQueueLoading] = useState(false);
-
   // ── Đề tài CTSV Nâng cao 2: Auto-Tagging Modal (significant_text) ─────────
   const [autoTagsModalDoc, setAutoTagsModalDoc] = useState<SearchHit | null>(null);
   const [autoTagsData, setAutoTagsData] = useState<DocumentAutoTagsResponse | null>(null);
   const [isAutoTagsLoading, setIsAutoTagsLoading] = useState(false);
-
-  // ── Đề tài CTSV Nâng cao 3 & 6: Geo-Verify NĐ 81 & Watchers ────────────────
-  const [geoAddressInput, setGeoAddressInput] = useState("Thôn Đạ Tro, Xã Đạ Chais, Huyện Lạc Dương, Tỉnh Lâm Đồng");
-  const [geoVerifyResult, setGeoVerifyResult] = useState<GeoAreaVerifyResponse | null>(null);
-  const [isGeoLoading, setIsGeoLoading] = useState(false);
-  const [watchersList, setWatchersList] = useState<WatcherItem[]>([]);
-  const [triggeredEvents, setTriggeredEvents] = useState<WatcherTriggeredEvent[]>([]);
-  const [isWatchersLoading, setIsWatchersLoading] = useState(false);
 
   // ── Đề tài CTSV Nâng cao 5: Audit Trail & Diffs Modal ─────────────────────
   const [auditTrailModalDoc, setAuditTrailModalDoc] = useState<SearchHit | null>(null);
@@ -273,48 +227,6 @@ export const SearchPage: React.FC = () => {
       });
     } finally {
       setIsFaqLoading(false);
-    }
-  };
-
-  const handleQueryTables = async () => {
-    setIsTableLoading(true);
-    try {
-      const gpaNum = tableMinGpa ? parseFloat(tableMinGpa) : undefined;
-      const drlNum = tableMinDrl ? parseInt(tableMinDrl, 10) : undefined;
-      const data = await searchApi.queryTables({
-        student_id: tableStudentId.trim() || undefined,
-        student_name: tableStudentName.trim() || undefined,
-        min_gpa: isNaN(gpaNum as number) ? undefined : gpaNum,
-        min_drl: isNaN(drlNum as number) ? undefined : drlNum,
-        scholarship_tier: tableTier || undefined,
-        page: 1,
-        page_size: 20,
-      });
-      setTableResult(data);
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi bảng biểu",
-        message: "Lỗi truy vấn bảng biểu cấu trúc",
-      });
-    } finally {
-      setIsTableLoading(false);
-    }
-  };
-
-  const handleLoadPiiAudit = async (windowMinutes = piiWindow) => {
-    setIsPiiLoading(true);
-    try {
-      const data = await searchApi.getPiiAuditSummary(windowMinutes);
-      setPiiData(data);
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi PII Audit",
-        message: "Lỗi tải báo cáo an toàn PII",
-      });
-    } finally {
-      setIsPiiLoading(false);
     }
   };
 
@@ -387,82 +299,6 @@ export const SearchPage: React.FC = () => {
     }
   };
 
-  const handleSearchOcrTolerant = async (text: string) => {
-    if (!text.trim()) return;
-    setIsOcrTolerantLoading(true);
-    try {
-      const data = await searchApi.searchOcrTolerant({ query: text.trim() });
-      setOcrTolerantData(data);
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi tìm kiếm OCR",
-        message: "Lỗi tìm kiếm chịu lỗi nhận dạng OCR",
-      });
-    } finally {
-      setIsOcrTolerantLoading(false);
-    }
-  };
-
-  const handleLoadOcrQuality = async () => {
-    setIsQualityLoading(true);
-    setIsQueueLoading(true);
-    try {
-      const [dist, queue] = await Promise.all([
-        searchApi.getOcrQualityDistribution(),
-        searchApi.getOcrReviewQueue({ page: 1, pageSize: 10, maxConfidence: 0.75 }),
-      ]);
-      setOcrQualityData(dist);
-      setReviewQueueData(queue);
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi chất lượng OCR",
-        message: "Không thể tải báo cáo phân bổ chất lượng nhận dạng OCR",
-      });
-    } finally {
-      setIsQualityLoading(false);
-      setIsQueueLoading(false);
-    }
-  };
-
-  const handleVerifyGeoArea = async (address: string) => {
-    if (!address.trim()) return;
-    setIsGeoLoading(true);
-    try {
-      const res = await searchApi.verifyGeoPriorityArea({ address_raw: address });
-      setGeoVerifyResult(res);
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi thẩm định địa giới",
-        message: "Không thể thẩm định địa giới ưu tiên",
-      });
-    } finally {
-      setIsGeoLoading(false);
-    }
-  };
-
-  const handleLoadWatchers = async () => {
-    setIsWatchersLoading(true);
-    try {
-      const data = await searchApi.getWatchers();
-      setWatchersList(data.watchers || []);
-      if (data.watchers && data.watchers.length > 0) {
-        const evts = await searchApi.getWatcherTriggeredEvents(data.watchers[0].watcher_id);
-        setTriggeredEvents(evts);
-      }
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi bộ theo dõi",
-        message: "Không thể tải danh sách bộ theo dõi Watchers",
-      });
-    } finally {
-      setIsWatchersLoading(false);
-    }
-  };
-
   const handleOpenAutoTags = async (doc: SearchHit) => {
     setAutoTagsModalDoc(doc);
     setIsAutoTagsLoading(true);
@@ -516,23 +352,6 @@ export const SearchPage: React.FC = () => {
       });
     } finally {
       setIsHybridLoading(false);
-    }
-  };
-
-  // ── Đề xuất 5: Handler Tải Dữ liệu Kibana Canvas Workpad ─────────────────
-  const handleLoadKibanaCanvas = async () => {
-    setIsKibanaLoading(true);
-    try {
-      const data = await searchApi.getKibanaCanvasPreview();
-      setKibanaPreviewData(data);
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi tải Canvas Workpad",
-        message: err?.response?.data?.detail || "Không thể tải dữ liệu Kibana Canvas",
-      });
-    } finally {
-      setIsKibanaLoading(false);
     }
   };
 
@@ -649,6 +468,11 @@ export const SearchPage: React.FC = () => {
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     performSearch(query, 1);
+    if (isHybridMode && query.trim()) {
+      handleSearchHybridRrf(query.trim(), hybridConstantK);
+    } else {
+      setHybridData(null);
+    }
   };
 
   const handleResetFilters = () => {
@@ -699,331 +523,135 @@ export const SearchPage: React.FC = () => {
         </div>
       </div>
 
-      {/* View Switcher Tabs - 2 Balanced Suites (Zero Overflow, Zero Cutoff) */}
+      {/* ── Modern Streamlined 3-Tab Navigation Bar ── */}
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
-          gap: "0.6rem",
-          backgroundColor: "#f8fafc",
-          border: "1px solid var(--gray-200)",
+          alignItems: "center",
+          gap: "0.5rem",
+          backgroundColor: "#ffffff",
+          border: "1px solid var(--border-color)",
           borderRadius: "0.875rem",
-          padding: "0.65rem",
+          padding: "0.45rem",
           boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
         }}
       >
-        {/* SUITE 1: CÔNG NGHỆ TRA CỨU & AI TÌM KIẾM THÔNG MINH */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem", padding: "0 0.25rem" }}>
-            <span style={{ fontSize: "0.6875rem", fontWeight: 800, color: "#1e40af", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              <Search size={12} /> NHÓM 1: CÔNG NGHỆ TRA CỨU & AI TÌM KIẾM THÔNG MINH
-            </span>
-            <span style={{ fontSize: "0.6875rem", color: "var(--gray-500)", fontWeight: 600 }}>Elasticsearch 8.9+ Core</span>
-          </div>
-
-          <div
+        {/* Tab 1: Tra cứu & Tìm kiếm Lai RRF */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("fulltext")}
+          style={{
+            flex: 1,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
+            padding: "0.65rem 1rem",
+            borderRadius: "0.6rem",
+            border: activeTab === "fulltext" ? "1px solid #2563eb" : "1px solid transparent",
+            backgroundColor: activeTab === "fulltext" ? "var(--primary-600)" : "transparent",
+            color: activeTab === "fulltext" ? "#ffffff" : "var(--gray-700)",
+            fontWeight: activeTab === "fulltext" ? 700 : 600,
+            fontSize: "0.875rem",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            boxShadow: activeTab === "fulltext" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
+          }}
+        >
+          <Search size={16} />
+          <span>Tra cứu Toàn văn & Tìm kiếm Lai (Hybrid RRF)</span>
+          <span
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-              gap: "0.4rem",
+              fontSize: "0.6875rem",
+              backgroundColor: activeTab === "fulltext" ? "rgba(255,255,255,0.25)" : "#eff6ff",
+              color: activeTab === "fulltext" ? "#fff" : "#1e40af",
+              padding: "0.15rem 0.5rem",
+              borderRadius: "9999px",
+              fontWeight: 700,
             }}
           >
-            {/* 1. fulltext */}
-            <button
-              type="button"
-              onClick={() => setActiveTab("fulltext")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "fulltext" ? "1px solid #2563eb" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "fulltext" ? "var(--primary-600)" : "#ffffff",
-                color: activeTab === "fulltext" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "fulltext" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "fulltext" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
-              }}
-            >
-              <Search size={14} style={{ flexShrink: 0 }} />
-              <span>Tra cứu Toàn văn</span>
-            </button>
+            ES 8.9+ / Vector
+          </span>
+        </button>
 
-            {/* 2. hybrid_rrf */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("hybrid_rrf");
-                if (!hybridData) handleSearchHybridRrf(hybridInput);
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "hybrid_rrf" ? "1px solid #4f46e5" : "1px solid #c7d2fe",
-                backgroundColor: activeTab === "hybrid_rrf" ? "#4f46e5" : "#ffffff",
-                color: activeTab === "hybrid_rrf" ? "#ffffff" : "#3730a3",
-                fontWeight: activeTab === "hybrid_rrf" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "hybrid_rrf" ? "0 2px 4px rgba(79,70,229,0.3)" : "none",
-              }}
-            >
-              <Cpu size={14} style={{ flexShrink: 0 }} />
-              <span>Tìm kiếm Lai RRF</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "hybrid_rrf" ? "rgba(255,255,255,0.25)" : "#e0e7ff", color: activeTab === "hybrid_rrf" ? "#fff" : "#3730a3", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                ES 8.9+
-              </span>
-            </button>
-
-            {/* 3. ocr_tolerant */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("ocr_tolerant");
-                if (!ocrTolerantData) handleSearchOcrTolerant(ocrTolerantInput);
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "ocr_tolerant" ? "1px solid #2563eb" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "ocr_tolerant" ? "var(--primary-600)" : "#ffffff",
-                color: activeTab === "ocr_tolerant" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "ocr_tolerant" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "ocr_tolerant" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
-              }}
-            >
-              <Zap size={14} style={{ flexShrink: 0 }} />
-              <span>Bù lỗi OCR</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "ocr_tolerant" ? "rgba(255,255,255,0.25)" : "#e0e7ff", color: activeTab === "ocr_tolerant" ? "#fff" : "#3730a3", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                Fuzzy
-              </span>
-            </button>
-
-            {/* 4. tables */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("tables");
-                if (!tableResult) handleQueryTables();
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "tables" ? "1px solid #2563eb" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "tables" ? "var(--primary-600)" : "#ffffff",
-                color: activeTab === "tables" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "tables" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "tables" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
-              }}
-            >
-              <TableIcon size={14} style={{ flexShrink: 0 }} />
-              <span>Bảng Quyết định</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "tables" ? "rgba(255,255,255,0.25)" : "#dbeafe", color: activeTab === "tables" ? "#fff" : "#1e40af", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                Nested
-              </span>
-            </button>
-
-            {/* 5. faq */}
-            <button
-              type="button"
-              onClick={() => setActiveTab("faq")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "faq" ? "1px solid #2563eb" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "faq" ? "var(--primary-600)" : "#ffffff",
-                color: activeTab === "faq" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "faq" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "faq" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
-              }}
-            >
-              <HelpCircle size={14} style={{ flexShrink: 0 }} />
-              <span>Hỏi đáp Quy chế</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "faq" ? "rgba(255,255,255,0.25)" : "#fef3c7", color: activeTab === "faq" ? "#fff" : "#92400e", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                Trợ lý
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Subtle Divider */}
-        <div style={{ height: "1px", backgroundColor: "#e2e8f0" }} />
-
-        {/* SUITE 2: BÁO CÁO THỐNG KÊ & QUẢN TRỊ CTSV */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem", padding: "0 0.25rem" }}>
-            <span style={{ fontSize: "0.6875rem", fontWeight: 800, color: "#0f766e", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              <BarChart3 size={12} /> NHÓM 2: BÁO CÁO THỐNG KÊ & QUẢN TRỊ CTSV
-            </span>
-            <span style={{ fontSize: "0.6875rem", color: "#0f766e", fontWeight: 700 }}>Nghiệp vụ CTSV ĐH Đà Lạt</span>
-          </div>
-
-          <div
+        {/* Tab 2: Hỏi đáp Quy chế (FAQ AI) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab("faq")}
+          style={{
+            flex: 1,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
+            padding: "0.65rem 1rem",
+            borderRadius: "0.6rem",
+            border: activeTab === "faq" ? "1px solid #2563eb" : "1px solid transparent",
+            backgroundColor: activeTab === "faq" ? "var(--primary-600)" : "transparent",
+            color: activeTab === "faq" ? "#ffffff" : "var(--gray-700)",
+            fontWeight: activeTab === "faq" ? 700 : 600,
+            fontSize: "0.875rem",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            boxShadow: activeTab === "faq" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
+          }}
+        >
+          <HelpCircle size={16} />
+          <span>Hỏi đáp Quy chế CTSV</span>
+          <span
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-              gap: "0.4rem",
+              fontSize: "0.6875rem",
+              backgroundColor: activeTab === "faq" ? "rgba(255,255,255,0.25)" : "#fef3c7",
+              color: activeTab === "faq" ? "#fff" : "#92400e",
+              padding: "0.15rem 0.5rem",
+              borderRadius: "9999px",
+              fontWeight: 700,
             }}
           >
+            Trợ lý AI
+          </span>
+        </button>
 
-            {/* 7. ctsv_analytics */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("ctsv_analytics");
-                if (!ctsvBreakdown) handleLoadCtsvBreakdown();
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "ctsv_analytics" ? "1px solid #2563eb" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "ctsv_analytics" ? "var(--primary-600)" : "#ffffff",
-                color: activeTab === "ctsv_analytics" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "ctsv_analytics" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "ctsv_analytics" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
-              }}
-            >
-              <BarChart3 size={14} style={{ flexShrink: 0 }} />
-              <span>Thống kê CTSV</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "ctsv_analytics" ? "rgba(255,255,255,0.25)" : "#fef3c7", color: activeTab === "ctsv_analytics" ? "#fff" : "#92400e", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                Aggs
-              </span>
-            </button>
-
-            {/* 8. ocr_quality */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("ocr_quality");
-                if (!ocrQualityData) handleLoadOcrQuality();
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "ocr_quality" ? "1px solid #16a34a" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "ocr_quality" ? "#16a34a" : "#ffffff",
-                color: activeTab === "ocr_quality" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "ocr_quality" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "ocr_quality" ? "0 2px 4px rgba(22,163,74,0.25)" : "none",
-              }}
-            >
-              <Activity size={14} style={{ flexShrink: 0 }} />
-              <span>Chất lượng OCR</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "ocr_quality" ? "rgba(255,255,255,0.25)" : "#ecfdf5", color: activeTab === "ocr_quality" ? "#fff" : "#047857", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                Queue
-              </span>
-            </button>
-
-            {/* 9. pii */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("pii");
-                if (!piiData) handleLoadPiiAudit();
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "pii" ? "1px solid #dc2626" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "pii" ? "#dc2626" : "#ffffff",
-                color: activeTab === "pii" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "pii" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "pii" ? "0 2px 4px rgba(220,38,38,0.25)" : "none",
-              }}
-            >
-              <ShieldAlert size={14} style={{ flexShrink: 0 }} />
-              <span>Giám sát PII</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "pii" ? "rgba(255,255,255,0.25)" : "#fee2e2", color: activeTab === "pii" ? "#fff" : "#991b1b", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                NĐ 13
-              </span>
-            </button>
-
-            {/* 10. realtime_watchers */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("realtime_watchers");
-                if (watchersList.length === 0) {
-                  handleLoadWatchers();
-                  handleVerifyGeoArea(geoAddressInput);
-                }
-              }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: "0.5rem",
-                border: activeTab === "realtime_watchers" ? "1px solid #2563eb" : "1px solid var(--gray-200)",
-                backgroundColor: activeTab === "realtime_watchers" ? "var(--primary-600)" : "#ffffff",
-                color: activeTab === "realtime_watchers" ? "#ffffff" : "var(--gray-700)",
-                fontWeight: activeTab === "realtime_watchers" ? 700 : 600,
-                fontSize: "0.8125rem",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                boxShadow: activeTab === "realtime_watchers" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
-              }}
-            >
-              <Bell size={14} style={{ flexShrink: 0 }} />
-              <span>Cảnh báo Watchers</span>
-              <span style={{ fontSize: "0.625rem", backgroundColor: activeTab === "realtime_watchers" ? "rgba(255,255,255,0.25)" : "#e0e7ff", color: activeTab === "realtime_watchers" ? "#fff" : "#1e40af", padding: "0.1rem 0.35rem", borderRadius: "9999px", fontWeight: 700 }}>
-                Alerts
-              </span>
-            </button>
-          </div>
-        </div>
+        {/* Tab 3: Thống kê CTSV */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("ctsv_analytics");
+            if (!ctsvBreakdown) handleLoadCtsvBreakdown();
+          }}
+          style={{
+            flex: 1,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
+            padding: "0.65rem 1rem",
+            borderRadius: "0.6rem",
+            border: activeTab === "ctsv_analytics" ? "1px solid #2563eb" : "1px solid transparent",
+            backgroundColor: activeTab === "ctsv_analytics" ? "var(--primary-600)" : "transparent",
+            color: activeTab === "ctsv_analytics" ? "#ffffff" : "var(--gray-700)",
+            fontWeight: activeTab === "ctsv_analytics" ? 700 : 600,
+            fontSize: "0.875rem",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            boxShadow: activeTab === "ctsv_analytics" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
+          }}
+        >
+          <BarChart3 size={16} />
+          <span>Thống kê CTSV theo Khoa</span>
+          <span
+            style={{
+              fontSize: "0.6875rem",
+              backgroundColor: activeTab === "ctsv_analytics" ? "rgba(255,255,255,0.25)" : "#ecfdf5",
+              color: activeTab === "ctsv_analytics" ? "#fff" : "#047857",
+              padding: "0.15rem 0.5rem",
+              borderRadius: "9999px",
+              fontWeight: 700,
+            }}
+          >
+            Aggregations
+          </span>
+        </button>
       </div>
 
       {activeTab === "fulltext" && (
@@ -1110,6 +738,9 @@ export const SearchPage: React.FC = () => {
                         setQuery(item.text);
                         setShowSuggestions(false);
                         performSearch(item.text, 1);
+                        if (isHybridMode) {
+                          handleSearchHybridRrf(item.text, hybridConstantK);
+                        }
                       }}
                       style={{
                         padding: "0.65rem 0.85rem",
@@ -1169,16 +800,116 @@ export const SearchPage: React.FC = () => {
           </div>
         </form>
 
+        {/* Hybrid RRF Mode Switcher & Parameters */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            marginTop: "1rem",
+            padding: "0.6rem 0.85rem",
+            backgroundColor: isHybridMode ? "#f5f3ff" : "#f8fafc",
+            border: isHybridMode ? "1px solid #c7d2fe" : "1px solid var(--border-color)",
+            borderRadius: "var(--radius-md)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                fontSize: "0.8125rem",
+                fontWeight: 700,
+                color: isHybridMode ? "#4338ca" : "var(--gray-700)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isHybridMode}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setIsHybridMode(enabled);
+                  if (enabled && query.trim()) {
+                    handleSearchHybridRrf(query.trim(), hybridConstantK);
+                  }
+                }}
+                style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#4f46e5" }}
+              />
+              <Cpu size={16} color={isHybridMode ? "#4f46e5" : "var(--gray-500)"} />
+              <span>Chế độ Tìm kiếm Lai RRF (BM25 + kNN Vector Ngữ nghĩa 768 chiều)</span>
+            </label>
+            <span
+              style={{
+                fontSize: "0.625rem",
+                fontWeight: 700,
+                backgroundColor: isHybridMode ? "#4f46e5" : "#e2e8f0",
+                color: isHybridMode ? "#ffffff" : "var(--gray-600)",
+                padding: "0.15rem 0.45rem",
+                borderRadius: "9999px",
+              }}
+            >
+              Elasticsearch 8.9+
+            </span>
+          </div>
+
+          {isHybridMode && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--gray-600)", fontWeight: 600 }}>Hằng số RRF (k):</span>
+              {[
+                { label: "k = 20 (Chuẩn ES 8.9)", val: 20 },
+                { label: "k = 60 (Cormack)", val: 60 },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  type="button"
+                  onClick={() => {
+                    setHybridConstantK(preset.val);
+                    if (query.trim()) handleSearchHybridRrf(query.trim(), preset.val);
+                  }}
+                  style={{
+                    padding: "0.2rem 0.5rem",
+                    borderRadius: "4px",
+                    fontSize: "0.75rem",
+                    fontWeight: hybridConstantK === preset.val ? 700 : 500,
+                    backgroundColor: hybridConstantK === preset.val ? "#4f46e5" : "#ffffff",
+                    color: hybridConstantK === preset.val ? "#ffffff" : "var(--gray-700)",
+                    border: "1px solid",
+                    borderColor: hybridConstantK === preset.val ? "#4f46e5" : "var(--border-color)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Quick Sample Queries */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1rem", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 600 }}>Gợi ý nhanh:</span>
-          {sampleQueries.map((item, idx) => (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 600 }}>Gợi ý mẫu:</span>
+          {[
+            "nghị định 81 miễn giảm học phí sv nghèo khó khăn",
+            "học bổng khuyến khích học tập dlu kỳ 1",
+            "đơn xin tạm hoãn thi kết thúc học phần vì sức khỏe",
+            "học phí",
+            "20210678",
+            "bảo lưu",
+          ].map((item, idx) => (
             <button
               key={idx}
               type="button"
               onClick={() => {
                 setQuery(item);
                 performSearch(item, 1);
+                if (isHybridMode) {
+                  handleSearchHybridRrf(item, hybridConstantK);
+                }
               }}
               style={{
                 padding: "0.2rem 0.6rem",
@@ -1362,6 +1093,281 @@ export const SearchPage: React.FC = () => {
       {/* Search Results Area */}
       {hasSearched && searchResponse && (
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {/* Hybrid RRF Loading State */}
+          {isHybridLoading && !hybridData && (
+            <Card padding="md">
+              <div style={{ padding: "1.75rem", textAlign: "center", color: "var(--gray-500)" }}>
+                <Clock className="animate-spin" size={26} style={{ margin: "0 auto 0.5rem", color: "var(--primary-600)" }} />
+                <div style={{ fontWeight: 600, color: "var(--gray-700)" }}>Đang xếp hạng song song BM25 và kNN vector 768 chiều qua RRF (k = {hybridConstantK})...</div>
+                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Thuật toán Reciprocal Rank Fusion kết hợp độ chính xác từ khóa và chiều sâu ngữ nghĩa</span>
+              </div>
+            </Card>
+          )}
+
+          {/* Hybrid RRF Ranked Results */}
+          {isHybridMode && hybridData && hybridData.results.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginBottom: "0.5rem" }}>
+              {/* Hybrid Header & Metrics */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1rem",
+                  backgroundColor: "#f5f3ff",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid #c7d2fe",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Sparkles size={18} color="#6366f1" />
+                  <span style={{ fontWeight: 800, fontSize: "0.9375rem", color: "#3730a3" }}>
+                    Kết quả Xếp hạng Lai RRF (Dense Vector 768d + BM25 Lexical)
+                  </span>
+                  <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                    ({hybridData.results.length} tài liệu tối ưu nhất, k = {hybridData.rank_constant_k})
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#dcfce7", color: "#166534" }}>
+                    ⚡ Khớp kép: {hybridData.metrics?.both_count ?? hybridData.results.filter(r => r.match_type === "HYBRID_BOTH").length}
+                  </span>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#dbeafe", color: "#1e40af" }}>
+                    🔍 BM25 từ khóa: {hybridData.metrics?.keyword_only_count ?? hybridData.results.filter(r => r.match_type === "KEYWORD_ONLY").length}
+                  </span>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#f3e8ff", color: "#6b21a8" }}>
+                    🧠 kNN Ngữ nghĩa: {hybridData.metrics?.semantic_only_count ?? hybridData.results.filter(r => r.match_type === "SEMANTIC_ONLY").length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Hybrid Hits Cards */}
+              {hybridData.results.map((hit, hIdx) => {
+                const titleInfo = formatDisplayTitle(hit.title);
+                const isBoth = hit.match_type === "HYBRID_BOTH";
+                const isBm25 = hit.match_type === "KEYWORD_ONLY";
+                const searchHitEquivalent = convertHybridHitToSearchHit(hit);
+
+                return (
+                  <Card
+                    key={hit.document_id || hIdx}
+                    padding="md"
+                    style={{
+                      borderLeft: isBoth ? "5px solid #16a34a" : isBm25 ? "5px solid #2563eb" : "5px solid #9333ea",
+                      backgroundColor: isBoth ? "#fcfdfc" : "#ffffff",
+                      transition: "box-shadow 0.2s ease",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
+                      <div style={{ flex: 1, minWidth: "280px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
+                          <span
+                            style={{
+                              padding: "0.2rem 0.6rem",
+                              borderRadius: "9999px",
+                              fontSize: "0.6875rem",
+                              fontWeight: 800,
+                              backgroundColor: isBoth ? "#dcfce7" : isBm25 ? "#dbeafe" : "#f3e8ff",
+                              color: isBoth ? "#166534" : isBm25 ? "#1e40af" : "#6b21a8",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                            }}
+                          >
+                            {isBoth ? <Sparkles size={12} /> : isBm25 ? <Search size={12} /> : <Cpu size={12} />}
+                            {isBoth ? "⚡ KHỚP KÉP (HYBRID BOTH)" : isBm25 ? "🔍 TỪ KHÓA CHÍNH XÁC (BM25)" : "🧠 NGỮ NGHĨA VECTOR (kNN)"}
+                          </span>
+                          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", backgroundColor: "var(--gray-100)", padding: "0.15rem 0.45rem", borderRadius: "4px" }}>
+                            {hit.category_name}
+                          </span>
+                          {titleInfo.code && (
+                            <span style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "#1d4ed8", backgroundColor: "#eff6ff", padding: "0.15rem 0.45rem", borderRadius: "4px", fontWeight: 700 }}>
+                              Số: {titleInfo.code}
+                            </span>
+                          )}
+                        </div>
+
+                        <Link
+                          to={`/documents/${hit.document_id}`}
+                          style={{
+                            fontSize: "1.05rem",
+                            fontWeight: 700,
+                            color: "var(--primary-700)",
+                            textDecoration: "none",
+                            lineHeight: 1.4,
+                            display: "block",
+                          }}
+                        >
+                          {titleInfo.mainTitle}
+                        </Link>
+
+                        {(hit.student_name || hit.student_id) && (
+                          <div style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.25rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                            <span>Sinh viên: <strong>{hit.student_name || "N/A"}</strong></span>
+                            <span>MSSV: <code style={{ color: "var(--primary-700)", fontWeight: 700 }}>{hit.student_id || "N/A"}</code></span>
+                          </div>
+                        )}
+
+                        {hit.content_snippet && (
+                          <p style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.4rem", lineHeight: 1.5 }}>
+                            {hit.content_snippet}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Rank & RRF Score Badges Box */}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                          gap: "0.4rem",
+                          backgroundColor: "#f8fafc",
+                          padding: "0.6rem 0.85rem",
+                          borderRadius: "var(--radius-md)",
+                          border: "1px solid #e2e8f0",
+                          minWidth: "210px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
+                          <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Điểm RRF:</span>
+                          <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "#1d4ed8", fontFamily: "monospace" }}>
+                            {hit.rrf_score.toFixed(5)}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", gap: "0.5rem", fontSize: "0.75rem" }}>
+                          <span style={{ color: hit.bm25_rank ? "#1e40af" : "var(--gray-400)", backgroundColor: hit.bm25_rank ? "#dbeafe" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
+                            BM25: {hit.bm25_rank ? `#${hit.bm25_rank}` : "Không khớp"}
+                          </span>
+                          <span style={{ color: hit.knn_rank ? "#6b21a8" : "var(--gray-400)", backgroundColor: hit.knn_rank ? "#f3e8ff" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
+                            kNN: {hit.knn_rank ? `#${hit.knn_rank}` : "Không khớp"}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)", textAlign: "right", marginTop: "0.15rem" }}>
+                          {hit.explanation}
+                        </div>
+
+                        <Link to={`/documents/${hit.document_id}`} style={{ marginTop: "0.25rem" }}>
+                          <Button variant="outline" size="sm" rightIcon={<ArrowRight size={13} />} style={{ fontSize: "0.75rem", padding: "0.2rem 0.55rem", height: "26px" }}>
+                            Xem chi tiết
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons for Hybrid Hit */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginTop: "0.75rem",
+                        paddingTop: "0.65rem",
+                        borderTop: "1px solid var(--gray-100)",
+                        flexWrap: "wrap",
+                        gap: "0.4rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase" }}>
+                          Công cụ:
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<GitBranch size={12} color="#4f46e5" />}
+                          onClick={() => handleOpenPercolateRouting(searchHitEquivalent)}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#eef2ff", borderColor: "#c7d2fe", color: "#3730a3" }}
+                        >
+                          Phân luồng Percolator
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<Scan size={12} color="#0284c7" />}
+                          onClick={() => handleOpenSpatialHighlights(searchHitEquivalent)}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f0f9ff", borderColor: "#bae6fd", color: "#0369a1" }}
+                        >
+                          Tọa độ Scan OCR
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<CopyCheck size={12} color="#be123c" />}
+                          onClick={() => handleOpenDuplicateCheck(searchHitEquivalent)}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#fff1f2", borderColor: "#fecdd3", color: "#9f1239" }}
+                        >
+                          Trùng lặp MLT
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<Tag size={12} color="#059669" />}
+                          onClick={() => handleOpenAutoTags(searchHitEquivalent)}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46" }}
+                        >
+                          Gán nhãn Tags
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<History size={12} color="#7c3aed" />}
+                          onClick={() => handleOpenAuditTrail(searchHitEquivalent)}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f5f3ff", borderColor: "#ddd6fe", color: "#5b21b6" }}
+                        >
+                          Nhật ký Diffs
+                        </Button>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<FileCheck size={12} color="#059669" />}
+                          onClick={() => handleOpenPolicyAudit(searchHitEquivalent, "NGHI_DINH_81")}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f0fdf4", borderColor: "#a7f3d0", color: "#065f46" }}
+                        >
+                          Thẩm định NĐ 81
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<ShieldCheck size={12} color="#d97706" />}
+                          onClick={() => handleOpenFraudAudit(searchHitEquivalent)}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#fffbeb", borderColor: "#fde68a", color: "#92400e" }}
+                        >
+                          Đối soát Gian lận
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Section title for full catalog when hybrid results are present */}
+          {isHybridMode && hybridData && hybridData.results.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "0.5rem 0 0.25rem", borderTop: "2px dashed var(--gray-200)", paddingTop: "1rem" }}>
+              <FileText size={16} color="var(--primary-600)" />
+              <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--gray-800)" }}>
+                Toàn bộ Danh mục Văn bản Khớp Từ khóa & Bộ lọc Phân loại ({searchResponse.total_hits} tài liệu)
+              </span>
+            </div>
+          )}
+
           {/* Results Summary Bar */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.875rem", color: "var(--gray-600)" }}>
             <div>
@@ -2015,383 +2021,6 @@ export const SearchPage: React.FC = () => {
       )}
 
       {/* ==================================================================== */}
-      {/* FEATURE 4 TAB: NESTED TABLE STRUCTURED SEARCH                        */}
-      {/* ==================================================================== */}
-      {activeTab === "tables" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* Filter Card */}
-          <Card padding="md">
-            <div style={{ marginBottom: "0.75rem" }}>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--gray-900)" }}>
-                Tra cứu Bảng biểu Quyết định & Phụ lục Học bổng Đa trang
-              </h3>
-              <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", marginTop: "0.15rem" }}>
-                Tìm kiếm trực tiếp từng dòng dữ liệu trong phụ lục scan quyết định khen thưởng, miễn giảm học phí và học bổng KKHT.
-              </p>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem", alignItems: "flex-end" }}>
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-700)", display: "block", marginBottom: "0.25rem" }}>
-                  Mã số SV (MSSV)
-                </label>
-                <input
-                  type="text"
-                  value={tableStudentId}
-                  onChange={(e) => setTableStudentId(e.target.value)}
-                  placeholder="vd: 2112345..."
-                  style={{ width: "100%", padding: "0.45rem 0.65rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-700)", display: "block", marginBottom: "0.25rem" }}>
-                  Họ và tên
-                </label>
-                <input
-                  type="text"
-                  value={tableStudentName}
-                  onChange={(e) => setTableStudentName(e.target.value)}
-                  placeholder="vd: Nguyễn Văn..."
-                  style={{ width: "100%", padding: "0.45rem 0.65rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-700)", display: "block", marginBottom: "0.25rem" }}>
-                  GPA Tối thiểu
-                </label>
-                <select
-                  value={tableMinGpa}
-                  onChange={(e) => setTableMinGpa(e.target.value)}
-                  style={{ width: "100%", padding: "0.45rem 0.65rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
-                >
-                  <option value="">Tất cả khoảng điểm</option>
-                  <option value="2.5">Từ 2.50 trở lên (Khá)</option>
-                  <option value="3.2">Từ 3.20 trở lên (Giỏi)</option>
-                  <option value="3.6">Từ 3.60 trở lên (Xuất sắc)</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-700)", display: "block", marginBottom: "0.25rem" }}>
-                  Điểm Rèn luyện Tối thiểu
-                </label>
-                <select
-                  value={tableMinDrl}
-                  onChange={(e) => setTableMinDrl(e.target.value)}
-                  style={{ width: "100%", padding: "0.45rem 0.65rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
-                >
-                  <option value="">Tất cả ĐRL</option>
-                  <option value="65">Từ 65 điểm trở lên (Khá)</option>
-                  <option value="80">Từ 80 điểm trở lên (Tốt)</option>
-                  <option value="90">Từ 90 điểm trở lên (Xuất sắc)</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-700)", display: "block", marginBottom: "0.25rem" }}>
-                  Khung học bổng
-                </label>
-                <select
-                  value={tableTier}
-                  onChange={(e) => setTableTier(e.target.value)}
-                  style={{ width: "100%", padding: "0.45rem 0.65rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem" }}
-                >
-                  <option value="">Tất cả loại học bổng</option>
-                  <option value="Xuất sắc">Loại Xuất sắc</option>
-                  <option value="Giỏi">Loại Giỏi</option>
-                  <option value="Khá">Loại Khá</option>
-                </select>
-              </div>
-
-              <Button
-                type="button"
-                variant="primary"
-                isLoading={isTableLoading}
-                leftIcon={<TableIcon size={15} />}
-                onClick={handleQueryTables}
-                style={{ height: "35px" }}
-              >
-                Truy vấn Bảng
-              </Button>
-            </div>
-          </Card>
-
-          {/* Results Table Card */}
-          <Card padding="md">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-              <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--gray-800)" }}>
-                Kết quả tìm kiếm bảng biểu:{" "}
-                <strong style={{ color: "var(--primary-600)" }}>{tableResult?.total_hits ?? 0}</strong> dòng ({tableResult?.took_ms ?? 0} ms)
-              </span>
-            </div>
-
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
-                <thead>
-                  <tr style={{ backgroundColor: "var(--gray-50)", borderBottom: "2px solid var(--border-color)", textAlign: "left" }}>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Trang</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Số Quyết định / Văn bản</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>MSSV</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Họ và tên</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Lớp</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>GPA</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>ĐRL</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Khung học bổng</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Mức tiền thưởng</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Hồ sơ gốc</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!tableResult || tableResult.rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} style={{ padding: "2rem", textAlign: "center", color: "var(--gray-400)" }}>
-                        Không có dòng dữ liệu bảng biểu nào khớp với tiêu chí tìm kiếm.
-                      </td>
-                    </tr>
-                  ) : (
-                    tableResult.rows.map((row, idx) => (
-                      <tr
-                        key={idx}
-                        style={{
-                          borderBottom: "1px solid var(--gray-100)",
-                          backgroundColor: idx % 2 === 0 ? "#ffffff" : "var(--gray-50)",
-                        }}
-                      >
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>Trang {row.page}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", color: "var(--gray-800)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.document_title}>
-                          {row.decision_number || formatDisplayTitle(row.document_title).code || row.document_title}
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--primary-700)" }}>{row.mssv}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, color: "var(--gray-900)" }}>{row.student_name}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", color: "var(--gray-600)" }}>{row.class_name || "CTK45"}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: (row.gpa ?? 0) >= 3.6 ? "#15803d" : "#0284c7" }}>
-                          {row.gpa?.toFixed(2) ?? "N/A"}
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600 }}>{row.drl ?? "N/A"}</td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <span
-                            style={{
-                              padding: "0.2rem 0.5rem",
-                              borderRadius: "4px",
-                              fontSize: "0.75rem",
-                              fontWeight: 700,
-                              backgroundColor: row.scholarship_tier?.includes("Xuất sắc") ? "#ede9fe" : "#e0f2fe",
-                              color: row.scholarship_tier?.includes("Xuất sắc") ? "#6d28d9" : "#0369a1",
-                            }}
-                          >
-                            {row.scholarship_tier || "Đạt chuẩn"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "#b45309" }}>{row.amount || "Theo quy định"}</td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <Link to={`/documents/${row.document_id}`} style={{ textDecoration: "none" }}>
-                            <Button variant="ghost" size="sm" style={{ padding: "0.2rem 0.4rem", fontSize: "0.75rem" }}>
-                              Xem file
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* FEATURE 5 TAB: PII SECURITY AUDIT & ANOMALY SIEM                     */}
-      {/* ==================================================================== */}
-      {activeTab === "pii" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* Header Controls */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
-            <div>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--gray-900)" }}>
-                Giám sát An toàn Thông tin Cá nhân Sinh viên (Nghị định 13/2023/NĐ-CP SIEM)
-              </h3>
-              <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", marginTop: "0.15rem" }}>
-                Giám sát việc truy xuất số CCCD, tài khoản ngân hàng, thông tin sổ hộ nghèo; phát hiện tải hàng loạt và truy cập ngoài giờ.
-              </p>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Cửa sổ giám sát:</span>
-              <select
-                value={piiWindow}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setPiiWindow(val);
-                  handleLoadPiiAudit(val);
-                }}
-                style={{ padding: "0.4rem 0.75rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", fontSize: "0.8125rem", fontWeight: 600 }}
-              >
-                <option value={30}>30 phút qua</option>
-                <option value={60}>60 phút qua (1 giờ)</option>
-                <option value={180}>3 giờ qua</option>
-                <option value={1440}>24 giờ qua (1 ngày)</option>
-              </select>
-              <Button variant="outline" size="sm" onClick={() => handleLoadPiiAudit(piiWindow)} leftIcon={<RotateCcw size={14} />}>
-                Làm mới
-              </Button>
-            </div>
-          </div>
-
-          {/* Metric KPIs */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
-            <Card padding="md" style={{ borderLeft: "4px solid #3b82f6" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)" }}>TỔNG LƯỢT TRUY XUẤT PII</span>
-              <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--gray-900)", marginTop: "0.25rem" }}>
-                {piiData?.total_pii_accesses ?? 12}
-              </div>
-              <span style={{ fontSize: "0.75rem", color: "#2563eb", fontWeight: 600 }}>Theo dõi tức thời</span>
-            </Card>
-
-            <Card padding="md" style={{ borderLeft: "4px solid #10b981" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)" }}>HỒ SƠ SINH VIÊN ĐÃ MỞ</span>
-              <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--gray-900)", marginTop: "0.25rem" }}>
-                {piiData?.unique_documents_accessed ?? 5}
-              </div>
-              <span style={{ fontSize: "0.75rem", color: "#059669", fontWeight: 600 }}>Hồ sơ chính sách, học bổng</span>
-            </Card>
-
-            <Card padding="md" style={{ borderLeft: "4px solid #ef4444" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)" }}>CẢNH BÁO BẤT THƯỜNG</span>
-              <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#dc2626", marginTop: "0.25rem" }}>
-                {piiData?.anomalies.length ?? 0}
-              </div>
-              <span style={{ fontSize: "0.75rem", color: "#dc2626", fontWeight: 600 }}>Cần thẩm tra an ninh</span>
-            </Card>
-
-            <Card padding="md" style={{ borderLeft: "4px solid #8b5cf6" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)" }}>TUÂN THỦ NGHỊ ĐỊNH 13</span>
-              <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#7c3aed", marginTop: "0.25rem" }}>
-                100%
-              </div>
-              <span style={{ fontSize: "0.75rem", color: "#7c3aed", fontWeight: 600 }}>Đã mã hóa và ghi nhật ký</span>
-            </Card>
-          </div>
-
-          {/* Anomaly Alerts List */}
-          {piiData && piiData.anomalies.length > 0 && (
-            <Card padding="md" style={{ border: "1px solid #fecaca", backgroundColor: "#fff5f5" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                <AlertTriangle size={18} color="#dc2626" />
-                <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#991b1b" }}>
-                  Phát hiện Cảnh báo Hành vi Bất thường (Anomalies Alert):
-                </h4>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                {piiData.anomalies.map((alt) => (
-                  <div
-                    key={alt.alert_id}
-                    style={{
-                      padding: "0.75rem 1rem",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: "#ffffff",
-                      border: "1px solid #fee2e2",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: "1rem",
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <span
-                          style={{
-                            padding: "0.15rem 0.45rem",
-                            borderRadius: "4px",
-                            fontSize: "0.6875rem",
-                            fontWeight: 700,
-                            backgroundColor: alt.severity === "CRITICAL" ? "#dc2626" : alt.severity === "HIGH" ? "#f97316" : "#eab308",
-                            color: "#ffffff",
-                          }}
-                        >
-                          {alt.severity}
-                        </span>
-                        <strong style={{ fontSize: "0.8125rem", color: "var(--gray-900)" }}>{alt.alert_id}</strong>
-                        <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Tài khoản: {alt.user_email}</span>
-                      </div>
-                      <p style={{ fontSize: "0.8125rem", color: "var(--gray-700)", marginTop: "0.25rem" }}>
-                        {alt.description}
-                      </p>
-                    </div>
-                    <span style={{ fontSize: "0.75rem", color: "var(--gray-400)", whiteSpace: "nowrap" }}>{alt.created_at}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Recent Access Stream */}
-          <Card padding="md">
-            <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.75rem" }}>
-              Nhật ký Truy xuất Dữ liệu Nhạy cảm Thời gian thực (Audit Trail)
-            </h4>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
-                <thead>
-                  <tr style={{ backgroundColor: "var(--gray-50)", borderBottom: "1px solid var(--border-color)", textAlign: "left" }}>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Thời gian</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Tài khoản Cán bộ</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Hành động</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Mã Hồ sơ</th>
-                    <th style={{ padding: "0.6rem 0.75rem", color: "var(--gray-700)", fontWeight: 700 }}>Trường PII đã đọc/tải</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!piiData || piiData.recent_accesses.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ padding: "1.5rem", textAlign: "center", color: "var(--gray-400)" }}>
-                        Chưa có nhật ký truy xuất PII trong cửa sổ thời gian này.
-                      </td>
-                    </tr>
-                  ) : (
-                    piiData.recent_accesses.map((acc) => (
-                      <tr key={acc.id} style={{ borderBottom: "1px solid var(--gray-100)" }}>
-                        <td style={{ padding: "0.6rem 0.75rem", color: "var(--gray-600)" }}>{acc.timestamp}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", fontWeight: 600, color: "var(--gray-900)" }}>{acc.user_email}</td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <span
-                            style={{
-                              padding: "0.15rem 0.45rem",
-                              borderRadius: "4px",
-                              fontSize: "0.6875rem",
-                              fontWeight: 700,
-                              backgroundColor: acc.action === "EXPORT" ? "#fef3c7" : acc.action === "DOWNLOAD" ? "#e0f2fe" : "#f3f4f6",
-                              color: acc.action === "EXPORT" ? "#b45309" : acc.action === "DOWNLOAD" ? "#0284c7" : "#4b5563",
-                            }}
-                          >
-                            {acc.action}
-                          </span>
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem", fontFamily: "monospace", fontSize: "0.75rem", color: "var(--primary-700)" }}>
-                          {acc.document_id.slice(0, 8)}...
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                            {acc.accessed_fields.map((fld, fIdx) => (
-                              <span key={fIdx} style={{ fontSize: "0.6875rem", backgroundColor: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>
-                                {fld}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
       {/* TAB 5: BÁO CÁO ĐA CHIỀU CTSV (MULTI-LEVEL AGGREGATIONS)              */}
       {/* ==================================================================== */}
       {activeTab === "ctsv_analytics" && (
@@ -2403,7 +2032,7 @@ export const SearchPage: React.FC = () => {
                 Thống kê Đa chiều CTSV Toàn trường (Multi-level Aggregations)
               </h3>
               <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", marginTop: "0.2rem" }}>
-                Khai phá dữ liệu tổng hợp đa tầng của Elasticsearch 8: Phân tích cơ cấu chính sách, phân bổ hồ sơ theo từng Khoa, tiến độ giải ngân ngân sách và cam kết chất lượng SLA.
+                Khai phá dữ liệu tổng hợp đa tầng của Elasticsearch 8: Phân tích cơ cấu chính sách, phân bổ hồ sơ theo từng Khoa, tiến độ phê duyệt hồ sơ và cam kết chất lượng SLA.
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -2448,11 +2077,13 @@ export const SearchPage: React.FC = () => {
                 </Card>
 
                 <Card padding="md" style={{ borderLeft: "4px solid #d97706", backgroundColor: "#f8fafc" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Tổng Ngân sách Cấp bù</span>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Tỷ lệ Đã Phê duyệt</span>
                   <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#b45309", marginTop: "0.25rem" }}>
-                    {(ctsvBreakdown.total_budget_allocated / 1000000000).toFixed(2)} tỷ VNĐ
+                    {ctsvBreakdown.total_student_documents > 0
+                      ? `${Math.round((ctsvBreakdown.faculty_breakdown.reduce((acc, f) => acc + f.approved_count, 0) / Math.max(ctsvBreakdown.total_student_documents, 1)) * 100)}%`
+                      : "100%"}
                   </div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--gray-600)" }}>Nghị định 81, KKHT & Trợ cấp XH</span>
+                  <span style={{ fontSize: "0.75rem", color: "var(--gray-600)" }}>Tiến độ thẩm định chính sách toàn trường</span>
                 </Card>
 
                 <Card padding="md" style={{ borderLeft: "4px solid #0284c7", backgroundColor: "#f8fafc" }}>
@@ -2486,7 +2117,7 @@ export const SearchPage: React.FC = () => {
                           <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "center" }}>Tổng đơn</th>
                           <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "center" }}>Đã duyệt</th>
                           <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "center" }}>Chờ duyệt</th>
-                          <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "right" }}>Kinh phí (VNĐ)</th>
+                          <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "right" }}>Tỷ lệ duyệt</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2503,8 +2134,17 @@ export const SearchPage: React.FC = () => {
                               <td style={{ padding: "0.55rem 0.6rem", textAlign: "center", fontWeight: 700 }}>{f.total_applications}</td>
                               <td style={{ padding: "0.55rem 0.6rem", textAlign: "center", color: "#16a34a", fontWeight: 700 }}>{f.approved_count}</td>
                               <td style={{ padding: "0.55rem 0.6rem", textAlign: "center", color: "#d97706" }}>{f.pending_count}</td>
-                              <td style={{ padding: "0.55rem 0.6rem", textAlign: "right", fontFamily: "monospace", fontWeight: 700 }}>
-                                {f.budget_disbursed.toLocaleString()}
+                              <td style={{ padding: "0.55rem 0.6rem", textAlign: "right" }}>
+                                <span style={{
+                                  fontSize: "0.75rem",
+                                  fontWeight: 700,
+                                  backgroundColor: rate >= 80 ? "#dcfce7" : "#fef3c7",
+                                  color: rate >= 80 ? "#16a34a" : "#d97706",
+                                  padding: "0.15rem 0.45rem",
+                                  borderRadius: "9999px"
+                                }}>
+                                  {rate}%
+                                </span>
                               </td>
                             </tr>
                           );
@@ -2571,850 +2211,6 @@ export const SearchPage: React.FC = () => {
                 </div>
               </div>
             </>
-          ) : null}
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* TAB 6: TRA CỨU BÙ LỖI OCR & TỪ VIẾT TẮT CTSV (FUZZY & N-GRAM)         */}
-      {/* ==================================================================== */}
-      {activeTab === "ocr_tolerant" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <Card padding="md">
-            <div>
-              <h3 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--gray-900)" }}>
-                Tra cứu Bao dung Lỗi OCR & Mở rộng Từ viết tắt Tiếng Việt
-              </h3>
-              <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", marginTop: "0.2rem" }}>
-                Khắc phục triệt để sai sót của bản scan OCR: Tự động sửa nhầm lẫn ký tự số/chữ (0/O, 1/l), phục hồi dấu tiếng Việt mờ nhòe và mở rộng từ viết tắt hồ sơ CTSV (hb, kkht, mghp, tcxh, drl, ktx).
-              </p>
-            </div>
-
-            {/* Input Form */}
-            <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-              <input
-                type="text"
-                value={ocrTolerantInput}
-                onChange={(e) => setOcrTolerantInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearchOcrTolerant(ocrTolerantInput)}
-                placeholder="Nhập từ khóa có lỗi OCR hoặc viết tắt (vd: don xin hb kkht sv 2O21)..."
-                style={{
-                  flex: 1,
-                  padding: "0.6rem 0.85rem",
-                  borderRadius: "var(--radius-md)",
-                  border: "2px solid var(--primary-400)",
-                  fontSize: "0.875rem",
-                }}
-              />
-              <Button
-                type="button"
-                variant="primary"
-                leftIcon={<Zap size={16} className={isOcrTolerantLoading ? "animate-spin" : ""} />}
-                onClick={() => handleSearchOcrTolerant(ocrTolerantInput)}
-                disabled={isOcrTolerantLoading}
-              >
-                {isOcrTolerantLoading ? "Đang xử lý..." : "Tra cứu Bù lỗi OCR"}
-              </Button>
-            </div>
-
-            {/* Suggestion Chips */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Gợi ý mẫu thử:</span>
-              {[
-                "don xin hb kkht sv 2O21",
-                "mghp mien giam hp sv",
-                "tro cap xh tcxh dlu",
-                "sinh hoat ktx noi tru sv",
-              ].map((chip, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setOcrTolerantInput(chip);
-                    handleSearchOcrTolerant(chip);
-                  }}
-                  style={{
-                    padding: "0.2rem 0.5rem",
-                    borderRadius: "9999px",
-                    border: "1px solid var(--primary-200)",
-                    backgroundColor: "#eef2ff",
-                    color: "var(--primary-700)",
-                    fontSize: "0.75rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Normalization & Results */}
-          {ocrTolerantData && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {/* Normalization Banner */}
-              <div
-                style={{
-                  padding: "1rem 1.25rem",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.5rem",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <CheckCircle2 size={18} color="#16a34a" />
-                  <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "#166534" }}>
-                    KẾT QUẢ NẮN CHỈNH & PHỤC HỒI NGỮ NGHĨA ELASTICSEARCH:
-                  </span>
-                </div>
-                <div style={{ fontSize: "0.875rem", color: "var(--gray-800)" }}>
-                  Truy vấn gốc: <code style={{ backgroundColor: "#fee2e2", color: "#991b1b", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>{ocrTolerantData.query}</code>
-                  {" ➔ "}
-                  Truy vấn nắn chỉnh: <strong style={{ color: "#15803d" }}>"{ocrTolerantData.normalized_query}"</strong>
-                </div>
-
-                {/* Badges for each corrected term */}
-                {ocrTolerantData.suggested_corrections.length > 0 && (
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
-                    {ocrTolerantData.suggested_corrections.map((sc, scIdx) => (
-                      <span
-                        key={scIdx}
-                        style={{
-                          fontSize: "0.75rem",
-                          padding: "0.2rem 0.6rem",
-                          borderRadius: "4px",
-                          backgroundColor: "#dcfce7",
-                          color: "#166534",
-                          border: "1px solid #86efac",
-                        }}
-                      >
-                        <strong>{sc.original_term}</strong> ➔ <em>{sc.corrected_term}</em> ({sc.reason})
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Matched Hits */}
-              <div>
-                <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.75rem" }}>
-                  Tài liệu Khớp sau khi Bù lỗi OCR ({ocrTolerantData.total} kết quả):
-                </h4>
-                {ocrTolerantData.results.length === 0 ? (
-                  <Card padding="md">
-                    <p style={{ textAlign: "center", color: "var(--gray-500)", margin: 0 }}>
-                      Không tìm thấy văn bản phù hợp sau khi nắn chỉnh truy vấn.
-                    </p>
-                  </Card>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                    {ocrTolerantData.results.map((hit) => (
-                      <Card key={hit.document_id} padding="md">
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-                          <div style={{ flex: 1 }}>
-                            <h4 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
-                              <Link to={`/documents/${hit.document_id}`} style={{ color: "var(--primary-700)", textDecoration: "none" }}>
-                                {formatDisplayTitle(hit.title).mainTitle}
-                              </Link>
-                            </h4>
-                            <div style={{ display: "flex", gap: "1rem", fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.3rem" }}>
-                              {hit.student_name && <span>Họ tên: {hit.student_name}</span>}
-                              {hit.student_id && <span>MSSV: {hit.student_id}</span>}
-                              <span>Điểm liên quan BM25: <strong>{hit.score.toFixed(2)}</strong></span>
-                            </div>
-                            {hit.content_snippet && (
-                              <div
-                                style={{
-                                  marginTop: "0.5rem",
-                                  padding: "0.5rem 0.75rem",
-                                  backgroundColor: "var(--gray-50)",
-                                  borderRadius: "4px",
-                                  fontSize: "0.8125rem",
-                                  color: "var(--gray-700)",
-                                  lineHeight: 1.5,
-                                }}
-                                dangerouslySetInnerHTML={{ __html: hit.content_snippet }}
-                              />
-                            )}
-                          </div>
-                          <Link to={`/documents/${hit.document_id}`}>
-                            <Button variant="outline" size="sm" rightIcon={<ArrowRight size={14} />}>
-                              Xem chi tiết
-                            </Button>
-                          </Link>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* TAB 7: CHẤT LƯỢNG SCAN OCR & HÀNG ĐỢI HIỆU ĐÍNH (HUMAN-IN-THE-LOOP)  */}
-      {/* ==================================================================== */}
-      {activeTab === "ocr_quality" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* Header Card */}
-          <Card padding="md">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <div style={{ padding: "0.6rem", borderRadius: "var(--radius-md)", backgroundColor: "#ecfdf5", color: "#059669" }}>
-                  <Activity size={24} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
-                    Kiểm định Chất lượng Nhận dạng OCR & Hàng đợi Hiệu đính
-                  </h3>
-                  <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", margin: 0, marginTop: "0.2rem" }}>
-                    Phân tích điểm số tin cậy (Confidence Score), phát hiện văn bản scan xiên/mờ và điều hướng vào hàng đợi rà soát Human-in-the-Loop.
-                  </p>
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                leftIcon={<RotateCcw size={14} />}
-                onClick={handleLoadOcrQuality}
-                disabled={isQualityLoading}
-              >
-                {isQualityLoading ? "Đang tải dữ liệu..." : "Cập nhật Thống kê"}
-              </Button>
-            </div>
-          </Card>
-
-          {/* 4 KPI Cards */}
-          {ocrQualityData && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem" }}>
-              <div style={{ padding: "1rem", borderRadius: "var(--radius-md)", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
-                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#166534", textTransform: "uppercase" }}>TỔNG BẢN SCAN ĐÃ SỐ HÓA</span>
-                <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#15803d", marginTop: "0.25rem" }}>
-                  {ocrQualityData.total_scanned_documents.toLocaleString()}
-                </div>
-                <span style={{ fontSize: "0.75rem", color: "#166534" }}>Tài liệu trong kho lưu trữ</span>
-              </div>
-              <div style={{ padding: "1rem", borderRadius: "var(--radius-md)", backgroundColor: "#eff6ff", border: "1px solid #bfdbfe" }}>
-                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1e40af", textTransform: "uppercase" }}>ĐỘ TIN CẬY TRUNG BÌNH</span>
-                <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#2563eb", marginTop: "0.25rem" }}>
-                  {Math.round(ocrQualityData.avg_confidence * 100)}%
-                </div>
-                <span style={{ fontSize: "0.75rem", color: "#1e40af" }}>Chất lượng nhận dạng tiếng Việt</span>
-              </div>
-              <div style={{ padding: "1rem", borderRadius: "var(--radius-md)", backgroundColor: "#fef3c7", border: "1px solid #fde68a" }}>
-                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#92400e", textTransform: "uppercase" }}>CẦN HIỆU ĐÍNH THỦ CÔNG</span>
-                <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#d97706", marginTop: "0.25rem" }}>
-                  {ocrQualityData.review_needed_count + ocrQualityData.poor_count}
-                </div>
-                <span style={{ fontSize: "0.75rem", color: "#92400e" }}>Bản scan có độ tin cậy &lt; 75%</span>
-              </div>
-              <div style={{ padding: "1rem", borderRadius: "var(--radius-md)", backgroundColor: "#fdf2f8", border: "1px solid #fbcfe8" }}>
-                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#9d174d", textTransform: "uppercase" }}>BẢN SCAN XIÊN GÓC</span>
-                <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#db2777", marginTop: "0.25rem" }}>
-                  {ocrQualityData.skewed_count}
-                </div>
-                <span style={{ fontSize: "0.75rem", color: "#9d174d" }}>Góc nghiêng &gt; 2.0 độ cần nắn chỉnh</span>
-              </div>
-            </div>
-          )}
-
-          {/* Distribution Ranges */}
-          {ocrQualityData && (
-            <Card padding="md">
-              <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.75rem" }}>
-                Phân bổ Dải Độ tin cậy OCR (Range Aggregations):
-              </h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {ocrQualityData.distribution.map((b, bIdx) => (
-                  <div key={bIdx}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8125rem", marginBottom: "0.25rem" }}>
-                      <span style={{ fontWeight: 600, color: "var(--gray-800)" }}>{b.range_label}</span>
-                      <span style={{ color: "var(--gray-500)" }}>
-                        <strong>{b.doc_count}</strong> tài liệu ({b.percentage}%) — <em>{b.action_needed}</em>
-                      </span>
-                    </div>
-                    <div style={{ height: "8px", borderRadius: "4px", backgroundColor: "#e2e8f0", overflow: "hidden" }}>
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${Math.min(b.percentage, 100)}%`,
-                          backgroundColor: bIdx === 0 ? "#10b981" : bIdx === 1 ? "#3b82f6" : bIdx === 2 ? "#f59e0b" : "#ef4444",
-                          borderRadius: "4px",
-                          transition: "width 0.4s ease",
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Review Queue Table */}
-          {reviewQueueData && (
-            <Card padding="md">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
-                  Hàng đợi Rà soát & Hiệu đính Thủ công ({reviewQueueData.total_items} tài liệu):
-                </h4>
-                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
-                  Ưu tiên xử lý tài liệu mức khẩn cấp (URGENT / HIGH)
-                </span>
-              </div>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
-                  <thead>
-                    <tr style={{ backgroundColor: "#f8fafc", borderBottom: "2px solid #e2e8f0", textAlign: "left" }}>
-                      <th style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--gray-700)" }}>Văn bản & Số hiệu</th>
-                      <th style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--gray-700)" }}>Sinh viên nộp</th>
-                      <th style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--gray-700)" }}>Độ tin cậy OCR</th>
-                      <th style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--gray-700)" }}>Góc nghiêng</th>
-                      <th style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--gray-700)" }}>Từ mờ/nghi vấn</th>
-                      <th style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--gray-700)" }}>Mức khẩn</th>
-                      <th style={{ padding: "0.6rem 0.75rem", fontWeight: 700, color: "var(--gray-700)" }}>Hành động</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reviewQueueData.items.map((item, idx) => (
-                      <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <div style={{ fontWeight: 600, color: "var(--gray-900)" }}>{item.title}</div>
-                          <div style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>{item.document_number || "Chưa có số"}</div>
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <div style={{ fontWeight: 600, color: "var(--gray-800)" }}>{item.student_name || "N/A"}</div>
-                          <div style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>MSSV: {item.student_id || "N/A"}</div>
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <span style={{ fontWeight: 700, color: item.ocr_confidence < 0.65 ? "#dc2626" : "#d97706" }}>
-                            {Math.round(item.ocr_confidence * 100)}%
-                          </span>
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem", color: "var(--gray-600)" }}>
-                          {item.skew_angle}°
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem", color: "var(--gray-600)" }}>
-                          {item.unclear_words_count} từ
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <span
-                            style={{
-                              fontSize: "0.6875rem",
-                              fontWeight: 700,
-                              padding: "0.15rem 0.45rem",
-                              borderRadius: "9999px",
-                              backgroundColor: item.urgency === "URGENT" ? "#fee2e2" : item.urgency === "HIGH" ? "#fef3c7" : "#e0e7ff",
-                              color: item.urgency === "URGENT" ? "#991b1b" : item.urgency === "HIGH" ? "#92400e" : "#3730a3",
-                            }}
-                          >
-                            {item.urgency}
-                          </span>
-                        </td>
-                        <td style={{ padding: "0.6rem 0.75rem" }}>
-                          <Link to={`/documents/${item.document_id}`}>
-                            <Button variant="outline" size="sm">
-                              Hiệu đính
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* TAB 8: GIÁM SÁT THỜI GIAN THỰC (WATCHERS & ĐỊA LÝ NGHỊ ĐỊNH 81)       */}
-      {/* ==================================================================== */}
-      {activeTab === "realtime_watchers" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* Sub-Card 1: Thẩm định Địa lý Xã ĐBKK NĐ 81/2021 */}
-          <Card padding="md">
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
-              <div style={{ padding: "0.6rem", borderRadius: "var(--radius-md)", backgroundColor: "#f3e8ff", color: "#7c3aed" }}>
-                <MapPin size={24} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
-                  Thẩm định Địa giới Thường trú theo Nghị định 81/2021 & QĐ 861/QĐ-TTg
-                </h3>
-                <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", margin: 0, marginTop: "0.2rem" }}>
-                  Ứng dụng Elasticsearch Geo-search đối chiếu địa chỉ sinh viên với danh mục xã Khu vực III (Đặc biệt khó khăn) tại Lâm Đồng & Tây Nguyên.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)", alignSelf: "center" }}>Địa chỉ mẫu kiểm thử:</span>
-              {[
-                "Thôn Đạ Tro, Xã Đạ Chais, Huyện Lạc Dương, Tỉnh Lâm Đồng",
-                "Xã Liêng S'rônh, Huyện Đam Rông, Tỉnh Lâm Đồng",
-                "Xã Tân Thượng, Huyện Di Linh, Tỉnh Lâm Đồng",
-                "Số 01 Phù Đổng Thiên Vương, Phường 8, TP Đà Lạt",
-              ].map((sampleAddr, sIdx) => (
-                <button
-                  key={sIdx}
-                  type="button"
-                  onClick={() => {
-                    setGeoAddressInput(sampleAddr);
-                    handleVerifyGeoArea(sampleAddr);
-                  }}
-                  style={{
-                    padding: "0.25rem 0.6rem",
-                    borderRadius: "9999px",
-                    fontSize: "0.75rem",
-                    border: "1px solid #d8b4fe",
-                    backgroundColor: "#faf5ff",
-                    color: "#6b21a8",
-                    cursor: "pointer",
-                  }}
-                >
-                  {sampleAddr.split(",")[1]?.trim() || sampleAddr.slice(0, 20)}
-                </button>
-              ))}
-            </div>
-
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <input
-                type="text"
-                value={geoAddressInput}
-                onChange={(e) => setGeoAddressInput(e.target.value)}
-                placeholder="Nhập địa chỉ ghi trên CCCD/Hộ khẩu sinh viên..."
-                style={{
-                  flex: 1,
-                  padding: "0.6rem 0.9rem",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-color)",
-                  fontSize: "0.875rem",
-                }}
-              />
-              <Button
-                type="button"
-                variant="primary"
-                onClick={() => handleVerifyGeoArea(geoAddressInput)}
-                disabled={isGeoLoading}
-              >
-                {isGeoLoading ? "Đang thẩm định..." : "Thẩm định Ngay"}
-              </Button>
-            </div>
-
-            {geoVerifyResult && (
-              <div
-                style={{
-                  marginTop: "1rem",
-                  padding: "1rem",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: geoVerifyResult.is_priority_area ? "#f0fdf4" : "#f8fafc",
-                  border: `1px solid ${geoVerifyResult.is_priority_area ? "#86efac" : "#cbd5e1"}`,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: geoVerifyResult.is_priority_area ? "#15803d" : "#475569" }}>
-                    KẾT QUẢ THẨM ĐỊNH: {geoVerifyResult.area_category}
-                  </span>
-                  <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: geoVerifyResult.tuition_reduction_rate > 0 ? "#15803d" : "#64748b" }}>
-                    {geoVerifyResult.tuition_reduction_rate > 0 ? `GIẢM ${geoVerifyResult.tuition_reduction_rate}% HỌC PHÍ` : "KHÔNG THUỘC DIỆN MIỄN GIẢM"}
-                  </span>
-                </div>
-                <div style={{ fontSize: "0.875rem", color: "var(--gray-900)", fontWeight: 600 }}>
-                  Địa phương đối soát: {geoVerifyResult.matched_commune}, {geoVerifyResult.matched_district}, {geoVerifyResult.matched_province} (Cách trường ~{geoVerifyResult.distance_to_dlu_km} km)
-                </div>
-                {geoVerifyResult.subsidy_amount_monthly > 0 && (
-                  <div style={{ fontSize: "0.8125rem", color: "#166534", marginTop: "0.25rem" }}>
-                    Trợ cấp chi phí học tập hàng tháng: <strong>{geoVerifyResult.subsidy_amount_monthly.toLocaleString()} VNĐ/tháng</strong>
-                  </div>
-                )}
-                <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.35rem" }}>
-                  Căn cứ pháp lý: <em>{geoVerifyResult.legal_reference}</em> — {geoVerifyResult.notes}
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Sub-Card 2: Watchers & Triggered Events */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1rem" }}>
-            <Card padding="md">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
-                  Bộ giám sát Chỉ mục Đang hoạt động ({watchersList.length}):
-                </h4>
-                <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#15803d", backgroundColor: "#dcfce7", padding: "0.15rem 0.4rem", borderRadius: "9999px" }}>
-                  Live Active
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                {watchersList.map((w, wIdx) => (
-                  <div
-                    key={wIdx}
-                    style={{
-                      padding: "0.65rem 0.85rem",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: "#f8fafc",
-                      border: "1px solid var(--border-color)",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontWeight: 700, fontSize: "0.8125rem", color: "var(--gray-900)" }}>{w.name}</span>
-                      <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#2563eb", backgroundColor: "#dbeafe", padding: "0.1rem 0.35rem", borderRadius: "4px" }}>
-                        +{w.matches_count_last_24h} hôm nay
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--gray-600)", marginTop: "0.2rem" }}>
-                      Điều kiện DSL: <code style={{ backgroundColor: "#e2e8f0", padding: "0.1rem 0.3rem", borderRadius: "3px" }}>{w.query_text}</code>
-                    </div>
-                    <div style={{ fontSize: "0.6875rem", color: "var(--gray-400)", marginTop: "0.25rem" }}>
-                      Kích hoạt gần nhất: {w.last_triggered_at ? new Date(w.last_triggered_at).toLocaleString("vi-VN") : "Chưa kích hoạt"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card padding="md">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
-                  Sự kiện Kích hoạt Thời gian thực (Real-Time Feed):
-                </h4>
-                <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#b91c1c", backgroundColor: "#fee2e2", padding: "0.15rem 0.4rem", borderRadius: "9999px" }}>
-                  Live Alerts
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                {triggeredEvents.map((evt, eIdx) => (
-                  <div
-                    key={eIdx}
-                    style={{
-                      padding: "0.65rem 0.85rem",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: evt.priority === "URGENT" ? "#fff1f2" : "#fefce8",
-                      border: `1px solid ${evt.priority === "URGENT" ? "#fecdd3" : "#fef08a"}`,
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontWeight: 700, fontSize: "0.8125rem", color: evt.priority === "URGENT" ? "#9f1239" : "#854d0e" }}>
-                        {evt.document_title}
-                      </span>
-                      <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "#ffffff", backgroundColor: evt.priority === "URGENT" ? "#e11d48" : "#ca8a04", padding: "0.1rem 0.35rem", borderRadius: "4px" }}>
-                        {evt.priority}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--gray-700)", marginTop: "0.2rem" }}>
-                      Sinh viên: <strong>{evt.student_name}</strong> (MSSV: {evt.student_id})
-                    </div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--gray-600)", marginTop: "0.15rem" }}>
-                      {evt.match_reason}
-                    </div>
-                    <div style={{ fontSize: "0.6875rem", color: "var(--gray-400)", marginTop: "0.25rem" }}>
-                      Thời điểm: {new Date(evt.triggered_at).toLocaleTimeString("vi-VN")}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* TAB: TÌM KIẾM LAI RRF (BM25 + kNN RECIPROCAL RANK FUSION - ES 8.9+)  */}
-      {/* ==================================================================== */}
-      {activeTab === "hybrid_rrf" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* Header & Concept Explanation */}
-          <Card padding="md" style={{ background: "linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)", border: "1px solid #bfdbfe" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
-              <div style={{ maxWidth: "800px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
-                  <div style={{ backgroundColor: "#2563eb", color: "#ffffff", padding: "0.3rem", borderRadius: "0.5rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Cpu size={20} />
-                  </div>
-                  <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--gray-900)", margin: 0 }}>
-                    Tìm kiếm Lai Đa Tầng RRF (Reciprocal Rank Fusion — BM25 & kNN Dense Vector)
-                  </h3>
-                  <span style={{ fontSize: "0.6875rem", fontWeight: 700, backgroundColor: "#dbeafe", color: "#1d4ed8", padding: "0.2rem 0.5rem", borderRadius: "9999px" }}>
-                    Elasticsearch 8.9+ Native
-                  </span>
-                </div>
-                <p style={{ fontSize: "0.8125rem", color: "var(--gray-600)", lineHeight: 1.5, margin: 0 }}>
-                  Thuật toán RRF giải quyết triệt để sự mất cân xứng độ lớn điểm số giữa <strong>BM25 (điểm số không chặn trên)</strong> và <strong>Vector kNN Cosine (trong khoảng 0 đến 1)</strong>. 
-                  RRF xếp hạng độc lập hai phương thức và dung hòa dựa trên vị trí thứ tự: 
-                  <code style={{ marginLeft: "0.35rem", padding: "0.15rem 0.45rem", backgroundColor: "#ffffff", borderRadius: "4px", border: "1px solid #bfdbfe", fontWeight: 700, color: "#1e40af" }}>
-                    RRF(d) = Σ 1 / (k + rank_m(d))
-                  </code>
-                </p>
-              </div>
-
-              {/* Formula & Parameter Quick Info */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", backgroundColor: "#ffffff", padding: "0.6rem 0.85rem", borderRadius: "var(--radius-md)", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 600 }}>HẰNG SỐ LÀM MỊN (RANK CONSTANT):</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  {[
-                    { label: "k = 20 (Khuyến nghị ES 8.9)", val: 20 },
-                    { label: "k = 60 (Cormack 2009)", val: 60 },
-                  ].map((preset) => (
-                    <button
-                      key={preset.val}
-                      type="button"
-                      onClick={() => {
-                        setHybridConstantK(preset.val);
-                        handleSearchHybridRrf(hybridInput, preset.val);
-                      }}
-                      style={{
-                        padding: "0.25rem 0.55rem",
-                        borderRadius: "4px",
-                        fontSize: "0.75rem",
-                        fontWeight: hybridConstantK === preset.val ? 700 : 500,
-                        backgroundColor: hybridConstantK === preset.val ? "#2563eb" : "#f1f5f9",
-                        color: hybridConstantK === preset.val ? "#ffffff" : "var(--gray-700)",
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Input Search Box */}
-            <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-              <div style={{ position: "relative", flex: 1 }}>
-                <Search size={18} style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "var(--gray-400)" }} />
-                <input
-                  type="text"
-                  value={hybridInput}
-                  onChange={(e) => setHybridInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearchHybridRrf(hybridInput)}
-                  placeholder="Nhập câu truy vấn ngữ nghĩa hoặc từ khóa chính xác (vd: nghị định 81 miễn giảm học phí sv nghèo khó khăn)..."
-                  style={{
-                    width: "100%",
-                    padding: "0.65rem 1rem 0.65rem 2.5rem",
-                    borderRadius: "var(--radius-md)",
-                    border: "2px solid #3b82f6",
-                    fontSize: "0.875rem",
-                    backgroundColor: "#ffffff",
-                    boxShadow: "0 2px 4px rgba(59, 130, 246, 0.1)",
-                  }}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="primary"
-                leftIcon={<Zap size={16} className={isHybridLoading ? "animate-spin" : ""} />}
-                onClick={() => handleSearchHybridRrf(hybridInput)}
-                disabled={isHybridLoading}
-                style={{ padding: "0 1.25rem", whiteSpace: "nowrap" }}
-              >
-                {isHybridLoading ? "Đang dung hòa RRF..." : "Tìm kiếm Lai RRF"}
-              </Button>
-            </div>
-
-            {/* Suggested Scenarios */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 600 }}>Kịch bản thực nghiệm:</span>
-              {[
-                "nghị định 81 miễn giảm học phí sv nghèo khó khăn",
-                "học bổng khuyến khích học tập dlu kỳ 1",
-                "đơn xin tạm hoãn thi kết thúc học phần vì sức khỏe",
-                "hỗ trợ sinh viên mồ côi dân tộc thiểu số ký túc xá",
-              ].map((querySample, sIdx) => (
-                <button
-                  key={sIdx}
-                  type="button"
-                  onClick={() => {
-                    setHybridInput(querySample);
-                    handleSearchHybridRrf(querySample);
-                  }}
-                  style={{
-                    padding: "0.2rem 0.55rem",
-                    borderRadius: "9999px",
-                    border: "1px solid #bfdbfe",
-                    backgroundColor: "#eff6ff",
-                    color: "#1e40af",
-                    fontSize: "0.75rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  {querySample}
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Execution Metrics Panel */}
-          {hybridData && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem" }}>
-              <Card padding="sm" style={{ borderLeft: "4px solid #2563eb", backgroundColor: "#f8fafc" }}>
-                <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Động cơ tìm kiếm</span>
-                <div style={{ fontSize: "0.9375rem", fontWeight: 800, color: "#1e40af", marginTop: "0.15rem" }}>
-                  {hybridData.metrics?.engine || "Elasticsearch 8.9+ RRF"}
-                </div>
-                <span style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Thời gian: {hybridData.metrics?.execution_time_ms ?? 12} ms</span>
-              </Card>
-
-              <Card padding="sm" style={{ borderLeft: "4px solid #16a34a", backgroundColor: "#f8fafc" }}>
-                <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Khớp Kép (Hybrid Both)</span>
-                <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#15803d", marginTop: "0.15rem" }}>
-                  {hybridData.metrics?.both_count ?? hybridData.results.filter(r => r.match_type === "HYBRID_BOTH").length}
-                </div>
-                <span style={{ fontSize: "0.6875rem", color: "#166534" }}>Đạt thứ hạng cao nhất nhờ cộng hưởng</span>
-              </Card>
-
-              <Card padding="sm" style={{ borderLeft: "4px solid #0284c7", backgroundColor: "#f8fafc" }}>
-                <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Chỉ Khớp Từ Khóa (BM25)</span>
-                <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#0369a1", marginTop: "0.15rem" }}>
-                  {hybridData.metrics?.keyword_only_count ?? hybridData.results.filter(r => r.match_type === "KEYWORD_ONLY").length}
-                </div>
-                <span style={{ fontSize: "0.6875rem", color: "#0284c7" }}>Khớp chính xác số hiệu, điều khoản</span>
-              </Card>
-
-              <Card padding="sm" style={{ borderLeft: "4px solid #9333ea", backgroundColor: "#f8fafc" }}>
-                <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Chỉ Khớp Ngữ Nghĩa (kNN)</span>
-                <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#7e22ce", marginTop: "0.15rem" }}>
-                  {hybridData.metrics?.semantic_only_count ?? hybridData.results.filter(r => r.match_type === "SEMANTIC_ONLY").length}
-                </div>
-                <span style={{ fontSize: "0.6875rem", color: "#9333ea" }}>Tìm ra tài liệu đồng nghĩa, cách diễn đạt khác</span>
-              </Card>
-            </div>
-          )}
-
-          {/* Results List */}
-          {isHybridLoading && !hybridData ? (
-            <Card padding="lg">
-              <div style={{ padding: "3rem", textAlign: "center", color: "var(--gray-500)" }}>
-                <Clock className="animate-spin" size={32} style={{ margin: "0 auto 0.75rem", color: "var(--primary-600)" }} />
-                <span>Đang xếp hạng song song BM25 và kNN vector 768 chiều qua RRF...</span>
-              </div>
-            </Card>
-          ) : hybridData && hybridData.results.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-              {hybridData.results.map((hit, hIdx) => {
-                const titleInfo = formatDisplayTitle(hit.title);
-                const isBoth = hit.match_type === "HYBRID_BOTH";
-                const isBm25 = hit.match_type === "KEYWORD_ONLY";
-                return (
-                  <Card
-                    key={hit.document_id || hIdx}
-                    padding="md"
-                    style={{
-                      borderLeft: isBoth ? "5px solid #16a34a" : isBm25 ? "5px solid #2563eb" : "5px solid #9333ea",
-                      backgroundColor: isBoth ? "#fcfdfc" : "#ffffff",
-                      transition: "box-shadow 0.2s ease",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
-                      <div style={{ flex: 1, minWidth: "280px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
-                          <span
-                            style={{
-                              padding: "0.2rem 0.6rem",
-                              borderRadius: "9999px",
-                              fontSize: "0.6875rem",
-                              fontWeight: 800,
-                              backgroundColor: isBoth ? "#dcfce7" : isBm25 ? "#dbeafe" : "#f3e8ff",
-                              color: isBoth ? "#166534" : isBm25 ? "#1e40af" : "#6b21a8",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "0.3rem",
-                            }}
-                          >
-                            {isBoth ? <Sparkles size={12} /> : isBm25 ? <Search size={12} /> : <Cpu size={12} />}
-                            {isBoth ? "⚡ KHỚP KÉP (HYBRID BOTH)" : isBm25 ? "🔍 TỪ KHÓA CHÍNH XÁC (BM25)" : "🧠 NGỮ NGHĨA VECTOR (kNN)"}
-                          </span>
-                          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", backgroundColor: "var(--gray-100)", padding: "0.15rem 0.45rem", borderRadius: "4px" }}>
-                            {hit.category_name}
-                          </span>
-                          {titleInfo.code && (
-                            <span style={{ fontSize: "0.75rem", fontFamily: "monospace", color: "#1d4ed8", backgroundColor: "#eff6ff", padding: "0.15rem 0.45rem", borderRadius: "4px", fontWeight: 700 }}>
-                              Số: {titleInfo.code}
-                            </span>
-                          )}
-                        </div>
-
-                        <Link
-                          to={`/documents/${hit.document_id}`}
-                          style={{
-                            fontSize: "1.05rem",
-                            fontWeight: 700,
-                            color: "var(--primary-700)",
-                            textDecoration: "none",
-                            lineHeight: 1.4,
-                            display: "block",
-                          }}
-                        >
-                          {titleInfo.mainTitle}
-                        </Link>
-
-                        {(hit.student_name || hit.student_id) && (
-                          <div style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.25rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                            <span>Sinh viên: <strong>{hit.student_name || "N/A"}</strong></span>
-                            <span>MSSV: <code style={{ color: "var(--primary-700)", fontWeight: 700 }}>{hit.student_id || "N/A"}</code></span>
-                          </div>
-                        )}
-
-                        {hit.content_snippet && (
-                          <p style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.4rem", lineHeight: 1.5 }}>
-                            {hit.content_snippet}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Rank & RRF Score Badges Box */}
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-end",
-                          gap: "0.4rem",
-                          backgroundColor: "#f8fafc",
-                          padding: "0.6rem 0.85rem",
-                          borderRadius: "var(--radius-md)",
-                          border: "1px solid #e2e8f0",
-                          minWidth: "210px",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-                          <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Điểm RRF:</span>
-                          <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "#1d4ed8", fontFamily: "monospace" }}>
-                            {hit.rrf_score.toFixed(5)}
-                          </span>
-                        </div>
-
-                        <div style={{ display: "flex", gap: "0.5rem", fontSize: "0.75rem" }}>
-                          <span style={{ color: hit.bm25_rank ? "#1e40af" : "var(--gray-400)", backgroundColor: hit.bm25_rank ? "#dbeafe" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
-                            BM25: {hit.bm25_rank ? `#${hit.bm25_rank}` : "Không khớp"}
-                          </span>
-                          <span style={{ color: hit.knn_rank ? "#6b21a8" : "var(--gray-400)", backgroundColor: hit.knn_rank ? "#f3e8ff" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
-                            kNN: {hit.knn_rank ? `#${hit.knn_rank}` : "Không khớp"}
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)", textAlign: "right", marginTop: "0.15rem" }}>
-                          {hit.explanation}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : hybridData ? (
-            <Card padding="lg">
-              <div style={{ textAlign: "center", padding: "2rem", color: "var(--gray-500)" }}>
-                Không tìm thấy tài liệu phù hợp với truy vấn lai RRF. Vui lòng thử từ khóa khác.
-              </div>
-            </Card>
           ) : null}
         </div>
       )}

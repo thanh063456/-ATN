@@ -5,7 +5,7 @@ import sqlite3
 import json
 from collections import defaultdict
 
-sys.stdout.reconfigure(encoding='utf-8')
+getattr(sys.stdout, "reconfigure", lambda **kwargs: None)(encoding="utf-8")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "data.db")

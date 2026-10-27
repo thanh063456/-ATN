@@ -98,6 +98,24 @@ export const UploadPage: React.FC = () => {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [globalCategory, setGlobalCategory] = useState("");
+  const [mergeImages, setMergeImages] = useState<boolean>(true);
+  const [mergedTitle, setMergedTitle] = useState<string>("");
+
+  const isImageFile = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    return ["jpg", "jpeg", "png", "tiff", "tif", "bmp", "webp"].includes(ext);
+  };
+
+  const pendingImages = queue.filter((q) => q.status === "pending" && isImageFile(q.file.name));
+  const canMerge = pendingImages.length >= 2;
+
+  useEffect(() => {
+    if (canMerge && !mergedTitle && pendingImages.length > 0) {
+      const firstStem = pendingImages[0].file.name.replace(/\.[^/.]+$/, "");
+      const cleaned = firstStem.replace(/[-_]?(?:images?|page|p|scan)[-_]?\d+$/i, "").trim();
+      setMergedTitle(cleaned || firstStem);
+    }
+  }, [queue.length, canMerge, mergedTitle]);
 
   const validateAndAdd = useCallback(
     (files: FileList | File[]) => {
@@ -227,26 +245,81 @@ export const UploadPage: React.FC = () => {
     let successCount = 0;
     let failCount = 0;
 
-    for (const item of pending) {
-      updateItem(item.id, { status: "uploading", progress: 20 });
+    const currentPendingImages = pending.filter((q) => isImageFile(q.file.name));
+    const shouldMerge = mergeImages && currentPendingImages.length >= 2;
+
+    if (shouldMerge) {
+      // Sắp xếp tự nhiên theo tên file / số thứ tự trang
+      const sortedImages = [...currentPendingImages].sort((a, b) =>
+        a.file.name.localeCompare(b.file.name, undefined, { numeric: true, sensitivity: "base" })
+      );
+
+      sortedImages.forEach((item) => updateItem(item.id, { status: "uploading", progress: 30 }));
       try {
-        updateItem(item.id, { progress: 60 });
+        const imageFiles = sortedImages.map((item) => item.file);
+        const titleToUse = mergedTitle.trim() || imageFiles[0].name.replace(/\.[^/.]+$/, "");
+
+        sortedImages.forEach((item) => updateItem(item.id, { progress: 60 }));
         const res = await documentsApi.upload(
-          item.file,
-          item.title.trim() || item.file.name,
-          item.category || undefined
+          imageFiles,
+          titleToUse,
+          globalCategory || undefined,
+          true
         );
-        updateItem(item.id, { status: "success", progress: 100, result: res });
+        sortedImages.forEach((item) => updateItem(item.id, { status: "success", progress: 100, result: res }));
         successCount++;
+        addToast({
+          type: "success",
+          title: "Ghép tài liệu & Tải lên thành công",
+          message: `Đã tự động ghép ${imageFiles.length} file ảnh thành 1 tài liệu PDF và đưa vào hàng đợi OCR.`,
+        });
       } catch (err: any) {
-        updateItem(item.id, { status: "error", progress: 0, error: err.message || "Upload thất bại" });
-        failCount++;
+        sortedImages.forEach((item) =>
+          updateItem(item.id, { status: "error", progress: 0, error: err.message || "Upload thất bại" })
+        );
+        failCount += sortedImages.length;
+      }
+
+      // Xử lý các file còn lại nếu có (ví dụ file PDF đi kèm)
+      const nonImages = pending.filter((q) => !isImageFile(q.file.name));
+      for (const item of nonImages) {
+        updateItem(item.id, { status: "uploading", progress: 20 });
+        try {
+          updateItem(item.id, { progress: 60 });
+          const res = await documentsApi.upload(
+            item.file,
+            item.title.trim() || item.file.name,
+            item.category || undefined
+          );
+          updateItem(item.id, { status: "success", progress: 100, result: res });
+          successCount++;
+        } catch (err: any) {
+          updateItem(item.id, { status: "error", progress: 0, error: err.message || "Upload thất bại" });
+          failCount++;
+        }
+      }
+    } else {
+      for (const item of pending) {
+        updateItem(item.id, { status: "uploading", progress: 20 });
+        try {
+          updateItem(item.id, { progress: 60 });
+          const res = await documentsApi.upload(
+            item.file,
+            item.title.trim() || item.file.name,
+            item.category || undefined
+          );
+          updateItem(item.id, { status: "success", progress: 100, result: res });
+          successCount++;
+        } catch (err: any) {
+          updateItem(item.id, { status: "error", progress: 0, error: err.message || "Upload thất bại" });
+          failCount++;
+        }
       }
     }
 
     setIsRunning(false);
 
-    if (successCount > 0) {
+    if (successCount > 0 && !shouldMerge) {
       addToast({
         type: "success",
         title: `Tải lên hoàn tất — ${successCount} file thành công`,
@@ -481,9 +554,67 @@ export const UploadPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Banner tùy chọn ghép nhiều ảnh thành 1 tài liệu PDF */}
+          {canMerge && (
+            <div
+              style={{
+                backgroundColor: mergeImages ? "#eef2ff" : "#f9fafb",
+                border: `1.5px solid ${mergeImages ? "#818cf8" : "var(--border-color)"}`,
+                borderRadius: "var(--radius-md)",
+                padding: "0.85rem 1rem",
+                marginBottom: "0.85rem",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: 700, fontSize: "0.875rem", color: mergeImages ? "#3730a3" : "var(--gray-800)" }}>
+                  <input
+                    type="checkbox"
+                    checked={mergeImages}
+                    onChange={(e) => setMergeImages(e.target.checked)}
+                    style={{ width: "18px", height: "18px", accentColor: "#6366f1", cursor: "pointer" }}
+                  />
+                  <span>⚡ Ghép các file ảnh thành 1 tài liệu nhiều trang (PDF)</span>
+                </label>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: mergeImages ? "#4f46e5" : "var(--gray-500)", backgroundColor: mergeImages ? "#e0e7ff" : "var(--gray-200)", padding: "2px 8px", borderRadius: "9999px" }}>
+                  {pendingImages.length} trang ảnh
+                </span>
+              </div>
+
+              {mergeImages && (
+                <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px dashed #c7d2fe" }}>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "#4338ca", marginBottom: "0.3rem" }}>
+                    Tiêu đề tài liệu hợp nhất (gồm {pendingImages.length} trang ảnh):
+                  </label>
+                  <input
+                    type="text"
+                    value={mergedTitle}
+                    onChange={(e) => setMergedTitle(e.target.value)}
+                    placeholder="Nhập tiêu đề tài liệu sau khi ghép các trang ảnh..."
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem 0.75rem",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                      borderRadius: "6px",
+                      border: "1px solid #a5b4fc",
+                      backgroundColor: "#ffffff",
+                      color: "var(--gray-900)",
+                    }}
+                  />
+                  <div style={{ fontSize: "0.72rem", color: "#6366f1", marginTop: "4px" }}>
+                    ✓ Các ảnh sẽ được ghép nối theo thứ tự trang tự nhiên thành 1 file PDF thống nhất, giữ nguyên chất lượng và chạy OCR cho toàn bộ các trang.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* File rows */}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            {queue.map((item) => (
+            {queue.map((item, idx) => {
+              const imageIndex = pendingImages.findIndex((pi) => pi.id === item.id);
+              return (
               <div
                 key={item.id}
                 style={{
@@ -508,22 +639,37 @@ export const UploadPage: React.FC = () => {
 
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {item.status === "pending" ? (
-                      <input
-                        type="text"
-                        value={item.title}
-                        onChange={(e) => updateItem(item.id, { title: e.target.value })}
-                        style={{
-                          width: "100%", fontSize: "0.8rem", fontWeight: 600,
-                          color: "var(--gray-900)", border: "none", background: "transparent",
-                          outline: "none", padding: 0,
-                        }}
-                      />
-                    ) : (
-                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--gray-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {item.title || item.file.name}
-                      </div>
-                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {mergeImages && canMerge && isImageFile(item.file.name) && imageIndex !== -1 && (
+                        <span style={{
+                          backgroundColor: "#6366f1",
+                          color: "#fff",
+                          fontSize: "0.65rem",
+                          fontWeight: 700,
+                          padding: "1px 6px",
+                          borderRadius: "4px",
+                          flexShrink: 0,
+                        }}>
+                          Trang {imageIndex + 1}
+                        </span>
+                      )}
+                      {item.status === "pending" ? (
+                        <input
+                          type="text"
+                          value={item.title}
+                          onChange={(e) => updateItem(item.id, { title: e.target.value })}
+                          style={{
+                            width: "100%", fontSize: "0.8rem", fontWeight: 600,
+                            color: "var(--gray-900)", border: "none", background: "transparent",
+                            outline: "none", padding: 0,
+                          }}
+                        />
+                      ) : (
+                        <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--gray-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {item.title || item.file.name}
+                        </div>
+                      )}
+                    </div>
                     <div style={{ fontSize: "0.7rem", color: "var(--gray-500)", marginTop: "2px" }}>
                       {item.file.name} · {formatSize(item.file.size)}
                       {item.status === "error" && (
@@ -591,7 +737,8 @@ export const UploadPage: React.FC = () => {
                   )}
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
 
           {/* Summary */}
@@ -643,7 +790,11 @@ export const UploadPage: React.FC = () => {
               leftIcon={<Sparkles size={17} />}
               onClick={handleUploadAll}
             >
-              {isRunning ? "Đang upload..." : `Upload ${pendingCount > 0 ? `${pendingCount} file` : "tất cả"} & OCR`}
+              {isRunning
+                ? "Đang xử lý..."
+                : mergeImages && canMerge
+                ? `Ghép ${pendingImages.length} ảnh thành 1 tài liệu & OCR`
+                : `Upload ${pendingCount > 0 ? `${pendingCount} file` : "tất cả"} & OCR`}
             </Button>
           )}
         </div>

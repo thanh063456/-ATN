@@ -45,9 +45,11 @@ class SearchIndexService:
         tags: list[str] | None = None,
         priority_score: int | None = None,
         metadata_extra: dict | None = None,
+        is_public: bool = False,
         is_deleted: bool = False,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
+        **kwargs: Any,
     ) -> dict | None:
         """
         Index hoặc update toàn bộ document vào Elasticsearch.
@@ -76,6 +78,7 @@ class SearchIndexService:
             "uploaded_by": str(uploaded_by) if uploaded_by else None,
             "ocr_status": ocr_status,
             "ocr_confidence": ocr_confidence,
+            "is_public": is_public,
             "tags": tags or [],
             "priority_score": priority_score,
             "metadata_extra": metadata_extra or {},
@@ -98,6 +101,34 @@ class SearchIndexService:
         except Exception as exc:
             logger.error(f"Failed to index document {doc_id_str} in Elasticsearch: {exc}")
             raise SearchIndexException(f"Lỗi khi index tài liệu {doc_id_str} vào Elasticsearch: {str(exc)}") from exc
+
+    async def update_document_public_status(
+        self,
+        document_id: UUID | str,
+        is_public: bool,
+        updated_at: datetime | None = None,
+    ) -> None:
+        """Cập nhật trạng thái công khai (is_public) vào Elasticsearch."""
+        if not is_es_available():
+            return
+        es = get_es_client()
+        doc_id_str = str(document_id)
+        now_iso = (updated_at or datetime.now()).isoformat()
+
+        try:
+            await es.update(
+                index=self.index_name,
+                id=doc_id_str,
+                doc={
+                    "is_public": is_public,
+                    "updated_at": now_iso,
+                },
+                doc_as_upsert=True,
+                refresh="wait_for",
+            )
+            logger.info(f"Updated is_public in ES for {doc_id_str} to {is_public}")
+        except Exception as exc:
+            logger.warning(f"Failed to update is_public in ES for {doc_id_str}: {exc}")
 
     async def update_document_status(
         self,

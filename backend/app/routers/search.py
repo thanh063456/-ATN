@@ -431,17 +431,20 @@ async def search_documents(
                 {"term": {"is_deleted": False}}
             ]
 
-            if role_name == "STUDENT":
-                user_id_str = str(current_user.id) if current_user else ""
-                filter_clause.append({
-                    "bool": {
-                        "should": [
-                            {"term": {"uploaded_by": user_id_str}} if user_id_str else {"term": {"ocr_status": "APPROVED"}},
-                            {"term": {"ocr_status": "APPROVED"}},
-                        ],
-                        "minimum_should_match": 1,
-                    }
-                })
+            if role_name not in ("ADMIN", "STAFF"):
+                if current_user:
+                    user_id_str = str(current_user.id)
+                    filter_clause.append({
+                        "bool": {
+                            "should": [
+                                {"term": {"is_public": True}},
+                                {"term": {"uploaded_by": user_id_str}},
+                            ],
+                            "minimum_should_match": 1,
+                        }
+                    })
+                else:
+                    filter_clause.append({"term": {"is_public": True}})
 
             if category_code:
                 filter_clause.append({"term": {"category_code": category_code}})
@@ -696,16 +699,15 @@ async def search_documents(
             )
         )
 
-        # RBAC Filter
-        if role_name == "STUDENT":
+        # RBAC Filter: Sinh viên/Khách chỉ tìm thấy tài liệu công khai hoặc do chính mình tải lên
+        if role_name not in ("ADMIN", "STAFF"):
             if current_user:
                 stmt = stmt.where(
-                    (Document.uploaded_by == current_user.id) |
-                    (Document.uploaded_by.is_(None)) |
-                    (Document.ocr_status == "APPROVED")
+                    (Document.is_public == True) |
+                    (Document.uploaded_by == current_user.id)
                 )
             else:
-                stmt = stmt.where(Document.ocr_status == "APPROVED")
+                stmt = stmt.where(Document.is_public == True)
 
         target_category = doc_type_code or category_code
         if target_category:
@@ -1545,7 +1547,7 @@ async def get_search_dashboard_analytics(
             avg=round(float(avg_c or 0.0), 3),
             min=round(float(min_c or 0.0), 3),
             max=round(float(max_c or 0.0), 3),
-            count=int(cnt_c or 0),
+            count=cnt_c or 0,
         )
 
         now_dt = datetime.now()

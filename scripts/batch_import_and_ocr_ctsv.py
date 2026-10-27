@@ -172,7 +172,7 @@ async def process_single_pdf(
         processed_text = ""
         confidence = 0.0
 
-    ocr_duration_ms = int(round((time.perf_counter() - t_ocr_start) * 1000))
+    ocr_duration_ms = round((time.perf_counter() - t_ocr_start) * 1000)
 
     # 7. Phân loại loại văn bản và trích xuất thực thể
     text_for_analysis = processed_text if processed_text else raw_text

@@ -20,6 +20,8 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Globe,
+  Lock,
 } from "lucide-react";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
@@ -71,6 +73,8 @@ export const DocumentsPage: React.FC = () => {
   const [tagSummary, setTagSummary] = useState<{ tag: string; count: number; priority: number; color: string; category: string }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [publicFilter, setPublicFilter] = useState<"ALL" | "PUBLIC" | "PRIVATE">("ALL");
+  const [togglingPublicId, setTogglingPublicId] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
 
   // 📄 Phân trang & Thống kê toàn hệ thống
@@ -249,8 +253,36 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
+  const handleTogglePublic = async (id: string, isPublic: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTogglingPublicId(id);
+    try {
+      await documentsApi.setPublic(id, isPublic);
+      addToast({
+        type: "success",
+        title: isPublic ? "Đã mở quyền công khai" : "Đã chuyển sang nội bộ",
+        message: isPublic
+          ? "Sinh viên hiện đã có thể tra cứu và xem tài liệu này."
+          : "Tài liệu đã được thu hồi quyền công khai, chỉ Cán bộ và Quản trị viên mới xem được.",
+      });
+      setDocs((prev) => prev.map((d) => (d.id === id ? { ...d, is_public: isPublic } : d)));
+    } catch (err: any) {
+      addToast({
+        type: "error",
+        title: "Lỗi cập nhật quyền",
+        message: err.message || "Không thể thay đổi quyền truy cập tài liệu.",
+      });
+    } finally {
+      setTogglingPublicId(null);
+    }
+  };
+
   // Dữ liệu hiển thị trực tiếp từ server đã được phân trang & lọc chính xác
-  const displayDocs = docs;
+  const displayDocs = docs.filter((doc) => {
+    if (publicFilter === "PUBLIC" && !doc.is_public) return false;
+    if (publicFilter === "PRIVATE" && doc.is_public) return false;
+    return true;
+  });
 
   // KPI tóm tắt số liệu toàn hệ thống & theo bộ lọc
   const isFiltered = Boolean(searchFilter || statusFilter !== "ALL" || approvalFilter !== "ALL" || selectedTag !== "ALL");
@@ -294,7 +326,7 @@ export const DocumentsPage: React.FC = () => {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)", letterSpacing: "-0.02em" }}>
-              {isStaffOrAdmin ? "Quản lý & Phê duyệt Hồ sơ CTSV" : "Hồ sơ của tôi"}
+              {isStaffOrAdmin ? "Quản lý & Phê duyệt Hồ sơ CTSV" : "Kho Tài liệu Công khai & Hồ sơ"}
             </h1>
             <Badge variant={user?.role === "ADMIN" ? "danger" : user?.role === "STAFF" ? "warning" : "info"}>
               {user?.role || "STUDENT"}
@@ -303,7 +335,7 @@ export const DocumentsPage: React.FC = () => {
           <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>
             {isStaffOrAdmin
               ? "Trợ lý CTSV kiểm tra kết quả nhận dạng OCR, phân loại nhãn thông minh và phê duyệt văn bản số."
-              : "Theo dõi tiến độ nhận diện OCR và kết quả phê duyệt các hồ sơ, đơn từ của bạn."}
+              : "Danh mục văn bản, thông báo và hồ sơ đã được Cán bộ phê duyệt và mở quyền công khai."}
           </p>
         </div>
 
@@ -485,6 +517,29 @@ export const DocumentsPage: React.FC = () => {
                 </select>
               </div>
 
+              {isStaffOrAdmin && (
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Quyền xem:</span>
+                  <select
+                    value={publicFilter}
+                    onChange={(e) => setPublicFilter(e.target.value as any)}
+                    style={{
+                      padding: "0.45rem 0.75rem",
+                      borderRadius: "0.5rem",
+                      border: "1px solid var(--border-color)",
+                      fontSize: "0.8125rem",
+                      backgroundColor: "#fff",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <option value="ALL">Tất cả quyền</option>
+                    <option value="PUBLIC">🌐 Công khai (Public)</option>
+                    <option value="PRIVATE">🔒 Nội bộ (Riêng tư)</option>
+                  </select>
+                </div>
+              )}
+
               <Button
                 variant="outline"
                 size="sm"
@@ -586,18 +641,19 @@ export const DocumentsPage: React.FC = () => {
                 textAlign: "left",
                 letterSpacing: "0.02em"
               }}>
-                <th style={{ padding: "0.85rem 1.25rem", width: "32%" }}>TIÊU ĐỀ & THÔNG TIN HỒ SƠ</th>
-                <th style={{ padding: "0.85rem 1rem", width: "18%" }}>NGƯỜI NỘP / MSSV</th>
-                <th style={{ padding: "0.85rem 1rem", width: "14%" }}>DANH MỤC</th>
-                <th style={{ padding: "0.85rem 1rem", width: "12%" }}>TIẾN ĐỘ OCR</th>
-                <th style={{ padding: "0.85rem 0.75rem", width: "10%" }}>PHÊ DUYỆT</th>
-                <th style={{ padding: "0.85rem 1.25rem", width: "14%", textAlign: "right" }}>THAO TÁC</th>
+                <th style={{ padding: "0.85rem 1.25rem", width: isStaffOrAdmin ? "28%" : "38%" }}>TIÊU ĐỀ & THÔNG TIN HỒ SƠ</th>
+                <th style={{ padding: "0.85rem 1rem", width: isStaffOrAdmin ? "16%" : "22%" }}>NGƯỜI NỘP / MSSV</th>
+                <th style={{ padding: "0.85rem 1rem", width: isStaffOrAdmin ? "14%" : "20%" }}>DANH MỤC</th>
+                {isStaffOrAdmin && <th style={{ padding: "0.85rem 1rem", width: "12%" }}>TIẾN ĐỘ OCR</th>}
+                {isStaffOrAdmin && <th style={{ padding: "0.85rem 0.75rem", width: "11%" }}>QUYỀN XEM</th>}
+                <th style={{ padding: "0.85rem 0.75rem", width: "9%" }}>PHÊ DUYỆT</th>
+                <th style={{ padding: "0.85rem 1.25rem", width: isStaffOrAdmin ? "10%" : "11%", textAlign: "right" }}>THAO TÁC</th>
               </tr>
             </thead>
             <tbody>
               {displayDocs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: "3.5rem 1rem", textAlign: "center", color: "var(--gray-400)" }}>
+                  <td colSpan={isStaffOrAdmin ? 7 : 5} style={{ padding: "3.5rem 1rem", textAlign: "center", color: "var(--gray-400)" }}>
                     <FileText size={40} style={{ margin: "0 auto 0.75rem", opacity: 0.4 }} />
                     <p style={{ fontSize: "0.9375rem", fontWeight: 500 }}>Không tìm thấy hồ sơ nào phù hợp.</p>
                     <p style={{ fontSize: "0.8125rem", color: "var(--gray-400)", marginTop: "0.25rem" }}>Thử thay đổi bộ lọc hoặc tải lên hồ sơ mới.</p>
@@ -757,66 +813,109 @@ export const DocumentsPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Tiến độ OCR - Thanh % thực tế */}
-                      <td style={{ padding: "1rem 1rem", verticalAlign: "middle", minWidth: "140px" }}>
-                        {(() => {
-                          const status = doc.ocr_status;
-                          const rawProgress = doc.ocr_progress ?? 0;
-                          const progress = status === "DONE" || status === "APPROVED" ? 100
-                            : status === "FAILED" ? 0
-                            : status === "PENDING" ? Math.max(rawProgress, 5)
-                            : rawProgress;
+                      {/* Tiến độ OCR - Chỉ hiển thị cho Cán bộ / Quản trị viên (Sinh viên không cần xem) */}
+                      {isStaffOrAdmin && (
+                        <td style={{ padding: "1rem 1rem", verticalAlign: "middle", minWidth: "140px" }}>
+                          {(() => {
+                            const status = doc.ocr_status;
+                            const rawProgress = doc.ocr_progress ?? 0;
+                            const progress = status === "DONE" || status === "APPROVED" ? 100
+                              : status === "FAILED" ? 0
+                              : status === "PENDING" ? Math.max(rawProgress, 5)
+                              : rawProgress;
 
-                          const isProcessing = status === "PROCESSING" || status === "PENDING";
-                          const isFailed = status === "FAILED";
-                          const isDone = status === "DONE" || status === "APPROVED";
+                            const isProcessing = status === "PROCESSING" || status === "PENDING";
+                            const isFailed = status === "FAILED";
+                            const isDone = status === "DONE" || status === "APPROVED";
 
-                          const barColor = isDone ? "#16a34a"
-                            : isFailed ? "#dc2626"
-                            : "#6366f1";
+                            const barColor = isDone ? "#16a34a"
+                              : isFailed ? "#dc2626"
+                              : "#6366f1";
 
-                          const label = isDone ? "Hoàn thành"
-                            : isFailed ? "Thất bại"
-                            : status === "PENDING" ? "Chờ xử lý"
-                            : `Đang OCR...`;
+                            const label = isDone ? "Hoàn thành"
+                              : isFailed ? "Thất bại"
+                              : status === "PENDING" ? "Chờ xử lý"
+                              : `Đang OCR...`;
 
-                          return (
-                            <div>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                                <span style={{
-                                  fontSize: "0.7rem",
-                                  fontWeight: 600,
-                                  color: isDone ? "#16a34a" : isFailed ? "#dc2626" : "#6366f1"
-                                }}>
-                                  {label}
-                                </span>
-                                <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--gray-700)" }}>
-                                  {progress}%
-                                </span>
-                              </div>
-                              <div style={{
-                                width: "100%",
-                                height: "6px",
-                                backgroundColor: "var(--gray-100)",
-                                borderRadius: "999px",
-                                overflow: "hidden",
-                              }}>
+                            return (
+                              <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                                  <span style={{
+                                    fontSize: "0.7rem",
+                                    fontWeight: 600,
+                                    color: isDone ? "#16a34a" : isFailed ? "#dc2626" : "#6366f1"
+                                  }}>
+                                    {label}
+                                  </span>
+                                  <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--gray-700)" }}>
+                                    {progress}%
+                                  </span>
+                                </div>
                                 <div style={{
-                                  height: "100%",
-                                  width: `${progress}%`,
-                                  backgroundColor: barColor,
+                                  width: "100%",
+                                  height: "6px",
+                                  backgroundColor: "var(--gray-100)",
                                   borderRadius: "999px",
-                                  transition: "width 0.6s ease",
-                                  backgroundImage: isProcessing && progress < 100
-                                    ? `repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(255,255,255,0.25) 8px, rgba(255,255,255,0.25) 16px)`
-                                    : "none",
-                                  animation: isProcessing && progress < 100 ? "progress-stripe 1s linear infinite" : "none",
-                                }} />
+                                  overflow: "hidden",
+                                }}>
+                                  <div style={{
+                                    height: "100%",
+                                    width: `${progress}%`,
+                                    backgroundColor: barColor,
+                                    borderRadius: "999px",
+                                    transition: "width 0.6s ease",
+                                    backgroundImage: isProcessing && progress < 100
+                                      ? `repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(255,255,255,0.25) 8px, rgba(255,255,255,0.25) 16px)`
+                                      : "none",
+                                    animation: isProcessing && progress < 100 ? "progress-stripe 1s linear infinite" : "none",
+                                  }} />
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })()}
-                      </td>
+                            );
+                          })()}
+                        </td>
+                      )}
+
+                      {/* Quyền xem Public / Nội bộ - Dành cho Cán bộ / Admin bật tắt 1-click */}
+                      {isStaffOrAdmin && (
+                        <td style={{ padding: "1rem 0.75rem", verticalAlign: "middle" }}>
+                          <button
+                            onClick={(e) => handleTogglePublic(doc.id, !doc.is_public, e)}
+                            disabled={togglingPublicId === doc.id}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.35rem",
+                              padding: "0.25rem 0.6rem",
+                              borderRadius: "9999px",
+                              fontSize: "0.72rem",
+                              fontWeight: 700,
+                              border: doc.is_public ? "1px solid #86efac" : "1px solid #fed7aa",
+                              backgroundColor: doc.is_public ? "#f0fdf4" : "#fff7ed",
+                              color: doc.is_public ? "#15803d" : "#c2410c",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease",
+                            }}
+                            title={
+                              doc.is_public
+                                ? "Tài liệu đang CÔNG KHAI cho Sinh viên. Nhấp để khóa thành Nội bộ"
+                                : "Tài liệu đang NỘI BỘ (Sinh viên không xem được). Nhấp để MỞ QUYỀN Public cho Sinh viên"
+                            }
+                          >
+                            {doc.is_public ? (
+                              <>
+                                <Globe size={12} style={{ color: "#16a34a" }} />
+                                <span>Công khai</span>
+                              </>
+                            ) : (
+                              <>
+                                <Lock size={12} style={{ color: "#ea580c" }} />
+                                <span>Nội bộ</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      )}
 
                       {/* Trạng thái Phê duyệt */}
                       <td style={{ padding: "1rem 0.75rem", verticalAlign: "middle" }}>

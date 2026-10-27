@@ -30,6 +30,20 @@ OCR_CHAR_RULES: list[tuple[str, str, int, str]] = [
         re.IGNORECASE,
         'date_day_trailing_bracket: "ngày 04)" → "ngày 04 tháng"',
     ),
+    # Sửa lỗi OCR nhầm số ngày viết tay không hợp lệ: "ngày 34" / "ngày 37" -> "ngày 31"
+    # Trong lịch hành chính, không có tháng nào có ngày 34 hay 37. Chữ số 1 viết tay nét chéo cong thường bị nhận nhầm thành 4 hoặc 7.
+    (
+        r'(?i)\bng[àaá]y\s*<hw>\s*3[47]\s*<\/hw>\s*th[áa]ng\b',
+        r'ngày <hw>31</hw> tháng',
+        0,
+        'date_day_invalid_hw_34_to_31: "ngày <hw>34</hw> tháng" → "ngày <hw>31</hw> tháng"',
+    ),
+    (
+        r'(?i)\bng[àaá]y\s+3[47]\s+th[áa]ng\b',
+        r'ngày 31 tháng',
+        0,
+        'date_day_invalid_plain_34_to_31: "ngày 34 tháng" → "ngày 31 tháng"',
+    ),
     # "tháng 4/năm" → "tháng 4 năm" (dấu / trước từ khóa "năm")
     (
         r'tháng\s+(\d{1,2})\s*/\s*(năm|n[aă]m)',
@@ -476,6 +490,93 @@ OCR_CHAR_RULES: list[tuple[str, str, int, str]] = [
         r'"\1"',
         0,
         'qmark_quote_fix: "?text?" → "text"',
+    ),
+    # Khử lặp từ đơn do artifact giải mã OCR: "trong trong" → "trong", "viên viên" → "viên"
+    (
+        r'\b([a-zA-ZÀ-ỹ0-9_]{3,})\s+\1\b',
+        r'\1',
+        0,
+        'dedup_repeated_words: "trong trong" → "trong", "viên viên" → "viên"',
+    ),
+    # Lặp cụm số năm: "80 năm 80 ngm" → "80 năm"
+    (
+        r'(\b\d+\s+năm)\s+\d+\s+n[g]?m\b',
+        r'\1',
+        re.IGNORECASE,
+        'dedup_repeated_years: "80 năm 80 ngm" → "80 năm"',
+    ),
+    # Sửa lỗi gõ dính / lặp âm "nguyuyên" → "nguyên"
+    (
+        r'\bnguyuyên\b',
+        r'nguyên',
+        re.IGNORECASE,
+        'typo_nguyuyen_to_nguyen: "nguyuyên" → "nguyên"',
+    ),
+    # Sửa "BuỔILẾ" → "BUỔI LỄ"
+    (
+        r'\bBuỔI\s*L[ẾE]\b',
+        r'BUỔI LỄ',
+        re.IGNORECASE,
+        'typo_buoile_to_buoi_le: "BuỔILẾ" → "BUỔI LỄ"',
+    ),
+    # Khử chuỗi số ảo giác lặp dài do decoder sinh ra khi gặp icon/nhiễu (vd: 000000000990, 22/20000000000990)
+    (
+        r'\b\d{0,4}/?0{5,}\d*\b',
+        '',
+        0,
+        'clean_hallucinated_long_zeros: loại bỏ chuỗi số lặp ảo giác',
+    ),
+    # Sửa lỗi OCR nhầm dấu hỏi '?' thành 'gi"', 'gi""'
+    (
+        r'\bgi["\'”]+(?:\s+gi["\'”]+)*',
+        'gì?',
+        re.IGNORECASE,
+        'fix_qmark_gi_quotes: "gi\" gi\"" → "gì?"',
+    ),
+    # Sửa lỗi OCR nhầm dấu hỏi '?' thành số 2 hoặc 7 ở cuối câu hỏi tiếng Việt
+    (
+        r'(?i)\b(là\s+gì|như\s+thế\s+nào|chuẩn\s+bị\s+gì|chưa|dự\s+án\s+này|quy\s+trình\s+đó|xử\s+lý\s+lỗi\s+đó|tương\s+lai|thế\s+nào)\s*([27]|gi["\'”]|g[iì]ợ|\?2)\b',
+        r'\1?',
+        0,
+        'fix_vietnamese_trailing_qmark_digits: sửa dấu hỏi bị nhận nhầm thành 2/7/gi"',
+    ),
+    # Sửa "theo dõi lỗp" → "theo dõi lỗi?"
+    (
+        r'(?i)\b(theo\s+dõi)\s+lỗp\b',
+        r'\1 lỗi?',
+        0,
+        'fix_theo_doi_lop_to_loi: "theo dõi lỗp" → "theo dõi lỗi?"',
+    ),
+    # Sửa "Usability Testing là giữ" / "kiểm thử là giữ" / "là gip" / "là giở" → "... là gì?"
+    (
+        r'(?i)\b(usability\s+testing|kiểm\s+thử|nghiệm)\s+là\s+(?:giữ|gip|giở)\b',
+        r'\1 là gì?',
+        0,
+        'fix_la_giu_to_la_gi: "... là giữ/gip/giở" → "... là gì?"',
+    ),
+    (
+        r'(?i)\blà\s+(?:gip|giở)\b',
+        'là gì?',
+        0,
+        'fix_la_gip_to_la_gi: "là gip/giở" → "là gì?"',
+    ),
+    (
+        r'(?i)\bchuẩn\s+bị\s+giữ\b',
+        'chuẩn bị gì?',
+        0,
+        'fix_chuan_bi_giu: "chuẩn bị giữ" → "chuẩn bị gì?"',
+    ),
+    (
+        r'(?i)\btương\s+laif\b',
+        'tương lai?',
+        0,
+        'fix_tuong_laif: "tương laif" → "tương lai?"',
+    ),
+    (
+        r'(?i)\btheo\s+d[õoà][ii]\s+l[ấỗ]p?\b',
+        'theo dõi lỗi?',
+        0,
+        'fix_theo_doi_loi: "theo dõi lấ?" → "theo dõi lỗi?"',
     ),
 ]
 

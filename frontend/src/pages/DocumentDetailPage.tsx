@@ -39,6 +39,8 @@ import {
   Clock,
   ArrowRightLeft,
   Info,
+  Globe,
+  Lock,
 } from "lucide-react";
 import { diffWordsWithSpace } from "diff";
 import { Card } from "../components/common/Card";
@@ -98,6 +100,8 @@ export const DocumentDetailPage: React.FC = () => {
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [verification, setVerification] = useState<VerificationData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [isTogglingPublic, setIsTogglingPublic] = useState(false);
   const [activeTab, setActiveTab] = useState<"ocr" | "fields" | "benchmark" | "verification" | "history">("ocr");
 
   // OCR Live Correction state
@@ -154,8 +158,13 @@ export const DocumentDetailPage: React.FC = () => {
       } catch (vErr) {
         // ignore
       }
-    } catch {
-      // Sample mock data for previewing detail page
+    } catch (err: any) {
+      if (err?.response?.status === 403 || err?.status === 403) {
+        setIsForbidden(true);
+        if (showSpinner) setIsLoading(false);
+        return;
+      }
+      // Sample mock data for previewing detail page (chỉ dùng khi dev offline, không phải 403)
       const sampleDoc: DocumentDetail = {
         id: id || "29c93453-bbaa-4b9d-932b-ee73e25f57e9",
         title: "Đơn xin xét học bổng học kỳ 1 năm học 2024-2025",
@@ -221,6 +230,31 @@ export const DocumentDetailPage: React.FC = () => {
       setCorrectedText(ocrTextMode === "raw" ? (engineResult?.raw_text || engineResult?.corrected_text || "") : (engineResult?.corrected_text || engineResult?.raw_text || ""));
     } else {
       setCorrectedText("");
+    }
+  };
+
+  const handleTogglePublicDetail = async () => {
+    if (!id || !doc) return;
+    const nextPublic = !doc.is_public;
+    setIsTogglingPublic(true);
+    try {
+      await documentsApi.setPublic(id, nextPublic);
+      setDoc((prev) => (prev ? { ...prev, is_public: nextPublic } : null));
+      addToast({
+        type: "success",
+        title: nextPublic ? "Đã mở quyền công khai" : "Đã khóa quyền nội bộ",
+        message: nextPublic
+          ? "Sinh viên hiện đã có thể tra cứu và xem tài liệu này."
+          : "Tài liệu đã được thu hồi quyền công khai, chỉ Cán bộ và Quản trị viên mới xem được.",
+      });
+    } catch (err: any) {
+      addToast({
+        type: "error",
+        title: "Lỗi cập nhật quyền",
+        message: err.message || "Không thể cập nhật quyền công khai.",
+      });
+    } finally {
+      setIsTogglingPublic(false);
     }
   };
 
@@ -433,7 +467,7 @@ export const DocumentDetailPage: React.FC = () => {
     if (!id) return;
     setIsAutoTagging(true);
     try {
-      const updated = await documentsApi.autoTag(id);
+      const updated = await documentsApi.autoTag(id, selectedOcrEngine);
       setDoc(updated);
       addToast({
         type: "success",
@@ -790,6 +824,25 @@ export const DocumentDetailPage: React.FC = () => {
     addToast({ type: "info", title: "Đã sao chép", message: `Nội dung văn bản (${selectedOcrEngine.toUpperCase()} - ${ocrTextMode === "raw" ? "gốc OCR" : "chuẩn hóa"}) đã được copy vào clipboard.` });
   };
 
+  if (isForbidden || (!isStaffOrAdmin && doc && !doc.is_public)) {
+    return (
+      <div style={{ textAlign: "center", padding: "5rem 1rem", maxWidth: "520px", margin: "2rem auto" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", backgroundColor: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem", color: "#dc2626" }}>
+          <Lock size={32} />
+        </div>
+        <h2 style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--gray-900)", marginBottom: "0.5rem" }}>
+          Tài liệu chưa được mở quyền công khai
+        </h2>
+        <p style={{ fontSize: "0.875rem", color: "var(--gray-600)", lineHeight: 1.6, marginBottom: "1.5rem" }}>
+          Tài liệu này hiện đang ở chế độ nội bộ. Chỉ Cán bộ Phòng CTSV hoặc Quản trị viên mới có quyền mở quyền public để Sinh viên xem.
+        </p>
+        <Button variant="primary" onClick={() => navigate("/documents")}>
+          Quay lại danh sách hồ sơ
+        </Button>
+      </div>
+    );
+  }
+
   if (isLoading || !doc) {
     return (
       <div style={{ textAlign: "center", padding: "4rem", color: "var(--gray-500)" }}>
@@ -846,63 +899,57 @@ export const DocumentDetailPage: React.FC = () => {
 
         {/* Action Buttons */}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-          {/* Dropdown OCR lại */}
-          <div style={{ position: "relative" }}>
+          {/* Nút bật/tắt quyền Public dành cho Cán bộ / Admin */}
+          {isStaffOrAdmin && (
             <Button
-              variant="outline"
+              variant={doc.is_public ? "outline" : "primary"}
               size="sm"
-              onClick={() => setIsRerunMenuOpen(!isRerunMenuOpen)}
-              leftIcon={<RefreshCw size={14} className={runningEngine ? "animate-spin" : ""} />}
-              rightIcon={<ChevronDown size={14} />}
+              onClick={handleTogglePublicDetail}
+              disabled={isTogglingPublic}
+              leftIcon={doc.is_public ? <Globe size={14} color="#16a34a" /> : <Lock size={14} />}
+              style={
+                doc.is_public
+                  ? { borderColor: "#86efac", backgroundColor: "#f0fdf4", color: "#15803d", fontWeight: 700 }
+                  : { backgroundColor: "#16a34a", borderColor: "#16a34a", color: "#fff", fontWeight: 700 }
+              }
+              title={doc.is_public ? "Tài liệu đang công khai cho SV. Bấm để khóa quyền nội bộ" : "Bấm để mở quyền công khai cho sinh viên"}
             >
-              {runningEngine ? (runningEngine === "all" ? "Đang quét 3 model..." : `Đang chạy ${runningEngine.toUpperCase()}...`) : "Chạy lại OCR..."}
+              {doc.is_public ? "🌐 Công khai (Bấm để khóa)" : "🔓 Mở quyền Public cho SV"}
             </Button>
-            {isRerunMenuOpen && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  marginTop: "4px",
-                  backgroundColor: "#fff",
-                  borderRadius: "var(--radius-md)",
-                  boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-                  border: "1px solid var(--border-color)",
-                  zIndex: 50,
-                  minWidth: "260px",
-                  padding: "4px 0",
-                }}
+          )}
+
+          {/* Dropdown OCR lại (Chỉ dành cho Cán bộ / Admin) */}
+          {isStaffOrAdmin && (
+            <div style={{ position: "relative" }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRerunMenuOpen(!isRerunMenuOpen)}
+                leftIcon={<RefreshCw size={14} className={runningEngine ? "animate-spin" : ""} />}
+                rightIcon={<ChevronDown size={14} />}
               >
-                <button
-                  onClick={() => {
-                    setIsRerunMenuOpen(false);
-                    handleReprocessOCR("all");
-                  }}
+                {runningEngine ? (runningEngine === "all" ? "Đang quét 3 model..." : `Đang chạy ${runningEngine.toUpperCase()}...`) : "Chạy lại OCR..."}
+              </Button>
+              {isRerunMenuOpen && (
+                <div
                   style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "8px 12px",
-                    fontSize: "0.8rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    backgroundColor: "#f0fdf4",
-                    border: "none",
-                    borderBottom: "1px solid var(--border-color)",
-                    cursor: "pointer",
-                    transition: "background-color 0.15s",
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    marginTop: "4px",
+                    backgroundColor: "#fff",
+                    borderRadius: "var(--radius-md)",
+                    boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+                    border: "1px solid var(--border-color)",
+                    zIndex: 50,
+                    minWidth: "260px",
+                    padding: "4px 0",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#dcfce7")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f0fdf4")}
                 >
-                  <span style={{ fontWeight: 800, color: "#15803d" }}>⚡ Quét lại toàn bộ (3 Model)</span>
-                  <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>VietOCR + TrOCR-Vi + Tesseract</span>
-                </button>
-                {OCR_ENGINES.map((eng) => (
                   <button
-                    key={eng.id}
                     onClick={() => {
                       setIsRerunMenuOpen(false);
-                      handleReprocessOCR(eng.id);
+                      handleReprocessOCR("all");
                     }}
                     style={{
                       width: "100%",
@@ -911,21 +958,48 @@ export const DocumentDetailPage: React.FC = () => {
                       fontSize: "0.8rem",
                       display: "flex",
                       flexDirection: "column",
-                      backgroundColor: "transparent",
+                      backgroundColor: "#f0fdf4",
                       border: "none",
+                      borderBottom: "1px solid var(--border-color)",
                       cursor: "pointer",
                       transition: "background-color 0.15s",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--gray-50)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#dcfce7")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f0fdf4")}
                   >
-                    <span style={{ fontWeight: 700, color: "var(--gray-900)" }}>{eng.name}</span>
-                    <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>{eng.subtitle}</span>
+                    <span style={{ fontWeight: 800, color: "#15803d" }}>⚡ Quét lại toàn bộ (3 Model)</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>VietOCR + TrOCR-Vi + Tesseract</span>
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
+                  {OCR_ENGINES.map((eng) => (
+                    <button
+                      key={eng.id}
+                      onClick={() => {
+                        setIsRerunMenuOpen(false);
+                        handleReprocessOCR(eng.id);
+                      }}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "8px 12px",
+                        fontSize: "0.8rem",
+                        display: "flex",
+                        flexDirection: "column",
+                        backgroundColor: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        transition: "background-color 0.15s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--gray-50)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                    >
+                      <span style={{ fontWeight: 700, color: "var(--gray-800)" }}>{eng.name}</span>
+                      <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>{eng.subtitle}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <Button variant="outline" size="sm" onClick={handleDownloadTxt} leftIcon={<FileDown size={14} />}>
             Xuất Text (.txt)
@@ -959,8 +1033,8 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Dynamic Processing Alert Banner */}
-      {(doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
+      {/* Dynamic Processing Alert Banner (Chỉ hiển thị cho Cán bộ / Admin) */}
+      {isStaffOrAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
         <div
           style={{
             display: "flex",
@@ -1005,8 +1079,8 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Notice when only first page was OCRed */}
-      {doc.ocr_status === "DONE" && (doc.metadata?.extra?.ocr_scope === "first_page" || ((doc.page_count ?? 1) > 1 && doc.metadata?.extra?.ocr_scope !== "full")) && (
+      {/* Notice when only first page was OCRed (Chỉ hiển thị cho Cán bộ / Admin) */}
+      {isStaffOrAdmin && doc.ocr_status === "DONE" && (doc.metadata?.extra?.ocr_scope === "first_page" || ((doc.page_count ?? 1) > 1 && doc.metadata?.extra?.ocr_scope !== "full")) && (
         <div
           style={{
             display: "flex",
@@ -1241,7 +1315,15 @@ export const DocumentDetailPage: React.FC = () => {
             gap: "6px",
           }}
         >
-          <Edit3 size={14} /> Trình đối chiếu & Sửa lỗi OCR (Live Editor)
+          {isStaffOrAdmin ? (
+            <>
+              <Edit3 size={14} /> Trình đối chiếu & Sửa lỗi OCR (Live Editor)
+            </>
+          ) : (
+            <>
+              <FileText size={14} /> Văn bản số hóa & Nội dung
+            </>
+          )}
         </button>
 
         <button
@@ -1260,32 +1342,34 @@ export const DocumentDetailPage: React.FC = () => {
             gap: "6px",
           }}
         >
-          <Sparkles size={14} /> Bóc tách Thông tin AI (Smart Fields)
+          <Sparkles size={14} /> {isStaffOrAdmin ? "Bóc tách Thông tin AI (Smart Fields)" : "Thông tin hồ sơ sinh viên"}
         </button>
 
-        <button
-          onClick={() => {
-            setActiveTab("benchmark");
-            if (!benchmarkData && !isBenchmarking) {
-              handleRunBenchmark();
-            }
-          }}
-          style={{
-            padding: "0.45rem 1rem",
-            borderRadius: "var(--radius-md)",
-            border: "none",
-            backgroundColor: activeTab === "benchmark" ? "var(--primary-600)" : "transparent",
-            color: activeTab === "benchmark" ? "#fff" : "var(--gray-600)",
-            fontWeight: 600,
-            fontSize: "0.8125rem",
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-          }}
-        >
-          <Layers size={14} /> Đối sánh 3 Mô hình (VietOCR vs TrOCR vs Tesseract)
-        </button>
+        {isStaffOrAdmin && (
+          <button
+            onClick={() => {
+              setActiveTab("benchmark");
+              if (!benchmarkData && !isBenchmarking) {
+                handleRunBenchmark();
+              }
+            }}
+            style={{
+              padding: "0.45rem 1rem",
+              borderRadius: "var(--radius-md)",
+              border: "none",
+              backgroundColor: activeTab === "benchmark" ? "var(--primary-600)" : "transparent",
+              color: activeTab === "benchmark" ? "#fff" : "var(--gray-600)",
+              fontWeight: 600,
+              fontSize: "0.8125rem",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <Layers size={14} /> Đối sánh 3 Mô hình (VietOCR vs TrOCR vs Tesseract)
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab("verification")}
@@ -1387,7 +1471,7 @@ export const DocumentDetailPage: React.FC = () => {
                 position: "relative",
               }}
             >
-              {(doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
+              {isStaffOrAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
                 <div
                   style={{
                     position: "absolute",
@@ -1458,104 +1542,120 @@ export const DocumentDetailPage: React.FC = () => {
           {/* RIGHT: LIVE OCR TEXT EDITOR & COMPARISON */}
           <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             
-            {/* Tabs for OCR Engines */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-color)", backgroundColor: "var(--gray-50)", paddingRight: "0.75rem" }}>
-              <div style={{ display: "flex", flex: 1, overflowX: "auto" }}>
-                {OCR_ENGINES.map((eng) => {
-                  const res = doc?.all_ocr_results?.find((r: any) => r.ocr_engine === eng.id);
-                  const isResRunning = res?.status === "PROCESSING" || res?.status === "RUNNING";
-                  const isResPending = res?.status === "PENDING";
-                  const isRunning =
-                    (runningEngine === eng.id && (!res || isResRunning || isResPending)) ||
-                    (runningEngine === "all" && (!res || isResRunning || isResPending)) ||
-                    isResRunning ||
-                    (doc?.ocr_status === "PROCESSING" && eng.id === "vietocr" && (!res || res.status === "PROCESSING"));
-                  const isPending =
-                    !isRunning &&
-                    (isResPending || (doc?.ocr_status === "PROCESSING" && !res && eng.id !== "vietocr"));
-                  const isFailed = res?.status === "FAILED";
-                  const isDone = (res?.status === "DONE" || res?.status === "LOW_QUALITY") && !isRunning && !isPending;
-                  const isNotRun = !res && !isRunning && !isPending;
-                  const isSelected = selectedOcrEngine === eng.id && !isCompareMode;
+            {/* Tabs for OCR Engines (Chỉ hiển thị cho Cán bộ / Admin) */}
+            {isStaffOrAdmin ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-color)", backgroundColor: "var(--gray-50)", paddingRight: "0.75rem" }}>
+                <div style={{ display: "flex", flex: 1, overflowX: "auto" }}>
+                  {OCR_ENGINES.map((eng) => {
+                    const res = doc?.all_ocr_results?.find((r: any) => r.ocr_engine === eng.id);
+                    const isResRunning = res?.status === "PROCESSING" || res?.status === "RUNNING";
+                    const isResPending = res?.status === "PENDING";
+                    const isRunning =
+                      (runningEngine === eng.id && (!res || isResRunning || isResPending)) ||
+                      (runningEngine === "all" && (!res || isResRunning || isResPending)) ||
+                      isResRunning ||
+                      (doc?.ocr_status === "PROCESSING" && eng.id === "vietocr" && (!res || res.status === "PROCESSING"));
+                    const isPending =
+                      !isRunning &&
+                      (isResPending || (doc?.ocr_status === "PROCESSING" && !res && eng.id !== "vietocr"));
+                    const isFailed = res?.status === "FAILED";
+                    const isDone = (res?.status === "DONE" || res?.status === "LOW_QUALITY") && !isRunning && !isPending;
+                    const isNotRun = !res && !isRunning && !isPending;
+                    const isSelected = selectedOcrEngine === eng.id && !isCompareMode;
 
-                  return (
-                    <button
-                      key={eng.id}
-                      onClick={() => {
-                        setIsCompareMode(false);
-                        switchOcrEngine(eng.id);
-                      }}
-                      style={{
-                        padding: "0.65rem 1rem",
-                        border: "none",
-                        backgroundColor: isSelected ? "#fff" : "transparent",
-                        borderBottom: isSelected ? "2.5px solid var(--primary-600)" : "2.5px solid transparent",
-                        color: isSelected ? "var(--primary-700)" : "var(--gray-600)",
-                        fontWeight: isSelected ? 800 : 600,
-                        fontSize: "0.8125rem",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        whiteSpace: "nowrap",
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      <span>{eng.name}</span>
-                      {isRunning && (
-                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#dbeafe", color: "#1d4ed8", display: "inline-flex", alignItems: "center", gap: "3px" }}>
-                          <RotateCw size={10} className="animate-spin" /> Đang chạy
-                        </span>
-                      )}
-                      {isPending && (
-                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#fef3c7", color: "#b45309", display: "inline-flex", alignItems: "center", gap: "3px" }}>
-                          <Clock size={10} /> Đang chờ
-                        </span>
-                      )}
-                      {isFailed && (
-                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }}>
-                          ✕ Thất bại
-                        </span>
-                      )}
-                      {isDone && !isRunning && (
-                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: 700 }}>
-                          ✓ Sẵn sàng
-                        </span>
-                      )}
-                      {isNotRun && (
-                        <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#f1f5f9", color: "#64748b" }}>
-                          Chưa chạy
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        key={eng.id}
+                        onClick={() => {
+                          setIsCompareMode(false);
+                          switchOcrEngine(eng.id);
+                        }}
+                        style={{
+                          padding: "0.65rem 1rem",
+                          border: "none",
+                          backgroundColor: isSelected ? "#fff" : "transparent",
+                          borderBottom: isSelected ? "2.5px solid var(--primary-600)" : "2.5px solid transparent",
+                          color: isSelected ? "var(--primary-700)" : "var(--gray-600)",
+                          fontWeight: isSelected ? 800 : 600,
+                          fontSize: "0.8125rem",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          whiteSpace: "nowrap",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <span>{eng.name}</span>
+                        {isRunning && (
+                          <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#dbeafe", color: "#1d4ed8", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                            <RotateCw size={10} className="animate-spin" /> Đang chạy
+                          </span>
+                        )}
+                        {isPending && (
+                          <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#fef3c7", color: "#b45309", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                            <Clock size={10} /> Đang chờ
+                          </span>
+                        )}
+                        {isFailed && (
+                          <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#fee2e2", color: "#b91c1c", fontWeight: 700 }}>
+                            ✕ Thất bại
+                          </span>
+                        )}
+                        {isDone && !isRunning && (
+                          <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: 700 }}>
+                            ✓ Sẵn sàng
+                          </span>
+                        )}
+                        {isNotRun && (
+                          <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: "10px", backgroundColor: "#f1f5f9", color: "#64748b" }}>
+                            Chưa chạy
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Compare Mode Toggle */}
+                <button
+                  onClick={() => setIsCompareMode(!isCompareMode)}
+                  style={{
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "6px",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    border: isCompareMode ? "1.5px solid #7c3aed" : "1px solid var(--border-color)",
+                    backgroundColor: isCompareMode ? "#f5f3ff" : "#fff",
+                    color: isCompareMode ? "#6d28d9" : "var(--gray-600)",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    transition: "all 0.15s ease",
+                    whiteSpace: "nowrap",
+                  }}
+                  title="So sánh kết quả song song giữa 2 mô hình với Word-level Diff & Chỉ số CER/WER"
+                >
+                  <GitCompare size={14} style={{ color: isCompareMode ? "#7c3aed" : "var(--gray-500)" }} />
+                  <span>{isCompareMode ? "Đang so sánh" : "So sánh 2 Model"}</span>
+                </button>
               </div>
-
-              {/* Compare Mode Toggle */}
-              <button
-                onClick={() => setIsCompareMode(!isCompareMode)}
-                style={{
-                  padding: "0.35rem 0.75rem",
-                  borderRadius: "6px",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  border: isCompareMode ? "1.5px solid #7c3aed" : "1px solid var(--border-color)",
-                  backgroundColor: isCompareMode ? "#f5f3ff" : "#fff",
-                  color: isCompareMode ? "#6d28d9" : "var(--gray-600)",
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  transition: "all 0.15s ease",
-                  whiteSpace: "nowrap",
-                }}
-                title="So sánh kết quả song song giữa 2 mô hình với Word-level Diff & Chỉ số CER/WER"
-              >
-                <GitCompare size={14} style={{ color: isCompareMode ? "#7c3aed" : "var(--gray-500)" }} />
-                <span>{isCompareMode ? "Đang so sánh" : "So sánh 2 Model"}</span>
-              </button>
-            </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-color)", backgroundColor: "var(--gray-50)", padding: "0.6rem 1rem" }}>
+                <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--primary-800)", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <FileText size={16} /> Nội dung văn bản số hóa chính thức
+                </span>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <Button variant="outline" size="sm" onClick={handleCopyText} leftIcon={<Copy size={13} />}>
+                    Sao chép
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleDownloadTxt} leftIcon={<FileDown size={13} />}>
+                    Tải .txt
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* COMPARE MODE VIEW */}
             {isCompareMode ? (
@@ -1829,7 +1929,7 @@ export const DocumentDetailPage: React.FC = () => {
                         {isHighlightTagsEnabled ? "🏷️ Đang tô nhãn (Bật)" : "📄 Văn bản thuần"}
                       </button>
                     )}
-                    {getSelectedEngineResult() && (
+                    {isStaffOrAdmin && getSelectedEngineResult() && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -1845,7 +1945,7 @@ export const DocumentDetailPage: React.FC = () => {
                     <button onClick={handleCopyText} style={viewerIconBtn} title="Sao chép văn bản">
                       <Copy size={14} />
                     </button>
-                    {getSelectedEngineResult() && (
+                    {isStaffOrAdmin && getSelectedEngineResult() && (
                       isEditingOCR ? (
                         <Button
                           variant="primary"
@@ -2098,8 +2198,8 @@ export const DocumentDetailPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Engine & Processing metadata footer */}
-                  {getSelectedEngineResult() && (
+                  {/* Engine & Processing metadata footer (Chỉ dành cho Cán bộ / Admin) */}
+                  {isStaffOrAdmin && getSelectedEngineResult() && (
                     <div
                       style={{
                         marginTop: "0.75rem",
@@ -2145,28 +2245,30 @@ export const DocumentDetailPage: React.FC = () => {
                   Tự động phân tích ngữ cảnh, bóc tách sinh viên, số tiền, lý do và gợi ý duyệt hồ sơ.
                 </p>
               </div>
-              <div style={{ display: "flex", gap: "0.4rem" }}>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleAIExtract}
-                  isLoading={isAIExtracting}
-                  leftIcon={<Sparkles size={14} />}
-                  style={{ background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)", border: "none" }}
-                >
-                  ✨ AI Bóc tách Thông minh
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleReExtractFields}
-                  isLoading={isExtracting}
-                  leftIcon={<RefreshCw size={13} />}
-                  title="Bóc tách theo Regex Pattern Matcher"
-                >
-                  Regex
-                </Button>
-              </div>
+              {isStaffOrAdmin && (
+                <div style={{ display: "flex", gap: "0.4rem" }}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAIExtract}
+                    isLoading={isAIExtracting}
+                    leftIcon={<Sparkles size={14} />}
+                    style={{ background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)", border: "none" }}
+                  >
+                    ✨ AI Bóc tách Thông minh
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleReExtractFields}
+                    isLoading={isExtracting}
+                    leftIcon={<RefreshCw size={13} />}
+                    title="Bóc tách theo Regex Pattern Matcher"
+                  >
+                    Regex
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* AI Summary Banner if available */}

@@ -12,7 +12,7 @@ from typing import Any
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from loguru import logger
 from sqlalchemy import select

@@ -136,6 +136,17 @@ class VietOCRService:
 
     def segment_lines_with_boxes(self, pil_image: Image.Image) -> tuple[list[tuple[Image.Image, tuple[int, int, int, int]]], int, np.ndarray | None]:
         try:
+            # 1. Kiểm tra cache kết quả tách dòng theo chữ ký SHA-256 toàn bộ ảnh
+            # (Tuyệt đối không chỉ lấy 256 byte đầu/cuối vì lề trắng của mọi file A4 đều giống nhau gây đọc nhầm văn bản khác)
+            import hashlib
+            img_w = pil_image.width
+            img_h = pil_image.height
+            raw_bytes = pil_image.tobytes()
+            sig = hashlib.sha256(raw_bytes).hexdigest()
+            if hasattr(self, '_segment_cache') and sig in self._segment_cache:
+                logger.debug("Reusing cached line segmentation for image ({w}x{h})", w=img_w, h=img_h)
+                return self._segment_cache[sig]
+
             img_np = np.array(pil_image)
             if len(img_np.shape) == 3 and img_np.shape[2] == 4:
                 img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
@@ -150,26 +161,47 @@ class VietOCRService:
                 use_gpu = torch.cuda.is_available()
                 self._easy_ocr = easyocr.Reader(['vi'], gpu=use_gpu, verbose=False)
                 
-            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR) if len(img_np.shape) == 3 else img_np
-            # Detect returns (horizontal_list, free_list)
-            # horizontal_list format: [[[x_min, x_max, y_min, y_max], ...]]
-            horizontal_list, free_list = self._easy_ocr.detect(img_bgr)
+            # Dọn sạch dấu đỏ trước khi EasyOCR quét detector để không bị dấu tròn nối dính các dòng văn bản liền kề
+            det_img_np = self._clean_stamp_in_crop(img_np.copy(), stamp_mask) if stamp_mask is not None else img_np
             
-            boxes = []
+            # Tối ưu tốc độ detector: Downscale ảnh về chiều rộng 1500px để CRAFT quét nhanh gấp 2.5x-3x.
+            # Sau khi phát hiện bounding box, scale tọa độ ngược về ảnh 300 DPI gốc để cắt chữ siêu nét.
+            det_scale = 1.0
+            if img_w > 1500:
+                det_scale = 1500.0 / float(img_w)
+                scaled_w = 1500
+                scaled_h = int(img_h * det_scale)
+                det_resized = cv2.resize(det_img_np, (scaled_w, scaled_h), interpolation=cv2.INTER_AREA)
+            else:
+                det_resized = det_img_np
+
+            img_bgr = cv2.cvtColor(det_resized, cv2.COLOR_RGB2BGR) if len(det_resized.shape) == 3 else det_resized
+            horizontal_list, free_list = self._easy_ocr.detect(img_bgr, canvas_size=1500, mag_ratio=1.0)
+            
+            raw_boxes = []
             if horizontal_list and len(horizontal_list[0]) > 0:
-                boxes.extend(horizontal_list[0])
+                raw_boxes.extend(horizontal_list[0])
             if free_list and len(free_list[0]) > 0:
-                # convert polygon to bounding box
                 for poly in free_list[0]:
                     xs = [pt[0] for pt in poly]
                     ys = [pt[1] for pt in poly]
-                    boxes.append([min(xs), max(xs), min(ys), max(ys)])
+                    raw_boxes.append([min(xs), max(xs), min(ys), max(ys)])
                     
-            if not boxes:
+            if not raw_boxes:
                 return [], 15, stamp_mask
-                
-            img_w = img_np.shape[1] if len(img_np.shape) >= 2 else pil_image.width
-            img_h = img_np.shape[0] if len(img_np.shape) >= 2 else pil_image.height
+
+            # Scale tọa độ ngược về ảnh gốc 300 DPI
+            boxes = []
+            for b in raw_boxes:
+                if det_scale != 1.0:
+                    boxes.append([
+                        int(round(b[0] / det_scale)),
+                        int(round(b[1] / det_scale)),
+                        int(round(b[2] / det_scale)),
+                        int(round(b[3] / det_scale)),
+                    ])
+                else:
+                    boxes.append(b)
 
             # Merge boxes that belong to the same line (to fix "Độc lập - Tự do" being split)
             def merge_boxes(boxes_list):
@@ -190,15 +222,24 @@ class VietOCRService:
                             mcx = (mx1 + mx2) / 2.0
                             mcy = (my1 + my2) / 2.0
                             
-                            # Ranh giới 2 cột ở phần Header (top 20% trang):
+                            # Ranh giới 2 cột ở phần Header (top 14% trang):
                             # Cột trái (Cơ quan / Số hiệu) và Cột phải (Quốc hiệu / Ngày tháng)
                             # TUYỆT ĐỐI KHÔNG GỘP NGANG XUYÊN QUA HAI CỘT
-                            is_header_zone = (cy < 0.20 * img_h and mcy < 0.20 * img_h)
+                            is_header_zone = (cy < 0.14 * img_h and mcy < 0.14 * img_h)
                             if is_header_zone:
                                 split_x = 0.46 * img_w
                                 if (cx < split_x and mcx > split_x) or (cx > split_x and mcx < split_x):
                                     continue
                             
+                            # Không bao giờ gộp 2 hộp có tâm lệch dọc quá xa (khác dòng văn bản)
+                            diff_cy = abs(cy - mcy)
+                            if diff_cy > 0.45 * min(h, mh):
+                                continue
+                                
+                            new_h = max(y2, my2) - min(y1, my1)
+                            if new_h > 1.35 * max(h, mh):
+                                continue
+
                             overlap_y = max(0, min(y2, my2) - max(y1, my1))
                             if overlap_y > 0.4 * min(h, mh):
                                 gap = max(0, x1 - mx2 if x1 > mx2 else mx1 - x2)
@@ -220,10 +261,10 @@ class VietOCRService:
             boxes = merge_boxes(boxes)
                 
             # Sắp xếp thứ tự đọc (Reading Order):
-            # Phần Header (top 20% trang): Cột trái trước (từ trên xuống dưới),
+            # Phần Header (top 14% trang): Cột trái trước (từ trên xuống dưới),
             # sau đó Cột phải (từ trên xuống dưới).
             # Phần Thân: tuần tự theo trục Y từ trên xuống dưới.
-            header_threshold_y = 0.20 * img_h
+            header_threshold_y = 0.14 * img_h
             split_x = 0.46 * img_w
             
             header_left = []
@@ -280,6 +321,14 @@ class VietOCRService:
                 
             h_med = int(np.median(heights)) if heights else 15
             logger.info("Segmented {n} lines using EasyOCR", n=len(lines_with_boxes))
+            
+            # Lưu vào cache bộ nhớ cho các engine sau tái sử dụng
+            if not hasattr(self, '_segment_cache'):
+                self._segment_cache = {}
+            if len(self._segment_cache) > 20:
+                self._segment_cache.clear()
+            self._segment_cache[sig] = (lines_with_boxes, h_med, stamp_mask)
+            
             return lines_with_boxes, h_med, stamp_mask
             
         except Exception as exc:
@@ -314,14 +363,14 @@ class VietOCRService:
             return None
 
     @staticmethod
-    def _clean_stamp_in_crop(crop_np: np.ndarray, crop_stamp_mask: np.ndarray) -> np.ndarray:
+    def _clean_stamp_in_crop(crop_np: np.ndarray, crop_stamp_mask: np.ndarray | None) -> np.ndarray:
         """
         Xóa pixel con dấu đỏ khỏi crop ảnh, giữ nguyên:
           - Pixel đen (chữ đen bên dưới/cạnh con dấu)  
           - Pixel xanh dương (chữ tay xanh: số, chữ ký)
         Fill WHITE cho pixel đỏ dấu, bảo vệ tuyệt đối chữ in đen và chữ viết tay xanh.
         """
-        if crop_np is None:
+        if crop_np is None or crop_stamp_mask is None:
             return crop_np
         try:
             if len(crop_np.shape) < 3 or crop_np.shape[2] < 3:

@@ -22,7 +22,9 @@ import json
 import argparse
 import unicodedata
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Sequence
+import importlib
+from PIL import Image
 
 # Reconfigure stdout/stderr for Windows UTF-8
 if hasattr(sys.stdout, 'reconfigure'):
@@ -31,8 +33,40 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8')
 
 import numpy as np
-from PIL import Image
-import editdistance
+
+def _py_levenshtein(seq1: Sequence[Any], seq2: Sequence[Any]) -> int:
+    """Pure Python Levenshtein distance for strings or lists of tokens."""
+    if seq1 == seq2:
+        return 0
+    if not seq1:
+        return len(seq2)
+    if not seq2:
+        return len(seq1)
+    prev = list(range(len(seq2) + 1))
+    for i, item1 in enumerate(seq1):
+        curr = [i + 1] * (len(seq2) + 1)
+        for j, item2 in enumerate(seq2):
+            cost = 0 if item1 == item2 else 1
+            curr[j + 1] = min(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost)
+        prev = curr
+    return prev[len(seq2)]
+
+try:
+    _ed_module: Any = importlib.import_module("editdistance")
+except Exception:
+    _ed_module = None
+
+class _EditDistance:
+    @staticmethod
+    def eval(a: Any, b: Any) -> int:
+        if _ed_module is not None and hasattr(_ed_module, "eval"):
+            try:
+                return int(_ed_module.eval(a, b))
+            except Exception:
+                pass
+        return _py_levenshtein(a, b)
+
+editdistance: Any = _EditDistance()
 
 # Add backend to path
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -161,7 +195,7 @@ class OCREvaluator:
         use_gt_crops: bool = False,
         crop_padding: int = 8,
         mode_desc: str = "Baseline",
-        trocr_config: Dict[str, Any] = None
+        trocr_config: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
         """
         Run evaluation across all held-out documents.
