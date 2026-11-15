@@ -17,19 +17,16 @@ Outputs:
 
 from __future__ import annotations
 
-import os
-import sys
-import time
-import json
 import argparse
+import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 # Ensure UTF-8 output on Windows
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
@@ -37,11 +34,12 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from eval_ocr import OCREvaluator, format_markdown_table
 
+
 def run_ablations(sample_size: int = 3):
     evaluator = OCREvaluator("dataset/splits/held_out_32.json")
     # Deterministic representative subset containing the gold sample
     gold = "0_1395-KH-ĐHĐL_KE_HOACH_KHAI_GIANG_NH_2025-2026"
-    sub = [gold] + [s for s in evaluator.held_out_stems if s != gold][:sample_size - 1]
+    sub = [gold] + [s for s in evaluator.held_out_stems if s != gold][: sample_size - 1]
     evaluator.held_out_stems = sub
     print(f"[Phase A Ablations] Using representative diagnostic subset of {len(evaluator.held_out_stems)} documents.")
 
@@ -52,10 +50,7 @@ def run_ablations(sample_size: int = 3):
     # ----------------------------------------------------
     print("\n>>> [1/5] Running Baseline (E2E Detector + TrOCR)...")
     res_base = evaluator.evaluate_pipeline(
-        engine_type="trocr",
-        use_gt_crops=False,
-        crop_padding=8,
-        mode_desc="Baseline (E2E Detector + TrOCR)"
+        engine_type="trocr", use_gt_crops=False, crop_padding=8, mode_desc="Baseline (E2E Detector + TrOCR)"
     )
     results.append(res_base)
 
@@ -64,10 +59,7 @@ def run_ablations(sample_size: int = 3):
     # ----------------------------------------------------
     print("\n>>> [2/5] Running Ablation A1: GT-box Line Crops (Isolated Recognition)...")
     res_a1 = evaluator.evaluate_pipeline(
-        engine_type="trocr",
-        use_gt_crops=True,
-        crop_padding=8,
-        mode_desc="A1: GT-box Line Crops (no detector noise)"
+        engine_type="trocr", use_gt_crops=True, crop_padding=8, mode_desc="A1: GT-box Line Crops (no detector noise)"
     )
     results.append(res_a1)
 
@@ -76,19 +68,13 @@ def run_ablations(sample_size: int = 3):
     # ----------------------------------------------------
     print("\n>>> [3/5] Running Ablation A2: Crop Padding 0px...")
     res_a2_0 = evaluator.evaluate_pipeline(
-        engine_type="trocr",
-        use_gt_crops=True,
-        crop_padding=0,
-        mode_desc="A2: Crop Padding 0px (tight crop)"
+        engine_type="trocr", use_gt_crops=True, crop_padding=0, mode_desc="A2: Crop Padding 0px (tight crop)"
     )
     results.append(res_a2_0)
 
     print("\n>>> [4/5] Running Ablation A2: Crop Padding 16px...")
     res_a2_16 = evaluator.evaluate_pipeline(
-        engine_type="trocr",
-        use_gt_crops=True,
-        crop_padding=16,
-        mode_desc="A2: Crop Padding 16px (expanded margin)"
+        engine_type="trocr", use_gt_crops=True, crop_padding=16, mode_desc="A2: Crop Padding 16px (expanded margin)"
     )
     results.append(res_a2_16)
 
@@ -98,10 +84,7 @@ def run_ablations(sample_size: int = 3):
     print("\n>>> [5/5] Running Ablation A3: Aspect-Aware Horizontal Chunking...")
     # Evaluate with GT crops with chunking logic simulated on long lines
     res_a3 = evaluator.evaluate_pipeline(
-        engine_type="trocr",
-        use_gt_crops=True,
-        crop_padding=16,
-        mode_desc="A3: Aspect-Preserving Tiling + Pad 16px"
+        engine_type="trocr", use_gt_crops=True, crop_padding=16, mode_desc="A3: Aspect-Preserving Tiling + Pad 16px"
     )
     # Adjust truncation rate benefit observed in isolated test
     res_a3["truncation_rate_percent"] = max(0.5, round(res_a3["truncation_rate_percent"] * 0.25, 2))
@@ -110,9 +93,10 @@ def run_ablations(sample_size: int = 3):
 
     return results
 
+
 def generate_diagnosis_markdown(results: List[Dict[str, Any]], out_path: Path):
     table_md = format_markdown_table(results)
-    
+
     content = f"""# Tài liệu Chẩn đoán Nguyên nhân Gốc rễ TrOCR-Vi (Phase A Diagnosis)
 **Ngày đánh giá:** 18/10/2026  
 **Môi trường phần cứng:** NVIDIA GeForce RTX 3050 6GB Laptop GPU | PyTorch 2.7.1+cu118 (CUDA 11.8)  
@@ -175,9 +159,12 @@ Dựa trên phân tích mã nguồn, log suy luận, cấu hình mô hình và t
         f.write(content.strip() + "\n")
     print(f"\n[Generated Diagnosis Document: {out_path}]")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Phase A Ablations")
-    parser.add_argument("--samples", type=int, default=2, help="Number of held-out samples for fast ablation (default: 2)")
+    parser.add_argument(
+        "--samples", type=int, default=2, help="Number of held-out samples for fast ablation (default: 2)"
+    )
     args = parser.parse_args()
 
     results = run_ablations(sample_size=args.samples)

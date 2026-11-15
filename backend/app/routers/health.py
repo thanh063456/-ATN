@@ -6,6 +6,7 @@ Kiểm tra kết nối tới tất cả external services:
 
 Ref: .ai/CODING_RULES.md §2 (1 file = 1 resource)
 """
+
 import time
 from typing import Any
 
@@ -22,6 +23,7 @@ async def _check_postgres() -> dict[str, Any]:
     t0 = time.monotonic()
     try:
         from sqlalchemy import text
+
         from app.core.database import engine
 
         async with engine.connect() as conn:
@@ -87,6 +89,7 @@ async def _check_ai() -> dict[str, Any]:
             base_url = base_url.replace("://localhost", "://127.0.0.1")
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=2.0)) as client:
                 resp = await client.get(f"{base_url}/api/tags")
                 if resp.status_code == 200:
@@ -101,7 +104,12 @@ async def _check_ai() -> dict[str, Any]:
                         "note": None if has_model else f"Mô hình {settings.ollama_model} chưa được tải về Ollama",
                     }
         except Exception as exc:
-            return {"status": "error", "provider": "ollama", "error": f"{type(exc).__name__}: {exc}", "latency_ms": None}
+            return {
+                "status": "error",
+                "provider": "ollama",
+                "error": f"{type(exc).__name__}: {exc}",
+                "latency_ms": None,
+            }
     return {"status": "ok", "provider": provider}
 
 
@@ -122,13 +130,13 @@ async def health_check() -> JSONResponse:
     )
 
     services = {
-        "postgres":      postgres_result,
-        "database":      postgres_result,
+        "postgres": postgres_result,
+        "database": postgres_result,
         "elasticsearch": es_result,
-        "storage":       storage_result,
-        "minio":         storage_result,
-        "redis":         redis_result,
-        "ai":            ai_result,
+        "storage": storage_result,
+        "minio": storage_result,
+        "redis": redis_result,
+        "ai": ai_result,
     }
 
     all_ok = all(s.get("status") == "ok" for s in services.values())
@@ -137,9 +145,9 @@ async def health_check() -> JSONResponse:
     return JSONResponse(
         status_code=200 if all_ok else 200,
         content={
-            "status":   overall,
+            "status": overall,
             "services": services,
-            "env":      settings.app_env,
+            "env": settings.app_env,
         },
     )
 

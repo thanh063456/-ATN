@@ -7,11 +7,13 @@ Tổng hợp số liệu thống kê thời gian thực từ PostgreSQL:
 - Phân bổ theo danh mục biểu mẫu
 - Danh sách tài liệu xử lý gần đây
 """
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
+from app.core.cache import app_cache
 from app.core.database import get_db
 from app.models.document_categories import DocumentCategory
 from app.models.documents import Document
@@ -22,11 +24,12 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 
 @router.get("/dashboard", summary="Lấy dữ liệu thống kê tổng quan và hiệu năng OCR")
 async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
-    """Trả về số liệu thống kê tổng hợp và chỉ số khoa học cho màn hình Dashboard."""
+    """Trả về số liệu thống kê tổng hợp và chỉ số khoa học cho màn hình Dashboard (có In-Memory TTL Cache)."""
+    cached = app_cache.get("dashboard_stats")
+    if cached is not None:
+        return cached
     # 1. Tổng tài liệu
-    total_docs_res = await db.execute(
-        select(func.count(Document.id)).where(Document.is_deleted == False)
-    )
+    total_docs_res = await db.execute(select(func.count(Document.id)).where(Document.is_deleted == False))
     total_documents = total_docs_res.scalar() or 0
 
     # 2. Đếm theo trạng thái
@@ -44,10 +47,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
         .group_by(DocumentCategory.id, DocumentCategory.name, DocumentCategory.code)
     )
     cat_res = await db.execute(cat_stmt)
-    category_breakdown = [
-        {"name": row[0], "code": row[1], "count": row[2]}
-        for row in cat_res.all()
-    ]
+    category_breakdown = [{"name": row[0], "code": row[1], "count": row[2]} for row in cat_res.all()]
 
     # 4. Hiệu năng OCR (Confidence, Correction Rate, Processing time)
     ocr_stats_stmt = select(
@@ -77,10 +77,10 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
         .order_by(Document.created_at.desc())
         .limit(10)
         .options(
-            selectinload(Document.category),
+            joinedload(Document.category),
+            joinedload(Document.uploader),
             selectinload(Document.metadata_),
-            selectinload(Document.uploader),
-            selectinload(Document.ocr_results),
+            selectinload(Document.ocr_results).defer(OCRResult.raw_text).defer(OCRResult.corrected_text),
         )
     )
     recent_res = await db.execute(recent_stmt)
@@ -91,22 +91,32 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
             if ocr.is_latest and ocr.confidence_score is not None:
                 conf = float(ocr.confidence_score)
                 break
-        student_name = d.metadata_.student_name if d.metadata_ and d.metadata_.student_name else (d.uploader.full_name if d.uploader else None)
-        student_id = d.metadata_.student_id if d.metadata_ and d.metadata_.student_id else (d.uploader.mssv if d.uploader else None)
+        student_name = (
+            d.metadata_.student_name
+            if d.metadata_ and d.metadata_.student_name
+            else (d.uploader.full_name if d.uploader else None)
+        )
+        student_id = (
+            d.metadata_.student_id
+            if d.metadata_ and d.metadata_.student_id
+            else (d.uploader.mssv if d.uploader else None)
+        )
 
-        recent_docs.append({
-            "id": str(d.id),
-            "title": d.title,
-            "category": d.category.name if d.category else "Chưa phân loại",
-            "student_name": student_name,
-            "student_id": student_id,
-            "file_type": d.file_type,
-            "ocr_status": d.ocr_status,
-            "confidence_score": conf,
-            "created_at": d.created_at.isoformat(),
-        })
+        recent_docs.append(
+            {
+                "id": str(d.id),
+                "title": d.title,
+                "category": d.category.name if d.category else "Chưa phân loại",
+                "student_name": student_name,
+                "student_id": student_id,
+                "file_type": d.file_type,
+                "ocr_status": d.ocr_status,
+                "confidence_score": conf,
+                "created_at": d.created_at.isoformat(),
+            }
+        )
 
-    return {
+    res_data = {
         "total_documents": total_documents,
         "pending_count": status_map.get("PENDING", 0) + status_map.get("PROCESSING", 0),
         "done_count": status_map.get("DONE", 0),
@@ -120,3 +130,5 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
         "category_breakdown": category_breakdown,
         "recent_documents": recent_docs,
     }
+    app_cache.set("dashboard_stats", res_data, ttl=45)
+    return res_data

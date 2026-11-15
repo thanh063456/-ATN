@@ -7,7 +7,7 @@ import {
   Check,
   X,
   SwitchCamera,
-  Sparkles,
+  Info,
 } from "lucide-react";
 
 interface CameraCaptureModalProps {
@@ -246,13 +246,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               />
               {/* Document Alignment Frame Guides */}
               <div style={documentGuideOverlayStyle}>
-                <div style={{ ...cornerStyle, top: 12, left: 12, borderTop: "3px solid #6366f1", borderLeft: "3px solid #6366f1" }} />
-                <div style={{ ...cornerStyle, top: 12, right: 12, borderTop: "3px solid #6366f1", borderRight: "3px solid #6366f1" }} />
-                <div style={{ ...cornerStyle, bottom: 12, left: 12, borderBottom: "3px solid #6366f1", borderLeft: "3px solid #6366f1" }} />
-                <div style={{ ...cornerStyle, bottom: 12, right: 12, borderBottom: "3px solid #6366f1", borderRight: "3px solid #6366f1" }} />
+                <div style={{ ...cornerStyle, top: 12, left: 12, borderTop: "3px solid #3b82f6", borderLeft: "3px solid #3b82f6" }} />
+                <div style={{ ...cornerStyle, top: 12, right: 12, borderTop: "3px solid #3b82f6", borderRight: "3px solid #3b82f6" }} />
+                <div style={{ ...cornerStyle, bottom: 12, left: 12, borderBottom: "3px solid #3b82f6", borderLeft: "3px solid #3b82f6" }} />
+                <div style={{ ...cornerStyle, bottom: 12, right: 12, borderBottom: "3px solid #3b82f6", borderRight: "3px solid #3b82f6" }} />
                 
                 <div style={guideBadgeStyle}>
-                  <Sparkles size={13} color="#6366f1" />
+                  <Info size={13} color="#60a5fa" />
                   <span>Giữ tài liệu phẳng & đủ ánh sáng</span>
                 </div>
               </div>
@@ -517,7 +517,7 @@ const shutterBtnStyle: React.CSSProperties = {
   height: "64px",
   borderRadius: "50%",
   backgroundColor: "transparent",
-  border: "4px solid #6366f1",
+  border: "4px solid #1e40af",
   padding: "4px",
   display: "flex",
   alignItems: "center",
@@ -529,7 +529,7 @@ const shutterInnerStyle: React.CSSProperties = {
   width: "100%",
   height: "100%",
   borderRadius: "50%",
-  backgroundColor: "#6366f1",
+  backgroundColor: "#1e40af",
   transition: "background-color 0.15s ease",
 };
 

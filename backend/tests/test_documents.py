@@ -3,8 +3,9 @@ backend/tests/test_documents.py — Documents Management & Approval Tests
 
 Tuân thủ AAA Pattern (Arrange - Act - Assert).
 """
-import pytest
+
 import httpx
+import pytest
 
 
 @pytest.mark.asyncio
@@ -53,7 +54,9 @@ async def test_approve_document(async_client: httpx.AsyncClient, staff_token: st
     pdf_content = b"%PDF-1.4 Test approval document"
     files = {"file": ("don_phe_duyet.pdf", pdf_content, "application/pdf")}
     headers = {"Authorization": f"Bearer {staff_token}"}
-    up_res = await async_client.post("/api/v1/documents/upload", data={"title": "Đơn cần phê duyệt"}, files=files, headers=headers)
+    up_res = await async_client.post(
+        "/api/v1/documents/upload", data={"title": "Đơn cần phê duyệt"}, files=files, headers=headers
+    )
     doc_id = up_res.json()["id"]
 
     # ── Act ───────────────────────────────────────────────────────────────

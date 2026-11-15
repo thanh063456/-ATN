@@ -13,6 +13,7 @@ Cách sử dụng:
     # Phục hồi index từ bản sao lưu
     python scripts/backup_restore_es.py --restore dataset/backups/es_backup_documents_YYYYMMDD_HHMMSS.json.gz
 """
+
 import argparse
 import asyncio
 import gzip
@@ -46,6 +47,7 @@ try:
     from loguru import logger
 except ImportError:
     import logging
+
     logger = logging.getLogger("backup_restore_es")
 logger: Any = logger
 
@@ -99,10 +101,12 @@ async def backup_elasticsearch_index(output_file: str | None = None) -> dict[str
     documents: list[dict[str, Any]] = []
     # Quét toàn bộ documents bằng async_scan (scroll)
     async for doc in async_scan(es, index=INDEX_NAME, query={"query": {"match_all": {}}}):
-        documents.append({
-            "_id": doc["_id"],
-            "_source": doc["_source"],
-        })
+        documents.append(
+            {
+                "_id": doc["_id"],
+                "_source": doc["_source"],
+            }
+        )
 
     backup_payload = {
         "version": "1.0",
@@ -121,10 +125,7 @@ async def backup_elasticsearch_index(output_file: str | None = None) -> dict[str
     file_size_kb = round(os.path.getsize(output_file) / 1024, 2)
     elapsed = round(time.perf_counter() - t0, 2)
 
-    logger.info(
-        f"SAO LƯU THÀNH CÔNG: {len(documents)} tài liệu -> {output_file} "
-        f"({file_size_kb} KB) trong {elapsed}s."
-    )
+    logger.info(f"SAO LƯU THÀNH CÔNG: {len(documents)} tài liệu -> {output_file} ({file_size_kb} KB) trong {elapsed}s.")
 
     return {
         "status": "SUCCESS",
@@ -171,11 +172,13 @@ async def restore_elasticsearch_index(input_file: str) -> dict[str, Any]:
     # 2. Chuẩn bị bulk actions
     actions = []
     for item in docs_to_restore:
-        actions.append({
-            "_index": target_index,
-            "_id": item["_id"],
-            "_source": item["_source"],
-        })
+        actions.append(
+            {
+                "_index": target_index,
+                "_id": item["_id"],
+                "_source": item["_source"],
+            }
+        )
 
     # 3. Nạp hàng loạt
     success_count = 0
@@ -190,7 +193,7 @@ async def restore_elasticsearch_index(input_file: str) -> dict[str, Any]:
             failed_count += failed if isinstance(failed, int) else len(failed)
             logger.info(f"Đã phục hồi {success_count}/{total_docs} tài liệu...")
         except Exception as exc:
-            logger.error(f"Lỗi phục hồi lô {i}-{i+batch_size}: {exc}")
+            logger.error(f"Lỗi phục hồi lô {i}-{i + batch_size}: {exc}")
             failed_count += len(chunk)
 
     await es.indices.refresh(index=target_index)

@@ -8,7 +8,7 @@ import {
   Users,
   FolderKanban,
   FileText,
-  Sparkles,
+  UserCircle,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/useAuthStore";
 
@@ -38,17 +38,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       highlight: true,
     },
     {
+      label: role === "STUDENT" ? "Kho hồ sơ công khai" : "Quản lý Văn bản & Hồ sơ",
+      path: "/documents",
+      icon: FileCheck2,
+      roles: ["ADMIN", "STAFF", "STUDENT"],
+      badge: role === "STUDENT" ? undefined : "CTSV",
+    },
+    {
       label: "Tra cứu toàn văn",
       path: "/search",
       icon: FileSearch,
       roles: ["ADMIN", "STAFF", "STUDENT"],
     },
     {
-      label: role === "STUDENT" ? "Kho tài liệu công khai" : "Phê duyệt & OCR",
-      path: "/documents",
-      icon: FileCheck2,
+      label: "Hồ sơ cá nhân",
+      path: "/profile",
+      icon: UserCircle,
       roles: ["ADMIN", "STAFF", "STUDENT"],
-      badge: role === "STUDENT" ? undefined : "CTSV",
     },
     {
       label: "Quản trị người dùng",
@@ -96,35 +102,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       >
         <div
           style={{
-            width: "36px",
-            height: "36px",
-            borderRadius: "10px",
-            background: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)",
+            width: "34px",
+            height: "34px",
+            borderRadius: "var(--radius-sm)",
+            backgroundColor: "#1e3a8a",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            boxShadow: "0 4px 10px rgba(99, 102, 241, 0.4)",
           }}
         >
-          <FileText size={20} color="#ffffff" />
+          <FileText size={18} color="#93c5fd" />
         </div>
         {!collapsed && (
           <div style={{ overflow: "hidden", whiteSpace: "nowrap" }}>
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", letterSpacing: "-0.01em" }}>
-              DocuCTSV <span style={{ color: "#818cf8", fontSize: "0.75rem" }}>OCR</span>
+            <div style={{ fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.02em", color: "#f8fafc" }}>
+              ĐẠI HỌC ĐÀ LẠT
             </div>
-            <div style={{ fontSize: "0.6875rem", color: "var(--gray-400)" }}>
-              Số hóa Tài liệu CTSV
+            <div style={{ fontSize: "0.6875rem", color: "#94a3b8" }}>
+              Phòng Công tác Sinh viên
             </div>
           </div>
         )}
       </div>
 
       {/* Nav List */}
-      <div style={{ flex: 1, padding: "1rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.35rem", overflowY: "auto" }}>
-        <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase", padding: "0.5rem 0.75rem", letterSpacing: "0.05em" }}>
-          {!collapsed ? "Menu Chức năng" : "•••"}
+      <div style={{ flex: 1, padding: "0.85rem 0.5rem", display: "flex", flexDirection: "column", gap: "0.25rem", overflowY: "auto" }}>
+        <div style={{ fontSize: "0.6875rem", fontWeight: 600, color: "#64748b", padding: "0.4rem 0.75rem", letterSpacing: "0.04em" }}>
+          {!collapsed ? "Hồ sơ & Nghiệp vụ" : "•••"}
         </div>
         {allowedNav.map((item) => {
           const isActive = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
@@ -138,20 +144,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "0.85rem",
-                padding: "0.65rem 0.85rem",
+                gap: "0.75rem",
+                padding: "0.6rem 0.75rem",
                 borderRadius: "var(--radius-md)",
-                fontSize: "0.875rem",
+                fontSize: "0.8125rem",
                 fontWeight: isActive ? 600 : 500,
-                color: isActive ? "#ffffff" : "var(--gray-400)",
-                backgroundColor: isActive
-                  ? "rgba(99, 102, 241, 0.2)"
-                  : "transparent",
-                border: isActive ? "1px solid rgba(99, 102, 241, 0.4)" : "1px solid transparent",
+                color: isActive ? "#ffffff" : "#94a3b8",
+                backgroundColor: isActive ? "rgba(37, 99, 235, 0.2)" : "transparent",
+                borderLeft: isActive ? "3px solid #60a5fa" : "3px solid transparent",
                 transition: "all 0.15s ease",
               }}
             >
-              <Icon size={19} color={isActive ? "#818cf8" : "currentColor"} />
+              <Icon size={18} color={isActive ? "#60a5fa" : "currentColor"} />
               {!collapsed && (
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {item.label}
@@ -160,12 +164,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
               {!collapsed && item.badge && (
                 <span
                   style={{
-                    fontSize: "0.6875rem",
-                    padding: "0.1rem 0.45rem",
-                    borderRadius: "4px",
-                    backgroundColor: "rgba(99, 102, 241, 0.3)",
-                    color: "#a5b4fc",
-                    fontWeight: 700,
+                    fontSize: "0.625rem",
+                    padding: "0.1rem 0.4rem",
+                    borderRadius: "2px",
+                    backgroundColor: "rgba(255, 255, 255, 0.1)",
+                    color: "#bfdbfe",
+                    fontWeight: 600,
                   }}
                 >
                   {item.badge}
@@ -176,16 +180,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
         })}
       </div>
 
-      {/* Pro tip card / Model badge */}
+      {/* Footer Info Box */}
       {!collapsed && (
-        <div style={{ padding: "1rem", margin: "0.75rem", backgroundColor: "rgba(255, 255, 255, 0.04)", borderRadius: "var(--radius-md)", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
-            <Sparkles size={16} color="#818cf8" />
-            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#e2e8f0" }}>VietOCR Engine v2.0</span>
+        <div style={{ padding: "0.75rem 1rem", margin: "0.65rem", backgroundColor: "rgba(255, 255, 255, 0.03)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+          <div style={{ fontSize: "0.6875rem", fontWeight: 600, color: "#cbd5e1" }}>
+            Kho lưu trữ số CTSV
           </div>
-          <p style={{ fontSize: "0.6875rem", color: "var(--gray-400)", lineHeight: 1.4 }}>
-            Hỗ trợ nhận dạng văn bản tiếng Việt & tìm kiếm Elasticsearch.
-          </p>
+          <div style={{ fontSize: "0.625rem", color: "#64748b", marginTop: "0.2rem" }}>
+            Trường Đại học Đà Lạt
+          </div>
         </div>
       )}
     </aside>

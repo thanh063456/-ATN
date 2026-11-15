@@ -4,28 +4,28 @@
 Tạo ảnh PNG giả lập tài liệu CTSV để test pipeline crop_lines → annotation_template → dataset_report.
 Ảnh gồm nhiều dòng chữ tiếng Việt in trên nền trắng.
 """
+
 import sys
-import os
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
     import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     print("Thiếu Pillow. Dùng OpenCV thuần để vẽ.")
-    from PIL import Image, ImageDraw  # sẽ fail nếu thiếu, dùng fallback cv2
+
 
 def make_test_image_cv2(output_path: Path, lines: list) -> None:
     """Tạo ảnh bằng OpenCV. Dùng imencode+tofile để hỗ trợ path Unicode trên Windows."""
-    import cv2, numpy as np
+    import cv2
+    import numpy as np
 
     H, W = 60 + len(lines) * 40, 900
     img = np.ones((H, W, 3), dtype=np.uint8) * 255  # nền trắng
 
     y = 40
     for line in lines:
-        cv2.putText(img, line, (20, y), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7, (30, 30, 30), 2, cv2.LINE_AA)
+        cv2.putText(img, line, (20, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (30, 30, 30), 2, cv2.LINE_AA)
         y += 40
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,7 +36,6 @@ def make_test_image_cv2(output_path: Path, lines: list) -> None:
         print(f"  Created: {output_path.name}  ({len(lines)} lines)")
     else:
         print(f"  [ERROR] imencode thất bại: {output_path.name}")
-
 
 
 SAMPLE_DOCUMENTS = [
@@ -90,7 +89,7 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     # Dùng cwd() thay vì __file__ — __file__ có thể resolve sai với path Unicode trên Windows
     project_root = Path.cwd()
-    raw_dir      = project_root / "dataset" / "raw"
+    raw_dir = project_root / "dataset" / "raw"
 
     print(f"[make_test_images] Tạo ảnh test trong: {raw_dir}")
     print()

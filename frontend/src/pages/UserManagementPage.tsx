@@ -40,7 +40,7 @@ export const UserManagementPage: React.FC = () => {
       id: "2",
       username: "canbo_ctsv",
       fullName: "Nguyễn Văn Tuấn",
-      email: "tuannv@hust.edu.vn",
+      email: "tuannv@dlu.edu.vn",
       role: "STAFF",
       isActive: true,
       lastLogin: "27/08/2026 14:32",
@@ -49,16 +49,16 @@ export const UserManagementPage: React.FC = () => {
       id: "3",
       username: "troly_hoso",
       fullName: "Lê Thị Hồng Nhung",
-      email: "nhunglth@hust.edu.vn",
+      email: "nhunglth@dlu.edu.vn",
       role: "STAFF",
       isActive: true,
       lastLogin: "26/08/2026 17:05",
     },
     {
       id: "4",
-      username: "20210678",
+      username: "2111456",
       fullName: "Nguyễn Hoàng Nam",
-      email: "nam.nh210678@sis.hust.edu.vn",
+      email: "nam.nh2111456@dlu.edu.vn",
       role: "STUDENT",
       isActive: true,
       lastLogin: "27/08/2026 10:15",
@@ -229,7 +229,7 @@ export const UserManagementPage: React.FC = () => {
               width: "100%",
               maxWidth: "480px",
               backgroundColor: "#ffffff",
-              borderRadius: "var(--radius-xl)",
+              borderRadius: "var(--radius-lg)",
               boxShadow: "var(--shadow-xl)",
               padding: "2rem",
             }}
@@ -276,7 +276,7 @@ export const UserManagementPage: React.FC = () => {
                   required
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="vd: bnv@hust.edu.vn"
+                  placeholder="vd: canbo@dlu.edu.vn"
                   style={{ width: "100%", padding: "0.55rem 0.85rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", fontSize: "0.875rem" }}
                 />
               </div>

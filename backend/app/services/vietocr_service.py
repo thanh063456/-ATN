@@ -19,6 +19,7 @@ Chịu trách nhiệm:
 
 Mọi ngưỡng số đọc từ backend/app/core/config.py.
 """
+
 import io
 import re
 import time
@@ -26,11 +27,10 @@ import unicodedata
 from datetime import date
 from typing import Any
 
+import cv2
 import numpy as np
 from loguru import logger
 from PIL import Image
-
-import cv2
 
 try:
     import pymupdf  # PyMuPDF
@@ -41,16 +41,18 @@ except ImportError:
         pymupdf = None
 
 try:
-    import pytesseract
-    import platform
     import os
+    import platform
+
+    import pytesseract
+
     # Cấu hình tự động đường dẫn cho Windows nếu Tesseract chưa được add vào PATH
     if platform.system() == "Windows":
         if os.path.exists(r"C:\Program Files\Tesseract-OCR\tesseract.exe"):
             pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
         elif os.path.exists(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
             pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"
-            
+
     # Trỏ TESSDATA_PREFIX về thư mục chứa model ngôn ngữ cục bộ
     local_tessdata = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../backend/tessdata"))
     if os.path.exists(local_tessdata):
@@ -77,6 +79,7 @@ class VietOCRService:
         if self._settings is None:
             try:
                 from app.core.config import settings
+
                 self._settings = settings
             except Exception:
                 pass
@@ -86,11 +89,13 @@ class VietOCRService:
     @staticmethod
     def _vietocr():
         from app.services.vietocr_engine import vietocr_engine
+
         return vietocr_engine
 
     @staticmethod
     def _trocr():
         from app.services.trocr_engine import trocr_engine
+
         return trocr_engine
 
     # Backward-compat: một số nơi có thể gọi trực tiếp _get_predictor()
@@ -134,36 +139,40 @@ class VietOCRService:
         lines_with_boxes, _, _ = self.segment_lines_with_boxes(pil_image)
         return [img for img, box in lines_with_boxes]
 
-    def segment_lines_with_boxes(self, pil_image: Image.Image) -> tuple[list[tuple[Image.Image, tuple[int, int, int, int]]], int, np.ndarray | None]:
+    def segment_lines_with_boxes(
+        self, pil_image: Image.Image
+    ) -> tuple[list[tuple[Image.Image, tuple[int, int, int, int]]], int, np.ndarray | None]:
         try:
             # 1. Kiểm tra cache kết quả tách dòng theo chữ ký SHA-256 toàn bộ ảnh
             # (Tuyệt đối không chỉ lấy 256 byte đầu/cuối vì lề trắng của mọi file A4 đều giống nhau gây đọc nhầm văn bản khác)
             import hashlib
+
             img_w = pil_image.width
             img_h = pil_image.height
             raw_bytes = pil_image.tobytes()
             sig = hashlib.sha256(raw_bytes).hexdigest()
-            if hasattr(self, '_segment_cache') and sig in self._segment_cache:
+            if hasattr(self, "_segment_cache") and sig in self._segment_cache:
                 logger.debug("Reusing cached line segmentation for image ({w}x{h})", w=img_w, h=img_h)
                 return self._segment_cache[sig]
 
             img_np = np.array(pil_image)
             if len(img_np.shape) == 3 and img_np.shape[2] == 4:
                 img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
-                
+
             stamp_mask = self._get_red_stamp_mask(img_np)
-            
+
             # Load EasyOCR only when needed
             import easyocr
             import torch
-            if not hasattr(self, '_easy_ocr'):
+
+            if not hasattr(self, "_easy_ocr"):
                 logger.info("Initializing EasyOCR...")
                 use_gpu = torch.cuda.is_available()
-                self._easy_ocr = easyocr.Reader(['vi'], gpu=use_gpu, verbose=False)
-                
+                self._easy_ocr = easyocr.Reader(["vi"], gpu=use_gpu, verbose=False)
+
             # Dọn sạch dấu đỏ trước khi EasyOCR quét detector để không bị dấu tròn nối dính các dòng văn bản liền kề
             det_img_np = self._clean_stamp_in_crop(img_np.copy(), stamp_mask) if stamp_mask is not None else img_np
-            
+
             # Tối ưu tốc độ detector: Downscale ảnh về chiều rộng 1500px để CRAFT quét nhanh gấp 2.5x-3x.
             # Sau khi phát hiện bounding box, scale tọa độ ngược về ảnh 300 DPI gốc để cắt chữ siêu nét.
             det_scale = 1.0
@@ -177,7 +186,7 @@ class VietOCRService:
 
             img_bgr = cv2.cvtColor(det_resized, cv2.COLOR_RGB2BGR) if len(det_resized.shape) == 3 else det_resized
             horizontal_list, free_list = self._easy_ocr.detect(img_bgr, canvas_size=1500, mag_ratio=1.0)
-            
+
             raw_boxes = []
             if horizontal_list and len(horizontal_list[0]) > 0:
                 raw_boxes.extend(horizontal_list[0])
@@ -186,7 +195,7 @@ class VietOCRService:
                     xs = [pt[0] for pt in poly]
                     ys = [pt[1] for pt in poly]
                     raw_boxes.append([min(xs), max(xs), min(ys), max(ys)])
-                    
+
             if not raw_boxes:
                 return [], 15, stamp_mask
 
@@ -194,12 +203,14 @@ class VietOCRService:
             boxes = []
             for b in raw_boxes:
                 if det_scale != 1.0:
-                    boxes.append([
-                        int(round(b[0] / det_scale)),
-                        int(round(b[1] / det_scale)),
-                        int(round(b[2] / det_scale)),
-                        int(round(b[3] / det_scale)),
-                    ])
+                    boxes.append(
+                        [
+                            int(round(b[0] / det_scale)),
+                            int(round(b[1] / det_scale)),
+                            int(round(b[2] / det_scale)),
+                            int(round(b[3] / det_scale)),
+                        ]
+                    )
                 else:
                     boxes.append(b)
 
@@ -214,28 +225,28 @@ class VietOCRService:
                         h = y2 - y1
                         cx = (x1 + x2) / 2.0
                         cy = (y1 + y2) / 2.0
-                        
+
                         found_merge = False
                         for i, m_box in enumerate(new_boxes):
                             mx1, mx2, my1, my2 = m_box
                             mh = my2 - my1
                             mcx = (mx1 + mx2) / 2.0
                             mcy = (my1 + my2) / 2.0
-                            
+
                             # Ranh giới 2 cột ở phần Header (top 14% trang):
                             # Cột trái (Cơ quan / Số hiệu) và Cột phải (Quốc hiệu / Ngày tháng)
                             # TUYỆT ĐỐI KHÔNG GỘP NGANG XUYÊN QUA HAI CỘT
-                            is_header_zone = (cy < 0.14 * img_h and mcy < 0.14 * img_h)
+                            is_header_zone = cy < 0.14 * img_h and mcy < 0.14 * img_h
                             if is_header_zone:
                                 split_x = 0.46 * img_w
                                 if (cx < split_x and mcx > split_x) or (cx > split_x and mcx < split_x):
                                     continue
-                            
+
                             # Không bao giờ gộp 2 hộp có tâm lệch dọc quá xa (khác dòng văn bản)
                             diff_cy = abs(cy - mcy)
                             if diff_cy > 0.45 * min(h, mh):
                                 continue
-                                
+
                             new_h = max(y2, my2) - min(y1, my1)
                             if new_h > 1.35 * max(h, mh):
                                 continue
@@ -249,28 +260,28 @@ class VietOCRService:
                                     found_merge = True
                                     merged = True
                                     break
-                                    
+
                         if not found_merge:
                             new_boxes.append(box)
-                            
+
                     boxes_list = new_boxes
                     if not merged:
                         break
                 return boxes_list
-                
+
             boxes = merge_boxes(boxes)
-                
+
             # Sắp xếp thứ tự đọc (Reading Order):
             # Phần Header (top 14% trang): Cột trái trước (từ trên xuống dưới),
             # sau đó Cột phải (từ trên xuống dưới).
             # Phần Thân: tuần tự theo trục Y từ trên xuống dưới.
             header_threshold_y = 0.14 * img_h
             split_x = 0.46 * img_w
-            
+
             header_left = []
             header_right = []
             body_boxes = []
-            
+
             for b in boxes:
                 cy = (b[2] + b[3]) / 2.0
                 cx = (b[0] + b[1]) / 2.0
@@ -282,55 +293,55 @@ class VietOCRService:
                         header_right.append(b)
                 else:
                     body_boxes.append(b)
-                    
+
             header_left = sorted(header_left, key=lambda b: (b[2] + b[3]) / 2.0)
             header_right = sorted(header_right, key=lambda b: (b[2] + b[3]) / 2.0)
             body_boxes = sorted(body_boxes, key=lambda b: (b[2] + b[3]) / 2.0)
-            
+
             boxes = header_left + header_right + body_boxes
-            
+
             lines_with_boxes = []
             heights = []
-            
+
             for box in boxes:
                 x_min, x_max, y_min, y_max = [int(v) for v in box]
                 x, y = x_min, y_min
                 w, h = x_max - x_min, y_max - y_min
-                
+
                 # Bỏ qua các đốm nhiễu, vết mực đơn lẻ (isolated noise components)
                 if (w < 22 and h < 16) or w < 8 or h < 8:
                     continue
-                
+
                 # Căn lề ngang dãn rộng ~5-8% chiều cao + margin để không bao giờ cắt cụt nét glyphs
                 pad_top = max(3, int(0.15 * h))
                 pad_bot = max(3, int(0.12 * h))
-                pad_h   = max(10, int(0.20 * h)) + 8
-                
-                t  = max(0, y - pad_top)
-                b  = min(img_np.shape[0], y + h + pad_bot)
+                pad_h = max(10, int(0.20 * h)) + 8
+
+                t = max(0, y - pad_top)
+                b = min(img_np.shape[0], y + h + pad_bot)
                 lo = max(0, x - pad_h)
                 ro = min(img_np.shape[1], x + w + pad_h)
-                
+
                 crop_np = img_np[t:b, lo:ro].copy()
                 sub_mask = stamp_mask[t:b, lo:ro] if stamp_mask is not None else None
                 crop_np = self._clean_stamp_in_crop(crop_np, sub_mask)
-                    
+
                 line_img = Image.fromarray(crop_np)
                 lines_with_boxes.append((line_img, (x, y, w, h)))
                 heights.append(h)
-                
+
             h_med = int(np.median(heights)) if heights else 15
             logger.info("Segmented {n} lines using EasyOCR", n=len(lines_with_boxes))
-            
+
             # Lưu vào cache bộ nhớ cho các engine sau tái sử dụng
-            if not hasattr(self, '_segment_cache'):
+            if not hasattr(self, "_segment_cache"):
                 self._segment_cache = {}
             if len(self._segment_cache) > 20:
                 self._segment_cache.clear()
             self._segment_cache[sig] = (lines_with_boxes, h_med, stamp_mask)
-            
+
             return lines_with_boxes, h_med, stamp_mask
-            
+
         except Exception as exc:
             logger.warning("segment_lines_with_boxes fallback (EasyOCR error): {err}", err=str(exc))
             return [(pil_image, (0, 0, pil_image.width, pil_image.height))], 15, None
@@ -349,9 +360,9 @@ class VietOCRService:
                 return None
             hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
             # Đỏ thấp: hue 0-12
-            m1  = cv2.inRange(hsv, (0, 90, 60), (12, 255, 255))
+            m1 = cv2.inRange(hsv, (0, 90, 60), (12, 255, 255))
             # Đỏ cao: hue 160-180
-            m2  = cv2.inRange(hsv, (160, 90, 60), (180, 255, 255))
+            m2 = cv2.inRange(hsv, (160, 90, 60), (180, 255, 255))
             red = cv2.bitwise_or(m1, m2)
             # Nếu vùng đỏ quá nhỏ → không có con dấu thực
             if cv2.countNonZero(red) < 200:
@@ -366,7 +377,7 @@ class VietOCRService:
     def _clean_stamp_in_crop(crop_np: np.ndarray, crop_stamp_mask: np.ndarray | None) -> np.ndarray:
         """
         Xóa pixel con dấu đỏ khỏi crop ảnh, giữ nguyên:
-          - Pixel đen (chữ đen bên dưới/cạnh con dấu)  
+          - Pixel đen (chữ đen bên dưới/cạnh con dấu)
           - Pixel xanh dương (chữ tay xanh: số, chữ ký)
         Fill WHITE cho pixel đỏ dấu, bảo vệ tuyệt đối chữ in đen và chữ viết tay xanh.
         """
@@ -375,7 +386,7 @@ class VietOCRService:
         try:
             if len(crop_np.shape) < 3 or crop_np.shape[2] < 3:
                 return crop_np
-                
+
             out = crop_np.copy()
             r = out[:, :, 0].astype(int)
             g = out[:, :, 1].astype(int)
@@ -401,10 +412,7 @@ class VietOCRService:
             return crop_np
 
     @staticmethod
-    def _sort_boxes_by_row(
-        boxes: list[tuple[int, int, int, int]],
-        h_med: int
-    ) -> list[tuple[int, int, int, int]]:
+    def _sort_boxes_by_row(boxes: list[tuple[int, int, int, int]], h_med: int) -> list[tuple[int, int, int, int]]:
         """
         Sắp xếp boxes theo hàng thực tế bằng cách gom nhóm theo y-center.
         """
@@ -433,7 +441,8 @@ class VietOCRService:
     @staticmethod
     def _merge_boxes(boxes: list[tuple[int, int, int, int]], h_med: int) -> list[tuple[int, int, int, int]]:
         """Gom các hộp gần nhau theo chiều ngang và có chung dòng (độ cao)."""
-        if not boxes: return []
+        if not boxes:
+            return []
         boxes = sorted(boxes, key=lambda b: b[0])
         merged = []
         for bx in boxes:
@@ -441,13 +450,13 @@ class VietOCRService:
             placed = False
             for i, mb in enumerate(merged):
                 mx, my, mw, mh = mb
-                overlap_y = max(0, min(y+h, my+mh) - max(y, my))
+                overlap_y = max(0, min(y + h, my + mh) - max(y, my))
                 if overlap_y >= 0.5 * min(h, mh):
                     if (x - (mx + mw)) < 2 * h_med and (mx - (x + w)) < 2 * h_med:
                         nx = min(x, mx)
                         ny = min(y, my)
-                        nw = max(x+w, mx+mw) - nx
-                        nh = max(y+h, my+mh) - ny
+                        nw = max(x + w, mx + mw) - nx
+                        nh = max(y + h, my + mh) - ny
                         merged[i] = (nx, ny, nw, nh)
                         placed = True
                         break
@@ -456,12 +465,14 @@ class VietOCRService:
         return merged
 
     @staticmethod
-    def _split_tall_box(binary: np.ndarray, x: int, y: int, w: int, h: int, h_med: int) -> list[tuple[int, int, int, int]]:
+    def _split_tall_box(
+        binary: np.ndarray, x: int, y: int, w: int, h: int, h_med: int
+    ) -> list[tuple[int, int, int, int]]:
         """
         Cắt box quá cao (thường do dính chữ giữa 2 dòng) bằng horizontal projection.
         Tìm gap THỰC SỰ trắng liên tiếp >= 2 pixel để tránh cắt nhầm dòng chữ.
         """
-        region = binary[y:y+h, x:x+w]
+        region = binary[y : y + h, x : x + w]
         if region.size == 0:
             return [(x, y, w, h)]
         row_hist = region.sum(axis=1)
@@ -513,8 +524,8 @@ class VietOCRService:
             if bh > 2.2 * h_med:
                 mid_start = int(0.3 * bh)
                 mid_end = int(0.7 * bh)
-                min_val = min(row_hist[by-y+mid_start:by-y+mid_end])
-                min_idx = mid_start + list(row_hist[by-y+mid_start:by-y+mid_end]).index(min_val)
+                min_val = min(row_hist[by - y + mid_start : by - y + mid_end])
+                min_idx = mid_start + list(row_hist[by - y + mid_start : by - y + mid_end]).index(min_val)
                 final_boxes.append((bx, by, bw, min_idx))
                 final_boxes.append((bx, by + min_idx, bw, bh - min_idx))
             else:
@@ -524,15 +535,13 @@ class VietOCRService:
 
     @staticmethod
     def _split_two_column_advanced(
-        binary: np.ndarray,
-        x: int, y: int, w: int, h: int,
-        h_med: int
+        binary: np.ndarray, x: int, y: int, w: int, h: int, h_med: int
     ) -> list[tuple[int, int, int, int]]:
         """
         Tách box rộng thành 2 cột nếu có khoảng trắng liên tục (gap > 3*h_med) ở vùng giữa.
         """
         try:
-            region = binary[max(0, y - 2): y + h + 2, max(0, x): x + w]
+            region = binary[max(0, y - 2) : y + h + 2, max(0, x) : x + w]
             if region.size == 0:
                 return [(x, y, w, h)]
 
@@ -553,12 +562,9 @@ class VietOCRService:
                         if gw > 3 * h_med and gw > best_gap_w:
                             best_gap_w = gw
                             best_gap = (gap_start + c) // 2
-            
+
             if best_gap > 0 and 0.2 * w < best_gap < 0.8 * w:
-                return [
-                    (x, y, best_gap, h),
-                    (x + best_gap, y, w - best_gap, h)
-                ]
+                return [(x, y, best_gap, h), (x + best_gap, y, w - best_gap, h)]
             return [(x, y, w, h)]
         except Exception:
             return [(x, y, w, h)]
@@ -566,8 +572,12 @@ class VietOCRService:
     # ── Lọc nhiễu ─────────────────────────────────────────────────────────────
     @staticmethod
     def _is_noise_line_advanced(
-        text: str, box: tuple[int, int, int, int], img_w: int, img_h: int, h_med: int,
-        stamp_mask: np.ndarray | None = None
+        text: str,
+        box: tuple[int, int, int, int],
+        img_w: int,
+        img_h: int,
+        h_med: int,
+        stamp_mask: np.ndarray | None = None,
     ) -> bool:
         """
         Lọc dòng rác nâng cao dựa vào context (kích thước box, vị trí).
@@ -579,19 +589,23 @@ class VietOCRService:
         # Dòng quá ngắn hoặc toàn ký tự đặc biệt
         if len(t) <= 1 and t not in ("I", "1", "-", "."):
             return True
-        if not re.search('[A-Za-z0-9\u00C0-\u1EF9]', t):
+        if not re.search("[A-Za-z0-9\u00c0-\u1ef9]", t):
             return True
 
         x, y, w, h = box
-        
+
         # Hallucination guard: crop rất rộng nhưng model trả về chuỗi siêu ngắn
-        if w > 3 * h_med and len(t) < 3 and not re.search(r'\d', t):
+        if w > 3 * h_med and len(t) < 3 and not re.search(r"\d", t):
             return True
-            
+
         # Drop lines that are clearly diacritic strips (height very small)
         if h <= max(12, int(0.6 * h_med)) and w > 100:
             # Exception for page numbers, document numbers, or standard valid words
-            if t not in {"THÔNG BÁO", "KẾ HOẠCH", "BÁO CÁO"} and not re.search(r'Số:\s*\d+', t) and not re.fullmatch(r'\d+', t):
+            if (
+                t not in {"THÔNG BÁO", "KẾ HOẠCH", "BÁO CÁO"}
+                and not re.search(r"Số:\s*\d+", t)
+                and not re.fullmatch(r"\d+", t)
+            ):
                 return True
 
         # Hallucination guard: crop rất hẹp nhưng text trả về lại rất dài
@@ -601,7 +615,7 @@ class VietOCRService:
         # Text/crop width mismatch guard:
         # Standard character width is roughly h_med * 0.4 to 0.7.
         # If crop is very wide, but text is very short, or vice versa
-        if w > 15 * h_med and len(t) < w / (h_med * 1.8) and not re.search(r'\d{8,}', t):
+        if w > 15 * h_med and len(t) < w / (h_med * 1.8) and not re.search(r"\d{8,}", t):
             # Exception for a few spaced characters, but usually it's noise
             if len(t) > 3:
                 return True
@@ -610,31 +624,61 @@ class VietOCRService:
         words = t.split()
         if len(words) > 2:
             vowels = "aeiouyáàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ"
-            valid_syllables = sum(1 for w_tok in words if any(v in w_tok.lower() for v in vowels) and re.search(r'[A-Za-z\u00C0-\u1EF9]', w_tok))
+            valid_syllables = sum(
+                1
+                for w_tok in words
+                if any(v in w_tok.lower() for v in vowels) and re.search(r"[A-Za-z\u00C0-\u1EF9]", w_tok)
+            )
             # If less than 30% of alphabetical words are valid syllables (have vowels)
-            alpha_words = [w_tok for w_tok in words if re.search(r'[A-Za-z\u00C0-\u1EF9]', w_tok)]
+            alpha_words = [w_tok for w_tok in words if re.search(r"[A-Za-z\u00C0-\u1EF9]", w_tok)]
             if len(alpha_words) >= 3 and (valid_syllables / len(alpha_words)) < 0.3:
                 return True
 
         # Drop lines that are ONLY digits/short tokens, UNLESS context rule matches
-        is_page_number = re.fullmatch(r'\d+', t) and w < 4 * h_med and (y < 0.15 * img_h or y > 0.85 * img_h) and (0.35 * img_w < x < 0.65 * img_w)
+        is_page_number = (
+            re.fullmatch(r"\d+", t)
+            and w < 4 * h_med
+            and (y < 0.15 * img_h or y > 0.85 * img_h)
+            and (0.35 * img_w < x < 0.65 * img_w)
+        )
         # Relaxed list number: allow small width (< 4*h_med) and numbers with dot/slash/parenthesis
-        is_list_number = re.fullmatch(r'\d+[\.\/\)]?', t) and w < 4 * h_med
-        is_doc_number = "Số:" in t or "TB-" in t or re.match(r'(Số:|số)?\s*\d+/[A-Z\-]+', t)
-        
+        is_list_number = re.fullmatch(r"\d+[\.\/\)]?", t) and w < 4 * h_med
+        is_doc_number = "Số:" in t or "TB-" in t or re.match(r"(Số:|số)?\s*\d+/[A-Z\-]+", t)
+
         # Valid small context words around signature
-        valid_small_words = {"1.", "2.", "3.", "4.", "I.", "II.", "III.", "IV.", "1", "2", "-", "PHÓ HIỆU TRƯỞNG", "HIỆU TRƯỞNG", "Nguyễn Văn Ngọc", "Lưu: VT, CTSV.", "Lưu: VT, CTSV"}
-        
-        if re.fullmatch(r'[\d\s\.\,\-\/]{1,4}', t):
+        valid_small_words = {
+            "1.",
+            "2.",
+            "3.",
+            "4.",
+            "I.",
+            "II.",
+            "III.",
+            "IV.",
+            "1",
+            "2",
+            "-",
+            "PHÓ HIỆU TRƯỞNG",
+            "HIỆU TRƯỞNG",
+            "Nguyễn Văn Ngọc",
+            "Lưu: VT, CTSV.",
+            "Lưu: VT, CTSV",
+        }
+
+        if re.fullmatch(r"[\d\s\.\,\-\/]{1,4}", t):
             # Short tokens of digits/symbols
             if not (is_page_number or is_list_number or is_doc_number or t in valid_small_words):
                 return True
-                
+
         # Filter garbage words and known hallucinated Latin long words
         if t in ("2.2", "42", "4.2", "22", "Coll", "Chines", "CHILL", "0%", "2/42", "Contracts", "Contract"):
             return True
-            
-        if re.search(r'\b(?:Contracts?|Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\b', t, re.IGNORECASE):
+
+        if re.search(
+            r"\b(?:Contracts?|Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\b",
+            t,
+            re.IGNORECASE,
+        ):
             return True
 
         # Rác lề mép ngoài văn bản (x sát mép phải > 88% chiều rộng trang hoặc trái < 5%)
@@ -642,15 +686,23 @@ class VietOCRService:
             return True
 
         # Barcode dài nằm xen kẽ
-        if re.search(r'\d{10,}', t):
+        if re.search(r"\d{10,}", t):
             return True
-            
+
         # Ảo giác dấu chấm/gạch ngang
-        if len(re.findall(r'[\.\-\_~]', t)) >= 12:
+        if len(re.findall(r"[\.\-\_~]", t)) >= 12:
             return True
 
         # Ảo giác watermark mờ rác
-        if len(re.findall(r'\"\"+', t)) >= 2 or len(re.findall(r'\d/\d/\d/\d', t)) >= 1 or '??T2' in t or 'yhng' in t or 'nghvay' in t or 'vụvv' in t or 'viv' in t:
+        if (
+            len(re.findall(r"\"\"+", t)) >= 2
+            or len(re.findall(r"\d/\d/\d/\d", t)) >= 1
+            or "??T2" in t
+            or "yhng" in t
+            or "nghvay" in t
+            or "vụvv" in t
+            or "viv" in t
+        ):
             return True
 
         # Lặp từ do con dấu tròn đỏ
@@ -658,32 +710,33 @@ class VietOCRService:
         if len(words) >= 4:
             clean_words = []
             for w_tok in words:
-                key = re.sub('[^a-z\u00C0-\u1EF9]', '', w_tok.lower())
+                key = re.sub("[^a-z\u00c0-\u1ef9]", "", w_tok.lower())
                 if len(key) >= 2:
                     clean_words.append(key)
-                    
+
             if len(clean_words) >= 3:
                 from collections import Counter
+
                 counts = Counter(clean_words)
                 max_freq = counts.most_common(1)[0][1]
-                
+
                 # Check if it overlaps with stamp
                 overlap_stamp = False
                 if stamp_mask is not None:
                     # bounding box overlap
-                    crop_stamp = stamp_mask[y:y+h, x:x+w]
+                    crop_stamp = stamp_mask[y : y + h, x : x + w]
                     if np.count_nonzero(crop_stamp) > 50:
                         overlap_stamp = True
-                
+
                 # Mộc mờ sinh ảo giác từ lặp liên tục
                 if max_freq >= 3 and (max_freq / len(clean_words)) > 0.25:
                     if overlap_stamp:
                         return True
-                    if max_freq >= 5: 
+                    if max_freq >= 5:
                         return True
-                    
+
                 # Watermark mờ sinh 2 cặp lặp từ đứng cạnh nhau
-                adjacent_dups = sum(1 for i in range(len(clean_words) - 1) if clean_words[i] == clean_words[i+1])
+                adjacent_dups = sum(1 for i in range(len(clean_words) - 1) if clean_words[i] == clean_words[i + 1])
                 if adjacent_dups >= 2 and overlap_stamp:
                     return True
 
@@ -708,9 +761,11 @@ class VietOCRService:
         """Gọi pipeline hậu xử lý: ocr_char_fixes → admin_dict → header_normalizer."""
         try:
             from app.services.text_postprocessing import post_process_vietnamese as _pp
+
             return _pp(text)
         except ImportError:
             import unicodedata as _ud
+
             return _ud.normalize("NFC", text).strip()
 
     # ── Chấm điểm tin cậy ────────────────────────────────────────────────────
@@ -725,9 +780,9 @@ class VietOCRService:
         if not text or len(text.strip()) < 10:
             return 0.60
         _base = {"vietocr": 0.92, "direct_pdf": 0.97, "pypdf": 0.88}.get(engine, 0.85)
-        suspicious  = len(re.findall(r'[%~^|<>{}\[\]\\@#$*]', text))
+        suspicious = len(re.findall(r"[%~^|<>{}\[\]\\@#$*]", text))
         char_penalty = min(0.15, (suspicious / max(len(text), 1)) * 5.0)
-        digit_runs   = re.findall(r'\d{8,}', text)
+        digit_runs = re.findall(r"\d{8,}", text)
         digit_penalty = min(0.05, len(digit_runs) * 0.01)
         return round(max(0.60, min(0.98, _base - char_penalty - digit_penalty)), 2)
 
@@ -737,15 +792,22 @@ class VietOCRService:
 
     # ── Điều hướng engine theo dòng ───────────────────────────────────────────
     def _ocr_lines_with_engine(
-        self, image: Image.Image, page_num: int = 1
-    ) -> list[tuple[str, float]]:
+        self,
+        image: Image.Image,
+        page_num: int = 1,
+        exclude_bboxes: list[tuple[int, int, int, int]] | None = None,
+    ) -> list[tuple[str, float, tuple[int, int, int, int]]]:
         """Tách dòng rồi OCR bằng VietOCR, lọc dòng rác bằng AI context.
 
         Args:
             image: PIL image của 1 trang.
             page_num: Số trang (1-indexed) để debug dump.
+            exclude_bboxes: Danh sách vùng bảng biểu (x, y, w, h) cần bỏ qua để tránh trùng lặp.
         """
-        import os, json, time as _time
+        import json
+        import os
+        import time as _time
+
         lines_with_boxes, h_med, stamp_mask = self.segment_lines_with_boxes(image)
         if not lines_with_boxes:
             return []
@@ -783,29 +845,46 @@ class VietOCRService:
             drop_reason: str | None = None
             ink_ratio_val: float | None = None
             num_cc_val: int | None = None
-            try:
-                crop_arr = np.array(img)
-                gray_c = cv2.cvtColor(crop_arr, cv2.COLOR_RGB2GRAY) if len(crop_arr.shape) == 3 else crop_arr
-                _, bw = cv2.threshold(gray_c, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-                ink_ratio_val = float(np.count_nonzero(bw)) / max(1, bw.size)
-                num_cc_val = max(0, cv2.connectedComponentsWithStats(bw, connectivity=8)[0] - 1)
-                if ink_ratio_val < 0.015:
-                    drop_reason = f"pre_guard:ink={ink_ratio_val:.4f}"
-                elif num_cc_val < 2:
-                    drop_reason = f"pre_guard:cc={num_cc_val}"
-            except Exception:
-                pass
+
+            # Bỏ qua nếu dòng nằm hoàn toàn trong khung bảng biểu đã bóc tách
+            if exclude_bboxes:
+                cx, cy = x + w / 2, y + h / 2
+                if any(
+                    (tx - 10 <= cx <= tx + tw + 10) and (ty - 10 <= cy <= ty + th + 10)
+                    for (tx, ty, tw, th) in exclude_bboxes
+                ):
+                    drop_reason = "table_bbox_excluded"
+
+            if not drop_reason:
+                try:
+                    crop_arr = np.array(img)
+                    gray_c = cv2.cvtColor(crop_arr, cv2.COLOR_RGB2GRAY) if len(crop_arr.shape) == 3 else crop_arr
+                    _, bw = cv2.threshold(gray_c, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+                    ink_ratio_val = float(np.count_nonzero(bw)) / max(1, bw.size)
+                    num_cc_val = max(0, cv2.connectedComponentsWithStats(bw, connectivity=8)[0] - 1)
+                    if ink_ratio_val < 0.015:
+                        drop_reason = f"pre_guard:ink={ink_ratio_val:.4f}"
+                    elif num_cc_val < 2:
+                        drop_reason = f"pre_guard:cc={num_cc_val}"
+                except Exception:
+                    pass
 
             pre_drop_reasons.append(drop_reason)
             if drop_reason:
                 if do_dump and overlay_np is not None:
-                    cv2.rectangle(overlay_np, (x, y), (x+w, y+h), (128, 0, 255), 1)
-                    dump_data.append({
-                        "id": idx, "page": page_num, "box": [x, y, w, h],
-                        "raw_text": "", "conf": 0.0,
-                        "ink_ratio": round(ink_ratio_val, 4) if ink_ratio_val is not None else None,
-                        "num_cc": num_cc_val, "drop_reason": drop_reason,
-                    })
+                    cv2.rectangle(overlay_np, (x, y), (x + w, y + h), (128, 0, 255), 1)
+                    dump_data.append(
+                        {
+                            "id": idx,
+                            "page": page_num,
+                            "box": [x, y, w, h],
+                            "raw_text": "",
+                            "conf": 0.0,
+                            "ink_ratio": round(ink_ratio_val, 4) if ink_ratio_val is not None else None,
+                            "num_cc": num_cc_val,
+                            "drop_reason": drop_reason,
+                        }
+                    )
             else:
                 kept_indices.append(idx)
                 guarded_imgs.append(img)
@@ -839,7 +918,7 @@ class VietOCRService:
                     drop_reason = f"low_conf:{conf:.2f}"
 
             if not drop_reason:
-                filtered_results.append((text, conf))
+                filtered_results.append((text, conf, (x, y, w, h)))
 
             if do_dump:
                 ink_ratio_val = None
@@ -858,137 +937,65 @@ class VietOCRService:
 
                 color = (0, 0, 255) if drop_reason else (0, 255, 0)
                 if overlay_np is not None:
-                    cv2.rectangle(overlay_np, (x, y), (x+w, y+h), color, 2)
+                    cv2.rectangle(overlay_np, (x, y), (x + w, y + h), color, 2)
                     label = f"{idx}:{(text or '')[:12]}" if not drop_reason else f"X{idx}:{(drop_reason or '')[:10]}"
-                    cv2.putText(overlay_np, label, (x, max(10, y - 2)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.32, color, 1)
-                dump_data.append({
-                    "id": idx, "page": page_num, "box": [x, y, w, h],
-                    "raw_text": text, "conf": round(conf, 3),
-                    "ink_ratio": ink_ratio_val, "num_cc": num_cc_val,
-                    "crop_png": crop_fname or None,
-                    "drop_reason": drop_reason,
-                })
+                    cv2.putText(overlay_np, label, (x, max(10, y - 2)), cv2.FONT_HERSHEY_SIMPLEX, 0.32, color, 1)
+                dump_data.append(
+                    {
+                        "id": idx,
+                        "page": page_num,
+                        "box": [x, y, w, h],
+                        "raw_text": text,
+                        "conf": round(conf, 3),
+                        "ink_ratio": ink_ratio_val,
+                        "num_cc": num_cc_val,
+                        "crop_png": crop_fname or None,
+                        "drop_reason": drop_reason,
+                    }
+                )
 
         if do_dump and overlay_np is not None:
             try:
                 ts = int(_time.time() * 1000)
                 cv2.imwrite(
                     os.path.join(debug_dir, f"debug_overlay_p{page_num}_{ts}.png"),
-                    cv2.cvtColor(overlay_np, cv2.COLOR_RGB2BGR))
-                with open(os.path.join(debug_dir, f"debug_dump_p{page_num}_{ts}.json"),
-                          "w", encoding="utf-8") as f:
+                    cv2.cvtColor(overlay_np, cv2.COLOR_RGB2BGR),
+                )
+                with open(os.path.join(debug_dir, f"debug_dump_p{page_num}_{ts}.json"), "w", encoding="utf-8") as f:
                     json.dump(dump_data, f, ensure_ascii=False, indent=2)
-                logger.debug("OCR_DEBUG_DUMP: saved p{p} overlay+dump ({n} boxes)",
-                             p=page_num, n=len(dump_data))
+                logger.debug("OCR_DEBUG_DUMP: saved p{p} overlay+dump ({n} boxes)", p=page_num, n=len(dump_data))
             except Exception as exc:
                 logger.error("OCR_DEBUG_DUMP write error: {err}", err=str(exc))
 
         return filtered_results
 
-
-    # ── Bóc tách bảng biểu ────────────────────────────────────────────────────
+    # ── Bóc tách bảng biểu đồng thời ──────────────────────────────────────────
     def detect_and_extract_tables(self, pil_image: Image.Image) -> list[str]:
         """
-        Nhận diện và bóc tách bảng biểu bằng Morphological Kernels.
-        Yêu cầu: ≥ 3 hàng × ≥ 2 cột, diện tích ≥ 5% trang.
-        Xuất ra định dạng Markdown.
+        Nhận diện và bóc tách bảng biểu tự động đồng thời với mô hình VietOCR
+        bằng thuật toán OpenCV Morphology + VietOCR Transformer.
+        Xuất ra danh sách định dạng Markdown Table.
         """
-        if cv2 is None:
-            return []
         try:
-            img_np = np.array(pil_image)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np
-            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+            from app.services.table_service import table_service
 
-            _s = self._get_settings()
-            _kh = getattr(_s, "ocr_morph_kernel_horiz", 25) if _s else 25
-            _kv = getattr(_s, "ocr_morph_kernel_vert",  25) if _s else 25
-
-            horiz = cv2.morphologyEx(binary, cv2.MORPH_OPEN,
-                                     cv2.getStructuringElement(cv2.MORPH_RECT, (_kh, 1)), iterations=2)
-            vert  = cv2.morphologyEx(binary, cv2.MORPH_OPEN,
-                                     cv2.getStructuringElement(cv2.MORPH_RECT, (1, _kv)), iterations=2)
-            grid  = cv2.add(horiz, vert)
-
-            contours, _ = cv2.findContours(grid, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            h_img, w_img = img_np.shape[:2]
-
-            cells, total_area = [], 0
-            for c in contours:
-                x, y, w, h = cv2.boundingRect(c)
-                if 25 < w < (w_img * 0.95) and 12 < h < (h_img * 0.3):
-                    cells.append((x, y, w, h))
-                    total_area += w * h
-
-            if len(cells) < 6 or total_area < (w_img * h_img * 0.05):
-                return []
-
-            cells = sorted(cells, key=lambda b: (b[1] // 18, b[0]))
-            rows: list[list] = []
-            cur_row: list = []
-            last_y = None
-            for x, y, w, h in cells:
-                if last_y is None or abs(y - last_y) < 18:
-                    cur_row.append((x, y, w, h))
-                    last_y = y
-                else:
-                    rows.append(sorted(cur_row, key=lambda b: b[0]))
-                    cur_row = [(x, y, w, h)]
-                    last_y = y
-            if cur_row:
-                rows.append(sorted(cur_row, key=lambda b: b[0]))
-
-            if len(rows) < 3 or (max(len(r) for r in rows) if rows else 0) < 2:
-                return []
-
-            all_flat = [(ri, x, y, w, h) for ri, row in enumerate(rows) for x, y, w, h in row]
-            crops = [
-                self.preprocess_handwriting(Image.fromarray(img_np[y:y+h, x:x+w]))
-                for _, x, y, w, h in all_flat
-                if min(w, h) > 6
-            ]
-            batch_texts = self._vietocr().predict_batch_padded(crops) if crops else []
-
-            crop_idx = 0
-            row_map: dict[int, list[str]] = {}
-            for ri, x, y, w, h in all_flat:
-                if min(w, h) > 6 and crop_idx < len(batch_texts):
-                    cell_text = batch_texts[crop_idx] or ""
-                    crop_idx += 1
-                else:
-                    cell_text = ""
-                    if pytesseract is not None:
-                        try:
-                            cell_bytes = pytesseract.image_to_string(
-                                Image.fromarray(img_np[y:y+h, x:x+w]),
-                                lang="vie+eng", config="--psm 6",
-                                output_type=pytesseract.Output.BYTES
-                            )
-                            cell_text = cell_bytes.decode("utf-8", errors="replace").strip()
-                        except Exception:
-                            pass
-                row_map.setdefault(ri, []).append(cell_text.replace("\n", " ") or "--")
-
-            md_rows: list[str] = []
-            for ri in sorted(row_map):
-                row_texts = row_map[ri]
-                md_rows.append("| " + " | ".join(row_texts) + " |")
-                if ri == 0:
-                    md_rows.append("| " + " | ".join(["---"] * len(row_texts)) + " |")
-
-            if len(md_rows) >= 3:
-                logger.info("Extracted table: {r} rows, {c} cells", r=len(rows), c=len(all_flat))
-                return ["\n".join(md_rows)]
+            res = table_service.extract_tables(pil_image, ocr_cells=True)
+            if res.has_table and res.tables:
+                logger.info(
+                    "VietOCR tự động bóc tách thành công {n} bảng biểu ({c} ô)",
+                    n=res.total_tables,
+                    c=res.total_cells,
+                )
+                return [tbl.markdown for tbl in res.tables if tbl.markdown]
         except Exception as exc:
-            logger.debug("Table extraction failed: {err}", err=str(exc))
+            logger.warning(f"Lỗi khi bóc tách bảng biểu đồng thời trong VietOCR: {exc}")
         return []
 
     # ── OCR 1 trang ───────────────────────────────────────────────────────────
     def _ocr_image(
         self,
         image: Image.Image,
-        extract_tables: bool = False,
+        extract_tables: bool = True,
         is_first_page: bool = True,
         page_num: int = 1,
     ) -> tuple[str, str]:
@@ -1003,32 +1010,55 @@ class VietOCRService:
         """
         processed_img = self.preprocess_image(image)
 
-        # 1. Bóc tách bảng biểu (tuỳ chọn)
-        table_markdowns = self.detect_and_extract_tables(processed_img) if extract_tables else []
+        # 1. Bóc tách bảng biểu đồng thời bằng OpenCV Morphology + VietOCR
+        detected_tables = []
+        table_bboxes = []
+        if extract_tables:
+            try:
+                from app.services.table_service import table_service
 
-        # 2. OCR toàn trang theo dòng
+                res = table_service.extract_tables(processed_img, ocr_cells=True)
+                if res.has_table and res.tables:
+                    detected_tables = res.tables
+                    table_bboxes = [t.bbox for t in detected_tables]
+                    logger.info(
+                        "VietOCR đồng bộ bóc tách thành công {n} bảng biểu ({c} ô) trang {p}",
+                        n=res.total_tables,
+                        c=res.total_cells,
+                        p=page_num,
+                    )
+            except Exception as exc:
+                logger.warning(f"Lỗi khi bóc tách bảng biểu đồng thời trong VietOCR: {exc}")
+
+        # 2. OCR toàn trang theo dòng (loại trừ các dòng thuộc ô bảng biểu đã bóc tách)
         raw_text = ""
-        line_results = self._ocr_lines_with_engine(processed_img, page_num=page_num)
-        if line_results:
-            valid_lines = [t for t, _ in line_results]
-            joined = "\n".join(valid_lines)
-            if len(joined.strip()) > 3:
-                # Prepend page marker so downstream can split by page
-                page_marker = f"--- Trang {page_num} ---"
-                raw_text = unicodedata.normalize("NFC", f"{page_marker}\n{joined.strip()}")
-                logger.info("OCR [vietocr] p{p} → {n} dòng, {c} ký tự",
-                            p=page_num, n=len(valid_lines), c=len(raw_text))
+        line_results = self._ocr_lines_with_engine(processed_img, page_num=page_num, exclude_bboxes=table_bboxes)
 
-        # 3. Ghép bảng biểu vào raw
-        if table_markdowns:
-            tables_str = "\n\n### [BẢNG BIỂU DỮ LIỆU BÓC TÁCH]:\n" + "\n\n".join(table_markdowns)
-            raw_text = f"{raw_text}\n\n{tables_str}" if raw_text else tables_str
+        # 3. Tích hợp dòng văn bản và bảng biểu theo thứ tự tọa độ từ trên xuống dưới
+        elements: list[dict[str, Any]] = []
+        if line_results:
+            for item in line_results:
+                t = item[0]
+                box = item[2] if len(item) > 2 else (0, 0, 0, 0)
+                if t.strip():
+                    elements.append({"text": t.strip(), "y": box[1]})
+
+        for tbl in detected_tables:
+            if tbl.markdown:
+                elements.append({"text": tbl.markdown, "y": tbl.bbox[1]})
+
+        elements.sort(key=lambda e: e["y"])
+        joined = "\n\n".join(e["text"] for e in elements)
+        if len(joined.strip()) > 3:
+            page_marker = f"--- Trang {page_num} ---"
+            raw_text = unicodedata.normalize("NFC", f"{page_marker}\n{joined.strip()}")
+            logger.info("OCR [vietocr] p{p} → {n} phần tử (dòng + bảng), {c} ký tự", p=page_num, n=len(elements), c=len(raw_text))
 
         # 4. Post-processing chỉ cho processed_text, giữ raw_text nguyên vẹn
         processed_text = ""
         if raw_text:
             try:
-                cleaned        = self._clean_ocr_text(raw_text)
+                cleaned = self._clean_ocr_text(raw_text)
                 processed_text = self.post_process_vietnamese(cleaned)
             except Exception as e:
                 logger.error("VietOCR post-processing failed: {err}", err=str(e))
@@ -1048,16 +1078,20 @@ class VietOCRService:
         """
         file_ext = file_type.lower().replace(".", "")
         _s = self._get_settings()
-        _dpi_default    = getattr(_s, "ocr_pdf_dpi_default", 200)  if _s else 200
-        _dpi_fast       = getattr(_s, "ocr_pdf_dpi_fast", 150)     if _s else 150
-        _fast_mode      = getattr(_s, "ocr_fast_mode", False)       if _s else False
-        _render_dpi     = _dpi_fast if _fast_mode else _dpi_default
-        _extract_tables = getattr(_s, "ocr_extract_tables", True)   if _s else True
+        _dpi_default = getattr(_s, "ocr_pdf_dpi_default", 200) if _s else 200
+        _dpi_fast = getattr(_s, "ocr_pdf_dpi_fast", 150) if _s else 150
+        _fast_mode = getattr(_s, "ocr_fast_mode", False) if _s else False
+        _render_dpi = _dpi_fast if _fast_mode else _dpi_default
+        _extract_tables = getattr(_s, "ocr_extract_tables", True) if _s else True
         selected_engine = engine or (getattr(_s, "ocr_engine", "vietocr") if _s else "vietocr")
 
         logger.info(
             "OCR: engine={eng}, dpi={dpi}, fast={fm}, tables={et}, pages={p}",
-            eng=selected_engine, dpi=_render_dpi, fm=_fast_mode, et=_extract_tables, p=pages
+            eng=selected_engine,
+            dpi=_render_dpi,
+            fm=_fast_mode,
+            et=_extract_tables,
+            p=pages,
         )
 
         page_count = 1
@@ -1068,7 +1102,7 @@ class VietOCRService:
                 try:
                     doc = pymupdf.open(stream=file_bytes, filetype="pdf")
                     page_count = len(doc)
-                    
+
                     target_pages = []
                     if isinstance(pages, int):
                         target_pages = list(range(min(pages, page_count)))
@@ -1077,21 +1111,84 @@ class VietOCRService:
                     else:
                         target_pages = list(range(page_count))
 
-                    # PDF có text layer → trích xuất trực tiếp (siêu tốc)
+                    # PDF có text layer → trích xuất kết hợp bóc tách bảng biểu tự động bằng OpenCV
                     if selected_engine == "vietocr":
-                        # Luôn trích xuất TẤT CẢ các trang đối với text-layer PDF, bất kể target_pages
-                        all_pages_text = [doc[idx].get_text().strip() for idx in range(page_count)]
-                        all_pages_text = [t for t in all_pages_text if t]
-                        # Only use text layer if it has some substantial text (>= 50 chars)
-                        if all_pages_text and len("\n".join(all_pages_text)) >= 50:
-                            raw_full = "\n\n".join(all_pages_text)
-                            processed_full = self.post_process_vietnamese(raw_full)
-                            logger.info("Direct text PDF: {p} trang (yêu cầu {tp} nhưng đã lấy toàn bộ), {c} ký tự",
-                                        p=page_count, tp=len(target_pages), c=len(processed_full))
-                            return raw_full, processed_full, self.calculate_confidence_score(processed_full, "direct_pdf"), page_count
+                        has_text_layer = False
+                        raw_sample = "".join(doc[i].get_text() for i in range(min(page_count, 3)))
+                        if len(raw_sample.strip()) >= 50:
+                            has_text_layer = True
+
+                        if has_text_layer:
+                            all_pages_text = []
+                            for idx in range(page_count):
+                                page = doc[idx]
+                                page_text = page.get_text().strip()
+                                if _extract_tables:
+                                    try:
+                                        pix = page.get_pixmap(dpi=_render_dpi)
+                                        page_img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                                        from app.services.table_service import table_service
+
+                                        table_res = table_service.extract_tables(page_img, ocr_cells=True)
+                                        if table_res.has_table and table_res.tables:
+                                            scale_x = pix.width / max(1.0, page.rect.width)
+                                            scale_y = pix.height / max(1.0, page.rect.height)
+                                            table_items = []
+                                            for t in table_res.tables:
+                                                t_rect = (
+                                                    t.bbox[0] / scale_x,
+                                                    t.bbox[1] / scale_y,
+                                                    (t.bbox[0] + t.bbox[2]) / scale_x,
+                                                    (t.bbox[1] + t.bbox[3]) / scale_y,
+                                                )
+                                                table_items.append({"rect": t_rect, "md": t.markdown, "y0": t_rect[1]})
+
+                                            blocks = page.get_text("blocks")
+                                            outside_blocks = []
+                                            for b in blocks:
+                                                bx0, by0, bx1, by1, btext = b[:5]
+                                                b_mid_y = (by0 + by1) / 2
+                                                b_mid_x = (bx0 + bx1) / 2
+                                                is_inside = any(
+                                                    (ti["rect"][1] - 5 <= b_mid_y <= ti["rect"][3] + 5)
+                                                    and (ti["rect"][0] - 15 <= b_mid_x <= ti["rect"][2] + 15)
+                                                    for ti in table_items
+                                                )
+                                                if not is_inside and btext.strip():
+                                                    outside_blocks.append({"text": btext.strip(), "y0": by0})
+
+                                            all_elems = outside_blocks + [
+                                                {"text": ti["md"], "y0": ti["y0"]} for ti in table_items
+                                            ]
+                                            all_elems.sort(key=lambda e: e["y0"])
+                                            page_text = "\n\n".join(e["text"] for e in all_elems)
+                                    except Exception as te_err:
+                                        logger.warning(
+                                            "Lỗi bóc tách bảng PDF trang {p}: {err}",
+                                            p=idx + 1,
+                                            err=str(te_err),
+                                        )
+
+                                if page_text:
+                                    all_pages_text.append(f"--- Trang {idx + 1} ---\n{page_text}")
+
+                            if all_pages_text:
+                                raw_full = "\n\n".join(all_pages_text)
+                                processed_full = self.post_process_vietnamese(raw_full)
+                                logger.info(
+                                    "Direct text PDF (đồng bộ bảng biểu OpenCV): {p} trang, {c} ký tự",
+                                    p=page_count,
+                                    c=len(processed_full),
+                                )
+                                return (
+                                    raw_full,
+                                    processed_full,
+                                    self.calculate_confidence_score(processed_full, "vietocr"),
+                                    page_count,
+                                )
 
                     # PDF scan ảnh
-                    raw_pages: list[str]       = []
+                    raw_pages: list[str] = []
                     processed_pages: list[str] = []
                     for idx in target_pages:
                         page = doc[idx]
@@ -1104,17 +1201,27 @@ class VietOCRService:
                             is_first_page=(idx == 0),
                             page_num=idx + 1,
                         )
-                        logger.info("OCR trang {i}/{t} [{eng}] | {s:.1f}s",
-                                    i=idx + 1, t=page_count, eng=selected_engine, s=time.time() - t0)
+                        logger.info(
+                            "OCR trang {i}/{t} [{eng}] | {s:.1f}s",
+                            i=idx + 1,
+                            t=page_count,
+                            eng=selected_engine,
+                            s=time.time() - t0,
+                        )
                         if page_raw:
                             raw_pages.append(page_raw)
                         if page_proc:
                             processed_pages.append(page_proc)
 
                     if raw_pages:
-                        raw_full       = "\n\n".join(raw_pages)
+                        raw_full = "\n\n".join(raw_pages)
                         processed_full = self.post_process_vietnamese("\n\n".join(processed_pages))
-                        return raw_full, processed_full, self.calculate_confidence_score(processed_full, selected_engine), page_count
+                        return (
+                            raw_full,
+                            processed_full,
+                            self.calculate_confidence_score(processed_full, selected_engine),
+                            page_count,
+                        )
                 except Exception as exc:
                     logger.warning("PyMuPDF OCR failed: {err}", err=str(exc))
 
@@ -1123,7 +1230,7 @@ class VietOCRService:
                 try:
                     reader = pypdf.PdfReader(io.BytesIO(file_bytes))
                     page_count = len(reader.pages)
-                    
+
                     target_pages = []
                     if isinstance(pages, int):
                         target_pages = list(range(min(pages, page_count)))
@@ -1131,12 +1238,12 @@ class VietOCRService:
                         target_pages = [p for p in pages if 0 <= p < page_count]
                     else:
                         target_pages = list(range(page_count))
-                        
+
                     # Extract all pages for text-layer PDFs
-                    texts  = [page.extract_text() or "" for page in reader.pages]
-                    texts  = [t for t in texts if t]
+                    texts = [page.extract_text() or "" for page in reader.pages]
+                    texts = [t for t in texts if t]
                     if texts and len("\n".join(texts)) >= 50:
-                        raw_full  = "\n\n".join(texts)
+                        raw_full = "\n\n".join(texts)
                         proc_full = self.post_process_vietnamese(raw_full)
                         return raw_full, proc_full, self.calculate_confidence_score(proc_full, "pypdf"), page_count
                 except Exception:
@@ -1147,9 +1254,14 @@ class VietOCRService:
         # ── Ảnh (JPG / PNG / TIFF) ───────────────────────────────────────────
         try:
             image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
-            raw_text, processed_text = self._ocr_image(image, page_num=1)
+            raw_text, processed_text = self._ocr_image(image, extract_tables=True, page_num=1)
             if raw_text:
-                return raw_text, processed_text, self.calculate_confidence_score(processed_text, selected_engine), page_count
+                return (
+                    raw_text,
+                    processed_text,
+                    self.calculate_confidence_score(processed_text, selected_engine),
+                    page_count,
+                )
         except Exception as exc:
             logger.warning("Image OCR failed: {err}", err=str(exc))
 
@@ -1157,29 +1269,21 @@ class VietOCRService:
 
     # ── So sánh engine ────────────────────────────────────────────────────────
     def compare_ocr_engines(self, file_bytes: bytes, file_type: str) -> dict[str, Any]:
-        """So sánh hiệu năng VietOCR / TrOCR / Tesseract trên cùng một tài liệu."""
+        """So sánh hiệu năng VietOCR / TrOCR trên cùng một tài liệu."""
         results: dict[str, Any] = {}
         for eng_key, eng_name in [
-            ("vietocr",  "VietOCR (vgg_transformer)"),
-            ("trocr",    "Microsoft TrOCR (Vision Transformer)"),
-            ("tesseract","Tesseract 5 (LSTM Baseline)"),
+            ("vietocr", "VietOCR (vgg_transformer)"),
+            ("trocr", "Microsoft TrOCR (Vision Transformer)"),
         ]:
             t0 = time.time()
             try:
-                if eng_key == "tesseract":
-                    try:
-                        from app.services.tesseract_service import tesseract_service
-                        res_tuple = tesseract_service.extract_text_from_file(file_bytes, file_type)
-                    except Exception:
-                        res_tuple = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
-                else:
-                    res_tuple = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
-                
+                res_tuple = self.extract_text_from_file(file_bytes, file_type, engine=eng_key)
+
                 raw_text = res_tuple[0] if len(res_tuple) > 0 else ""
                 processed_text = res_tuple[1] if len(res_tuple) > 1 else ""
                 conf = res_tuple[2] if len(res_tuple) > 2 else 0.0
                 pc = res_tuple[3] if len(res_tuple) > 3 else 1
-                
+
                 text = processed_text or raw_text
                 results[eng_key] = {
                     "engine_name": eng_name,
@@ -1222,9 +1326,9 @@ class VietOCRService:
             return metadata
 
         _s = self._get_settings()
-        _mssv_prefix  = getattr(_s, "mssv_year_prefix_pattern", r"2[0-3]") if _s else r"2[0-3]"
-        _mssv_len_min = getattr(_s, "mssv_length_min", 7)                   if _s else 7
-        _mssv_len_max = getattr(_s, "mssv_length_max", 8)                   if _s else 8
+        _mssv_prefix = getattr(_s, "mssv_year_prefix_pattern", r"2[0-3]") if _s else r"2[0-3]"
+        _mssv_len_min = getattr(_s, "mssv_length_min", 7) if _s else 7
+        _mssv_len_max = getattr(_s, "mssv_length_max", 8) if _s else 8
         _kw_len = "{" + str(_mssv_len_min) + "," + str(_mssv_len_max) + "}"
         _sfx_min, _sfx_max = max(1, _mssv_len_min - 2), max(2, _mssv_len_max - 2)
         _sfx_len = "{" + str(_sfx_min) + "," + str(_sfx_max) + "}"
@@ -1232,7 +1336,8 @@ class VietOCRService:
         # 1. MSSV
         m = re.search(
             r"(?:MSSV|Mã\s*số\s*sinh\s*viên|Mã\s*SV|Mã\s*sinh\s*viên)[\s:]*([0-9]" + _kw_len + r")",
-            text, re.IGNORECASE,
+            text,
+            re.IGNORECASE,
         ) or re.search(r"\b(" + _mssv_prefix + r"[0-9]" + _sfx_len + r")\b", text)
         if m:
             metadata["student_id"] = m.group(1).strip()
@@ -1266,11 +1371,14 @@ class VietOCRService:
         # 4. Số hiệu văn bản
         sn = re.search(
             r"(?:Số|Số hiệu)[\s:]*([0-9A-ZÀ-Ỹa-zà-ỹ\-_/]+(?:\s*/\s*[0-9A-ZÀ-Ỹa-zà-ỹ\-_/]+)?)",
-            text, re.IGNORECASE,
+            text,
+            re.IGNORECASE,
         )
         if sn:
             num = re.sub(r"\s*/\s*", "/", sn.group(1).strip())
-            metadata["document_number"] = num
+            # Chỉ ghi nhận khi có số thực tế, không gán số hiệu nếu chỉ là placeholder / bản nháp
+            if not any(ph in num for ph in ["...", "……", "[chưa", "chưa đọc"]) and re.search(r"\d", num):
+                metadata["document_number"] = num
 
         # 5. Phân loại tự động
         tl = text.lower()

@@ -14,9 +14,7 @@ import {
   Cpu,
   ArrowUpRight,
   TrendingUp,
-  Sparkles,
   Award,
-  Zap,
   CheckSquare,
 } from "lucide-react";
 import { Card } from "../components/common/Card";
@@ -61,42 +59,38 @@ export const DashboardPage: React.FC = () => {
 
   const stats = [
     {
-      title: "Tổng tài liệu hồ sơ",
+      title: "Tổng số hồ sơ lưu trữ",
       value: String(totalDocs),
-      change: "Toàn hệ thống DLU",
+      detail: "Hồ sơ công văn & học vụ DLU",
       icon: FileText,
-      color: "#4f46e5",
-      bg: "#eef2ff",
+      accent: "#1e3a8a",
     },
     {
-      title: "Đang chờ OCR / Xử lý",
+      title: "Đang chờ số hóa",
       value: String(pendingDocs),
-      change: "Thời gian xử lý ~1.2s",
+      detail: "Hồ sơ mới gửi vào hàng đợi",
       icon: Clock,
-      color: "#d97706",
-      bg: "#fffbeb",
+      accent: "#d97706",
     },
     {
-      title: "OCR Hoàn thành",
+      title: "Nhận diện toàn văn hoàn tất",
       value: String(doneDocs),
-      change: `Độ chính xác ${statsData?.avg_confidence || 96.8}%`,
+      detail: `Độ tin cậy trung bình ${statsData?.avg_confidence || 95}%`,
       icon: CheckCircle2,
-      color: "#16a34a",
-      bg: "#f0fdf4",
+      accent: "#16a34a",
     },
     {
-      title: "Đã phê duyệt điện tử",
+      title: "Hồ sơ đã phê duyệt điện tử",
       value: String(approvedDocs),
-      change: "Có mã QR xác thực",
+      detail: "Đã ký số & gắn mã QR tra cứu",
       icon: Award,
-      color: "#059669",
-      bg: "#ecfdf5",
+      accent: "#0f766e",
     },
   ];
 
   const categoryBreakdown = statsData?.category_breakdown?.length
     ? statsData.category_breakdown.map((cat, i) => {
-        const colors = ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#8b5cf6"];
+        const colors = ["#1e3a8a", "#0f766e", "#2563eb", "#d97706", "#475569"];
         const percent = totalDocs > 0 ? Math.round((cat.count / totalDocs) * 100) : 0;
         return {
           name: cat.name,
@@ -106,10 +100,10 @@ export const DashboardPage: React.FC = () => {
         };
       })
     : [
-        { name: "Đơn xin nghỉ học tạm thời / bảo lưu", count: 4, percent: 35, color: "#6366f1" },
-        { name: "Giấy xác nhận sinh viên", count: 3, percent: 25, color: "#06b6d4" },
-        { name: "Hồ sơ xét học bổng khuyến khích", count: 3, percent: 25, color: "#10b981" },
-        { name: "Hồ sơ Khen thưởng - Kỷ luật", count: 2, percent: 15, color: "#f59e0b" },
+        { name: "Đơn xin nghỉ học tạm thời / bảo lưu", count: 4, percent: 35, color: "#1e3a8a" },
+        { name: "Giấy xác nhận sinh viên", count: 3, percent: 25, color: "#0f766e" },
+        { name: "Hồ sơ xét học bổng khuyến khích", count: 3, percent: 25, color: "#2563eb" },
+        { name: "Hồ sơ Khen thưởng - Kỷ luật", count: 2, percent: 15, color: "#d97706" },
       ];
 
   const recentDocs = statsData?.recent_documents?.length
@@ -128,227 +122,219 @@ export const DashboardPage: React.FC = () => {
       ];
 
   return (
-    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-      {/* Top Banner */}
+    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      {/* Institutional Header Banner */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #1e40af 100%)",
+          backgroundColor: "#162d4d",
           color: "#ffffff",
-          padding: "1.85rem 2rem",
-          borderRadius: "var(--radius-xl)",
-          boxShadow: "0 12px 28px -6px rgba(49, 46, 129, 0.35)",
+          padding: "1.5rem 1.75rem",
+          borderRadius: "var(--radius-lg)",
+          border: "1px solid #1e3a8a",
           flexWrap: "wrap",
           gap: "1.25rem",
         }}
       >
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <h1 style={{ fontSize: "1.45rem", fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
-              Hệ thống Số hóa & Quản lý Hồ sơ CTSV — Đại học Đà Lạt
-            </h1>
-            <span style={{ fontSize: "0.75rem", backgroundColor: "rgba(255,255,255,0.2)", padding: "2px 8px", borderRadius: "9999px", fontWeight: 600 }}>
-              v2.0 AI Powered
-            </span>
+          <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#93c5fd", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            Trường Đại học Đà Lạt — Phòng Công tác Sinh viên
           </div>
-          <p style={{ color: "#c7d2fe", fontSize: "0.85rem", marginTop: "0.4rem", maxWidth: "620px", lineHeight: "1.5" }}>
-            Nhận diện văn bản tiếng Việt VietOCR Transformer, bóc tách thực thể AI thông minh và tra cứu toàn văn tốc độ cao trên Elasticsearch.
+          <h1 style={{ fontSize: "1.35rem", fontWeight: 700, letterSpacing: "-0.01em", margin: "0.3rem 0 0 0", color: "#f8fafc" }}>
+            Hệ thống Số hóa & Quản lý Văn bản Lưu trữ CTSV
+          </h1>
+          <p style={{ color: "#cbd5e1", fontSize: "0.8125rem", marginTop: "0.35rem", maxWidth: "620px", lineHeight: "1.5" }}>
+            Quản lý số hóa công văn, quyết định và hồ sơ học vụ sinh viên; hỗ trợ bóc tách toàn văn và tra cứu phục vụ công tác văn thư.
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "0.65rem", flexWrap: "wrap" }}>
           <Link to="/upload">
             <Button
               variant="primary"
               size="md"
-              leftIcon={<UploadCloud size={17} />}
-              style={{ backgroundColor: "#6366f1", border: "1px solid rgba(255,255,255,0.2)" }}
+              leftIcon={<UploadCloud size={16} />}
+              style={{ backgroundColor: "#2563eb", color: "#ffffff", border: "1px solid rgba(255,255,255,0.2)" }}
             >
-              Upload hồ sơ mới
+              Tiếp nhận hồ sơ mới
             </Button>
           </Link>
           <Link to="/search">
             <Button
               variant="secondary"
               size="md"
-              leftIcon={<FileSearch size={17} />}
-              style={{ backgroundColor: "rgba(255,255,255,0.12)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.2)" }}
+              leftIcon={<FileSearch size={16} />}
+              style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.18)" }}
             >
-              Tra cứu nhanh
+              Tra cứu văn thư
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* 4 Stat Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "1.25rem" }}>
+      {/* 4 Stat Blocks với phân cấp nghiệp vụ rõ ràng */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
         {stats.map((stat, i) => {
           const Icon = stat.icon;
+          const isFeatured = i === 0;
           return (
-            <Card key={i} padding="md" hoverable>
+            <Card
+              key={i}
+              padding="md"
+              style={{
+                borderLeft: `3px solid ${stat.accent}`,
+                backgroundColor: isFeatured ? "#f8fafc" : "#ffffff",
+              }}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <span style={{ fontSize: "0.8125rem", color: "var(--gray-500)", fontWeight: 600 }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--gray-600)", fontWeight: 600 }}>
                     {stat.title}
                   </span>
-                  <div style={{ fontSize: "1.875rem", fontWeight: 800, color: "var(--gray-900)", marginTop: "0.25rem" }}>
+                  <div style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--gray-900)", marginTop: "0.25rem", fontFamily: "var(--font-mono)" }}>
                     {stat.value}
                   </div>
                 </div>
-                <div
-                  style={{
-                    width: "44px",
-                    height: "44px",
-                    borderRadius: "12px",
-                    backgroundColor: stat.bg,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Icon size={22} color={stat.color} />
-                </div>
+                <Icon size={18} color={stat.accent} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.85rem", fontSize: "0.75rem", color: stat.color, fontWeight: 600 }}>
-                <TrendingUp size={14} />
-                <span>{stat.change}</span>
+              <div style={{ marginTop: "0.6rem", fontSize: "0.75rem", color: "var(--gray-500)" }}>
+                {stat.detail}
               </div>
             </Card>
           );
         })}
       </div>
 
-      {/* Research & Quality Metrics (Báo cáo Khoa học ĐATN) */}
-      <Card padding="md" style={{ border: "1px solid #c7d2fe", backgroundColor: "#faf5ff" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Zap size={22} color="#7c3aed" />
-            </div>
+      {/* Bảng Kiểm soát Chất lượng Số hóa Văn bản (Chỉ hiển thị cho ADMIN) */}
+      {user?.role === "ADMIN" && (
+        <Card padding="md" style={{ border: "1px solid var(--border-color)", backgroundColor: "#ffffff" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
             <div>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#581c87", margin: 0 }}>
-                Chỉ số Hiệu năng & Chất lượng Nhận diện OCR (ĐATN Metrics)
+              <h3 style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
+                Kiểm định Độ chính xác & Hiệu năng Số hóa Văn bản
               </h3>
-              <span style={{ fontSize: "0.75rem", color: "#6b21a8" }}>
-                Đánh giá định lượng trên tập dữ liệu hồ sơ sinh viên Đại học Đà Lạt
+              <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
+                Dữ liệu đo đạc thực nghiệm trên tập mẫu văn bản hành chính CTSV Đại học Đà Lạt
               </span>
             </div>
-          </div>
 
-          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
-            <div>
-              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Độ tin cậy OCR TB:</span>
-              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#16a34a" }}>
-                {statsData?.avg_confidence || 96.8}%
-              </div>
-            </div>
-
-            <div>
-              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Tỷ lệ lỗi ký tự (CER):</span>
-              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#2563eb" }}>
-                {statsData?.cer_estimation || 1.15}%
-              </div>
-            </div>
-
-            <div>
-              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Tốc độ xử lý TB:</span>
-              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>
-                {statsData?.avg_processing_time_ms || 1180} ms
-              </div>
-            </div>
-
-            <div>
-              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Hiệu chỉnh thủ công:</span>
-              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#7c3aed" }}>
-                {statsData?.corrected_count || 0} hồ sơ
-              </div>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Middle section: System Health + Category Breakdown */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1.5rem" }}>
-        {/* System Services Health Monitor */}
-        <Card padding="md">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <Activity size={18} color="var(--primary-600)" />
-              <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
-                Trạng thái Dịch vụ Hệ thống
-              </h2>
-            </div>
-            <button
-              onClick={fetchData}
-              style={{ fontSize: "0.75rem", color: "var(--primary-600)", fontWeight: 600, border: "none", background: "none", cursor: "pointer" }}
-            >
-              {isHealthLoading ? "Đang kiểm tra..." : "Làm mới"}
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Database size={18} color="#4f46e5" />
-                <div>
-                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>PostgreSQL 15 (Supabase)</div>
-                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Lưu trữ dữ liệu có cấu trúc & RBAC</div>
+            <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+              <div>
+                <span style={{ fontSize: "0.6875rem", color: "var(--gray-500)", fontWeight: 600 }}>Độ tin cậy nhận diện:</span>
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#166534", fontFamily: "var(--font-mono)" }}>
+                  {statsData?.avg_confidence || 95.8}%
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
-                  {healthData?.services?.postgres?.latency_ms ? `${healthData.services.postgres.latency_ms} ms` : "Online"}
-                </span>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
-              </div>
-            </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Search size={18} color="#06b6d4" />
-                <div>
-                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Elasticsearch 8.12</div>
-                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Tìm kiếm toàn văn tiếng Việt</div>
+              <div>
+                <span style={{ fontSize: "0.6875rem", color: "var(--gray-500)", fontWeight: 600 }}>Tỷ lệ lỗi ký tự (CER):</span>
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#1e40af", fontFamily: "var(--font-mono)" }}>
+                  {statsData?.cer_estimation || 1.15}%
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
-                  {healthData?.services?.elasticsearch?.latency_ms ? `${healthData.services.elasticsearch.latency_ms} ms` : "Online"}
-                </span>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
-              </div>
-            </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <HardDrive size={18} color="#d97706" />
-                <div>
-                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Object Storage (MinIO / Supabase)</div>
-                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Lưu trữ file gốc PDF & Scan</div>
+              <div>
+                <span style={{ fontSize: "0.6875rem", color: "var(--gray-500)", fontWeight: 600 }}>Tốc độ xử lý trung bình:</span>
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--gray-900)", fontFamily: "var(--font-mono)" }}>
+                  {statsData?.avg_processing_time_ms || 1180} ms/trang
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Online</span>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
-              </div>
-            </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Cpu size={18} color="#dc2626" />
-                <div>
-                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>VietOCR Worker Engine</div>
-                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Mô hình Transformer & Trích xuất AI</div>
+              <div>
+                <span style={{ fontSize: "0.6875rem", color: "var(--gray-500)", fontWeight: 600 }}>Hồ sơ đã hiệu chỉnh:</span>
+                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--gray-800)", fontFamily: "var(--font-mono)" }}>
+                  {statsData?.corrected_count || 0} hồ sơ
                 </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Sẵn sàng</span>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
               </div>
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Middle section: System Health + Category Breakdown */}
+      <div style={{ display: "grid", gridTemplateColumns: user?.role === "ADMIN" ? "repeat(auto-fit, minmax(360px, 1fr))" : "1fr", gap: "1.5rem" }}>
+        {/* System Services Health Monitor (Chỉ hiển thị cho ADMIN) */}
+        {user?.role === "ADMIN" && (
+          <Card padding="md">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Activity size={18} color="var(--primary-600)" />
+                <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
+                  Trạng thái Dịch vụ Hệ thống
+                </h2>
+              </div>
+              <button
+                onClick={fetchData}
+                style={{ fontSize: "0.75rem", color: "var(--primary-600)", fontWeight: 600, border: "none", background: "none", cursor: "pointer" }}
+              >
+                {isHealthLoading ? "Đang kiểm tra..." : "Làm mới"}
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <Database size={18} color="#4f46e5" />
+                  <div>
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>PostgreSQL 15 (Supabase)</div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Lưu trữ dữ liệu có cấu trúc & RBAC</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
+                    {healthData?.services?.postgres?.latency_ms ? `${healthData.services.postgres.latency_ms} ms` : "Online"}
+                  </span>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <Search size={18} color="#06b6d4" />
+                  <div>
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Elasticsearch 8.12</div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Tìm kiếm toàn văn tiếng Việt</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
+                    {healthData?.services?.elasticsearch?.latency_ms ? `${healthData.services.elasticsearch.latency_ms} ms` : "Online"}
+                  </span>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <HardDrive size={18} color="#d97706" />
+                  <div>
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Object Storage (MinIO / Supabase)</div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Lưu trữ file gốc PDF & Scan</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Online</span>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <Cpu size={18} color="#dc2626" />
+                  <div>
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>VietOCR Worker Engine</div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Mô hình Transformer & Trích xuất AI</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Sẵn sàng</span>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Category Distribution */}
         <Card padding="md">

@@ -38,10 +38,10 @@ export const Card: React.FC<CardProps> = ({
         border: "1px solid var(--border-color)",
         padding: paddingMap[padding],
         boxShadow: shadowMap[shadow],
-        transition: hoverable ? "transform 0.2s ease, box-shadow 0.2s ease" : undefined,
+        transition: hoverable ? "border-color 0.15s ease, box-shadow 0.15s ease" : undefined,
         ...style,
       }}
-      className={`card ${hoverable ? "card-hover" : ""} ${className}`}
+      className={`card ${className}`}
       {...props}
     >
       {children}

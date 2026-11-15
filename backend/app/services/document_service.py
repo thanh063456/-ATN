@@ -10,6 +10,7 @@ Tuân thủ .ai/CODING_RULES.md:
 - Service layer chỉ raise custom exception (AppException).
 - Không import trực tiếp HTTPException.
 """
+
 from datetime import datetime
 from uuid import UUID
 
@@ -19,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import DocumentNotFoundException
-from app.models.documents import Document, OCR_STATUS_PENDING
-from app.models.processing_jobs import ProcessingJob, JOB_STATUS_PENDING
+from app.models.documents import OCR_STATUS_PENDING, Document
+from app.models.processing_jobs import JOB_STATUS_PENDING, ProcessingJob
 from app.models.roles import Role
 from app.models.users import User
 from app.schemas.documents import (
@@ -119,8 +120,7 @@ class DocumentService:
         await self.db.refresh(document)
         await self.db.refresh(job)
 
-        logger.info("Created Document (id={doc_id}) and ProcessingJob (id={job_id})",
-                    doc_id=document.id, job_id=job.id)
+        logger.info("Created Document (id={doc_id}) and ProcessingJob (id={job_id})", doc_id=document.id, job_id=job.id)
         return document, job
 
     async def update_job_celery_task_id(self, job_id: UUID, celery_task_id: str) -> None:

@@ -113,7 +113,7 @@ export const CategoryManagementPage: React.FC = () => {
         {categories.map((cat) => (
           <Card key={cat.id} padding="md" hoverable>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-              <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "var(--primary-50)", color: "var(--primary-600)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--primary-50)", color: "var(--primary-600)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <FileText size={20} />
               </div>
               <Badge variant="success">Hoạt động</Badge>
@@ -122,8 +122,9 @@ export const CategoryManagementPage: React.FC = () => {
             <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--gray-900)" }}>
               {cat.name}
             </h3>
-            <div style={{ fontSize: "0.75rem", color: "var(--primary-600)", fontWeight: 600, marginTop: "0.15rem" }}>
-              Mã: <code>{cat.code}</code>
+            <div style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>
+              <span style={{ color: "var(--gray-500)", marginRight: "0.35rem" }}>Mã:</span>
+              <code style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", backgroundColor: "#eff6ff", color: "#1e40af", padding: "0.15rem 0.4rem", borderRadius: "var(--radius-sm)", fontWeight: 600 }}>{cat.code}</code>
             </div>
 
             <p style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.5rem", minHeight: "2.4rem", lineHeight: 1.4 }}>
@@ -164,7 +165,7 @@ export const CategoryManagementPage: React.FC = () => {
               width: "100%",
               maxWidth: "480px",
               backgroundColor: "#ffffff",
-              borderRadius: "var(--radius-xl)",
+              borderRadius: "var(--radius-lg)",
               boxShadow: "var(--shadow-xl)",
               padding: "2rem",
             }}

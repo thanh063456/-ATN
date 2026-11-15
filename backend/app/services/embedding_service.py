@@ -5,15 +5,19 @@ Cung cấp vector nhúng 768 chiều cho tài liệu và truy vấn tìm kiếm:
 1. Thử nghiệm sinh vector qua Google Gemini text-embedding-004 (hoặc OpenAI text-embedding-3-small) nếu có API key.
 2. Fallback sang Term-Hashing n-gram vectorizer chuẩn hóa L2 (chạy offline 100% không cần Internet).
 """
+
 import hashlib
 import math
 import re
 from typing import Any
+
 import httpx
+
 try:
     from loguru import logger
 except ImportError:
     import logging
+
     logger = logging.getLogger("embedding_service")
 logger: Any = logger
 
@@ -66,7 +70,7 @@ class EmbeddingService:
         # Chiếu các từ và bi-grams vào không gian 768 chiều
         tokens = list(words)
         for i in range(len(words) - 1):
-            tokens.append(f"{words[i]}_{words[i+1]}")
+            tokens.append(f"{words[i]}_{words[i + 1]}")
 
         for tok in tokens:
             h = int(hashlib.md5(tok.encode("utf-8")).hexdigest(), 16)

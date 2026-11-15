@@ -3,8 +3,9 @@ backend/tests/test_auth.py — Authentication & RBAC Unit / Integration Tests
 
 Tuân thủ AAA Pattern (Arrange - Act - Assert) theo .ai/CODING_RULES.md.
 """
-import pytest
+
 import httpx
+import pytest
 
 
 @pytest.mark.asyncio
@@ -49,10 +50,13 @@ async def test_login_wrong_password(async_client: httpx.AsyncClient):
 async def test_get_me_authenticated(async_client: httpx.AsyncClient):
     """Kiểm tra lấy profile người dùng hiện tại khi đã đính kèm Bearer token."""
     # ── Arrange ───────────────────────────────────────────────────────────
-    login_res = await async_client.post("/api/v1/auth/login", json={
-        "username": "canbo_ctsv",
-        "password": "password123",
-    })
+    login_res = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": "canbo_ctsv",
+            "password": "password123",
+        },
+    )
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 

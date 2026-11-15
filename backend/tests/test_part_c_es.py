@@ -1,7 +1,7 @@
 import pytest
-from httpx import AsyncClient
-from app.core.elasticsearch import INDEX_MAPPINGS, is_es_available
 from app.core.doc_types_config import DOC_TYPES_CONFIG
+from app.core.elasticsearch import INDEX_MAPPINGS, is_es_available
+from httpx import AsyncClient
 
 
 def test_es_mappings_contain_specified_fields():

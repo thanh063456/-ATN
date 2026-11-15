@@ -8,11 +8,12 @@ Cung cấp các endpoints:
 - GET /auth/me: Lấy thông tin tài khoản hiện tại kèm vai trò và MSSV
 - POST /auth/login: Đăng nhập trực tiếp (backward-compatible)
 """
-from typing import Any
+
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from loguru import logger
 from sqlalchemy import select
@@ -34,6 +35,7 @@ from app.schemas.auth import (
     RegisterRequest,
     SignupRequest,
     TokenResponse,
+    UpdateProfileRequest,
     UserResponse,
 )
 
@@ -58,9 +60,7 @@ async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depend
     # 2. Kiểm tra tài khoản đã tồn tại trong DB chưa -> Không ghi đè, trả 409 Conflict
     username = email_clean.split("@")[0]
     stmt = (
-        select(User)
-        .where((User.email == email_clean) | (User.username == username))
-        .options(selectinload(User.role))
+        select(User).where((User.email == email_clean) | (User.username == username)).options(selectinload(User.role))
     )
     res = await db.execute(stmt)
     existing_user = res.scalars().first()
@@ -73,16 +73,18 @@ async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depend
     # 3. Tạo user trên Supabase Auth
     supabase_uid: str | None = None
     try:
-        supa_user_res = supabase_admin.auth.admin.create_user({
-            "email": email_clean,
-            "password": req.password,
-            "email_confirm": True,
-            "user_metadata": {
-                "full_name": req.full_name,
-                "mssv": req.mssv or (email_clean.split("@")[0] if email_clean.split("@")[0].isdigit() else None),
-                "role": "STUDENT",
-            },
-        })
+        supa_user_res = supabase_admin.auth.admin.create_user(
+            {
+                "email": email_clean,
+                "password": req.password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": req.full_name,
+                    "mssv": req.mssv or (email_clean.split("@")[0] if email_clean.split("@")[0].isdigit() else None),
+                    "role": "STUDENT",
+                },
+            }
+        )
         if supa_user_res and supa_user_res.user:
             supabase_uid = str(supa_user_res.user.id)
     except Exception as exc:
@@ -151,8 +153,12 @@ async def confirm_user(
         target_user = next((u for u in users_list if u.email and u.email.lower() == email_clean), None)
         if target_user:
             supabase_admin.auth.admin.update_user_by_id(str(target_user.id), {"email_confirm": True})
-            logger.info("Admin {admin} confirmed user email: {email} [req_id={req_id}]",
-                        admin=current_user.username, email=email_clean, req_id=request_id)
+            logger.info(
+                "Admin {admin} confirmed user email: {email} [req_id={req_id}]",
+                admin=current_user.username,
+                email=email_clean,
+                req_id=request_id,
+            )
             return {"success": True, "message": f"Tài khoản {email_clean} đã được kích hoạt email xác nhận."}
         else:
             return {"success": False, "message": "Không tìm thấy tài khoản với email này trên hệ thống Auth."}
@@ -207,16 +213,13 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    email_confirmed = bool(
-        getattr(supa_user, "email_confirmed_at", None)
-        or getattr(supa_user, "confirmed_at", None)
-    )
+    email_confirmed = bool(getattr(supa_user, "email_confirmed_at", None) or getattr(supa_user, "confirmed_at", None))
 
     # Tìm user trong DB theo token_uid; chỉ match theo email nếu email đã được Supabase xác nhận
     if email_confirmed:
         condition = (User.supabase_uid == token_uid) | (User.email == token_email)
     else:
-        condition = (User.supabase_uid == token_uid)
+        condition = User.supabase_uid == token_uid
 
     stmt = select(User).where(condition).options(selectinload(User.role))
     res = await db.execute(stmt)
@@ -293,11 +296,7 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
 
     stmt = (
         select(User)
-        .where(
-            (User.username.in_(match_targets))
-            | (User.email.in_(match_targets))
-            | (User.mssv.in_(match_targets))
-        )
+        .where((User.username.in_(match_targets)) | (User.email.in_(match_targets)) | (User.mssv.in_(match_targets)))
         .options(selectinload(User.role))
     )
     res = await db.execute(stmt)
@@ -355,6 +354,33 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
 @router.get("/me", response_model=UserResponse, summary="Lấy thông tin người dùng đang đăng nhập")
 async def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
     """Trả về thông tin chi tiết của user từ JWT Bearer token."""
+    role_name = current_user.role.name if current_user.role else "STUDENT"
+    return UserResponse(
+        id=current_user.id,
+        supabase_uid=current_user.supabase_uid,
+        username=current_user.username,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        mssv=current_user.mssv,
+        role_name=role_name,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+    )
+
+
+@router.put("/me", response_model=UserResponse, summary="Cập nhật thông tin cá nhân")
+async def update_me(
+    req: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """Cập nhật họ tên và mã số sinh viên của tài khoản đang đăng nhập."""
+    if req.full_name is not None and req.full_name.strip():
+        current_user.full_name = req.full_name.strip()
+    if req.mssv is not None:
+        current_user.mssv = req.mssv.strip() or None
+    await db.commit()
+    await db.refresh(current_user)
     role_name = current_user.role.name if current_user.role else "STUDENT"
     return UserResponse(
         id=current_user.id,

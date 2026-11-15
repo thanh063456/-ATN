@@ -8,15 +8,17 @@ Test theo 3 module tách biệt + integration test pipeline đầy đủ.
 Chạy: pytest tests/test_text_postprocessing.py -v
 """
 
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 # Đảm bảo import đúng từ backend/
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 # ─── Tests: ocr_char_fixes ────────────────────────────────────────────────────
+
 
 class TestOcrCharFixes:
     """Test từng OCR char rule riêng lẻ."""
@@ -26,6 +28,7 @@ class TestOcrCharFixes:
             apply_ocr_char_fixes,
             apply_single_rule,
         )
+
         self.fix = apply_ocr_char_fixes
         self.fix_one = apply_single_rule
 
@@ -148,12 +151,14 @@ class TestOcrCharFixes:
     def test_all_rules_have_description(self):
         """Đảm bảo tất cả rules đều có description (để test riêng lẻ được)."""
         from app.services.text_postprocessing.ocr_char_fixes import OCR_CHAR_RULES
+
         for pat, rep, flags, desc in OCR_CHAR_RULES:
             assert desc, f"Rule '{pat}' thiếu description"
             assert len(desc) > 5, f"Description quá ngắn: '{desc}'"
 
 
 # ─── Tests: admin_dictionary ──────────────────────────────────────────────────
+
 
 class TestAdminDictionary:
     """Test load và áp dụng từ điển hành chính."""
@@ -164,6 +169,7 @@ class TestAdminDictionary:
             normalize_document_code,
             reload_dictionary,
         )
+
         self.correct = apply_admin_corrections
         self.norm_code = normalize_document_code
         reload_dictionary()  # Xóa cache để test sạch
@@ -208,15 +214,17 @@ class TestAdminDictionary:
 
 # ─── Tests: document_header_normalizer ───────────────────────────────────────
 
+
 class TestDocumentHeaderNormalizer:
     """Test chuẩn hóa header văn bản hành chính."""
 
     def setup_method(self):
         from app.services.text_postprocessing.document_header_normalizer import (
-            normalize_document_header,
-            _normalize_doc_number,
             _normalize_date,
+            _normalize_doc_number,
+            normalize_document_header,
         )
+
         self.normalize = normalize_document_header
         self._norm_no = _normalize_doc_number
         self._norm_date = _normalize_date
@@ -270,7 +278,8 @@ class TestDocumentHeaderNormalizer:
         assert date_str is not None
         # Tháng phải hợp lệ (1-12)
         import re
-        m = re.search(r'tháng (\d+)', date_str)
+
+        m = re.search(r"tháng (\d+)", date_str)
         assert m and int(m.group(1)) <= 12
 
     def test_date_slash_error(self):
@@ -362,29 +371,30 @@ class TestDocumentHeaderNormalizer:
 
 # ─── Integration Tests: full pipeline ────────────────────────────────────────
 
+
 class TestPostProcessVietnamese:
     """Integration tests cho toàn bộ pipeline post_process_vietnamese()."""
 
     def setup_method(self):
         from app.services.text_postprocessing import post_process_vietnamese
+
         self.process = post_process_vietnamese
 
     def test_date_month_with_bracket_error_pipeline(self):
         """ocr_char_fixes strip bracket + header_normalizer truncate '40'→'4'"""
         from app.services.text_postprocessing import post_process_vietnamese
+
         raw = "Lâm Đồng, ngày 04 tháng 40) năm 2025\nQUYẾT ĐỊNH"
         result = post_process_vietnamese(raw)
         # Sau pipeline đầy đủ: tháng phải hợp lệ
         import re
-        m = re.search(r'tháng (\d+)', result)
+
+        m = re.search(r"tháng (\d+)", result)
         assert m and int(m.group(1)) <= 12
+
     def test_full_pipeline_admin_doc(self):
         """Pipeline day du voi van ban hanh chinh tieu bieu."""
-        raw = (
-            "So: 1328/QD-DHDL\n"
-            "QUYET DINH\n"
-            "Dieu 1. Phan cong 150 giao vien."
-        )
+        raw = "So: 1328/QD-DHDL\nQUYET DINH\nDieu 1. Phan cong 150 giao vien."
         result = self.process(raw)
         assert "1328" in result
         assert "..." not in result
@@ -393,6 +403,7 @@ class TestPostProcessVietnamese:
         """Unicode NFC được chuẩn hóa."""
         # Chữ "ị" có thể biểu diễn bằng 2 cách NFC và NFD
         import unicodedata
+
         text_nfd = unicodedata.normalize("NFD", "Hội đồng trường")
         result = self.process(text_nfd)
         assert unicodedata.is_normalized("NFC", result)
@@ -412,11 +423,13 @@ class TestPostProcessVietnamese:
 
 # ─── Tests: heuristic_quality_score ──────────────────────────────────────────
 
+
 class TestHeuristicQualityScore:
     """Test heuristic_quality_score không còn bonus Quốc hiệu vô nghĩa."""
 
     def setup_method(self):
         from app.services.ocr_service import OCRService
+
         self.svc = OCRService()
 
     def test_clean_text_high_score(self):
@@ -439,11 +452,7 @@ class TestHeuristicQualityScore:
         Text 1 có Quốc hiệu, Text 2 không có — nếu nội dung khác nhau
         thì score phải dựa trên chất lượng ký tự, không phải có/không có header.
         """
-        text_with_header = (
-            "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
-            "Độc lập - Tự do - Hạnh phúc\n"
-            "Quyết định phân công"
-        )
+        text_with_header = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc\nQuyết định phân công"
         text_without_header = "Quyết định phân công"
 
         score_with = self.svc.heuristic_quality_score(text_with_header)
@@ -452,8 +461,7 @@ class TestHeuristicQualityScore:
         # Score không nên khác biệt lớn chỉ vì có/không có Quốc hiệu
         # (Trước đây: +0.04 bonus → bây giờ: 0 bonus)
         assert abs(score_with - score_without) < 0.05, (
-            f"Score khác biệt quá lớn: {score_with} vs {score_without}. "
-            "Có thể vẫn còn bonus Quốc hiệu vô nghĩa."
+            f"Score khác biệt quá lớn: {score_with} vs {score_without}. Có thể vẫn còn bonus Quốc hiệu vô nghĩa."
         )
 
     def test_score_range(self):
@@ -476,11 +484,13 @@ class TestHeuristicQualityScore:
 
 # ─── Tests: extract_metadata MSSV ────────────────────────────────────────────
 
+
 class TestExtractMetadataMSSV:
     """Test extract_metadata() ưu tiên keyword MSSV: trước pattern."""
 
     def setup_method(self):
         from app.services.ocr_service import OCRService
+
         self.svc = OCRService()
 
     def test_mssv_keyword_priority(self):
@@ -519,11 +529,13 @@ class TestExtractMetadataMSSV:
         meta = self.svc.extract_metadata(text)
         assert meta["student_id"] is None
 
+
 class TestRegexBugRegression:
     """Test để đảm bảo các chuỗi ký tự đặc biệt không gây lỗi re.error."""
 
     def test_heuristic_quality_score_no_re_error(self):
         from app.services.trocr_service import trocr_service
+
         # Dấu ngoặc mở không được escape đúng cách từng gây ra lỗi nothing to repeat at position 18
         garbage = "nothing to repeat at position 18 * {} [] () % ~ ^ | < > \\"
         score = trocr_service.heuristic_quality_score(garbage)
@@ -532,30 +544,35 @@ class TestRegexBugRegression:
 
     def test_post_process_vietnamese_garbage(self):
         from app.services.text_postprocessing import post_process_vietnamese
+
         garbage = "**??+*{}[][]()\\|"
         res = post_process_vietnamese(garbage)
         assert isinstance(res, str)
-        
+
     def test_extract_metadata_garbage(self):
         from app.services.extraction_service import extraction_service
+
         garbage = "Lý do: + * ? { }"
         meta = extraction_service.extract_metadata(garbage)
         assert meta["reason"] is None or isinstance(meta["reason"], str)
+
+
 class TestDocumentHeaderNormalizer:
     def test_doc_number_not_extracted_from_body(self):
         from app.services.text_postprocessing.document_header_normalizer import normalize_document_header
+
         # The body has a reference to another document
         raw_text = (
             "TRƯỜNG ĐẠI HỌC ĐÀ LẠT\n"
             "PHÒNG CÔNG TÁC SINH VIÊN\n"
-            "Số:Í+42 /TB-ĐHĐL\n\n\n\n\n\n\n\n\n\n" # Make sure the rest is body
+            "Số:Í+42 /TB-ĐHĐL\n\n\n\n\n\n\n\n\n\n"  # Make sure the rest is body
             "THÔNG BÁO\n"
             "Về việc abc\n"
             "Căn cứ Công văn số 4642/BGDĐT-HSSV ngày 08/8/2025 của Bộ Giáo dục và Đào tạo;\n"
             "Tiếp theo..."
         )
         normalized = normalize_document_header(raw_text)
-        
+
         # Should not extract 4642 from the body
         assert "Số: 4642/BGDĐT-HSSV" not in normalized.splitlines()[0:10]
         # Should fallback to [chưa đọc được] for the bad header
@@ -565,6 +582,7 @@ class TestDocumentHeaderNormalizer:
 
     def test_two_column_header_and_date_preserved(self):
         from app.services.text_postprocessing.document_header_normalizer import normalize_document_header
+
         sample = (
             "BỘ GIÁO DỤC VÀ ĐÀO TẠO                CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
             "TRƯỜNG ĐẠI HỌC ĐÀ LẠT                 Độc lập - Tự do - Hạnh phúc\n"
@@ -585,6 +603,7 @@ class TestDocumentHeaderNormalizer:
 
     def test_rejoin_paragraphs_preserves_structure(self):
         from app.services.text_postprocessing import rejoin_paragraphs
+
         text = (
             "BỘ GIÁO DỤC VÀ ĐÀO TẠO                CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n"
             "TRƯỜNG ĐẠI HỌC ĐÀ LẠT                 Độc lập - Tự do - Hạnh phúc\n"
@@ -604,6 +623,7 @@ class TestDocumentHeaderNormalizer:
 
     def test_pipeline_normalizes_handwritten_doc_header(self):
         from app.services.text_postprocessing import post_process_vietnamese
+
         raw = (
             "BỘ GIÁO DỤC VÀ ĐÀO TẠO\n"
             "TRƯỜNG ĐẠI HỌC ĐÀ LẬT\n"
@@ -620,7 +640,6 @@ class TestDocumentHeaderNormalizer:
         assert lines[2] == "Số: <hw>1243</hw>/KH-ĐHĐL"
         assert lines[5] == "Lâm Đồng, ngày <hw>31</hw> tháng 7 năm 2026"
         assert lines[6] == "KẾ HOẠCH"
-
 
 
 if __name__ == "__main__":

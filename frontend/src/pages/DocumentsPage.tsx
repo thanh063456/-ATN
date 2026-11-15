@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   FileText,
@@ -15,7 +15,6 @@ import {
   FileCheck,
   AlertCircle,
   ShieldCheck,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -277,12 +276,20 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
-  // Dữ liệu hiển thị trực tiếp từ server đã được phân trang & lọc chính xác
-  const displayDocs = docs.filter((doc) => {
-    if (publicFilter === "PUBLIC" && !doc.is_public) return false;
-    if (publicFilter === "PRIVATE" && doc.is_public) return false;
-    return true;
-  });
+  // Dữ liệu hiển thị trực tiếp từ server, sắp xếp nghiêm ngặt theo thời gian thực upload (mới nhất lên đầu)
+  const displayDocs = useMemo(() => {
+    return docs
+      .filter((doc) => {
+        if (publicFilter === "PUBLIC" && !doc.is_public) return false;
+        if (publicFilter === "PRIVATE" && doc.is_public) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeB - timeA;
+      });
+  }, [docs, publicFilter]);
 
   // KPI tóm tắt số liệu toàn hệ thống & theo bộ lọc
   const isFiltered = Boolean(searchFilter || statusFilter !== "ALL" || approvalFilter !== "ALL" || selectedTag !== "ALL");
@@ -339,8 +346,9 @@ export const DocumentsPage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap", alignItems: "center" }}>
-          {isStaffOrAdmin && (
+        {/* Chỉ ADMIN mới thao tác Xuất Excel, Chụp ảnh và Tiếp nhận tại đây; Cán bộ (STAFF) sử dụng giao diện chuẩn hóa */}
+        {user?.role === "ADMIN" && (
+          <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap", alignItems: "center" }}>
             <a
               href={documentsApi.exportExcelUrl(statusFilter)}
               download
@@ -352,98 +360,86 @@ export const DocumentsPage: React.FC = () => {
                 Xuất Excel (.csv)
               </Button>
             </a>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsCameraOpen(true)}
-            leftIcon={<Camera size={15} color="#6366f1" />}
-          >
-            Chụp ảnh hồ sơ
-          </Button>
-          <Link to="/upload" style={{ textDecoration: "none" }}>
-            <Button variant="primary" size="sm" leftIcon={<UploadCloud size={15} />}>
-              Upload hồ sơ mới
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCameraOpen(true)}
+              leftIcon={<Camera size={15} color="#1e40af" />}
+            >
+              Chụp ảnh hồ sơ
             </Button>
-          </Link>
-        </div>
+            <Link to="/upload" style={{ textDecoration: "none" }}>
+              <Button variant="primary" size="sm" leftIcon={<UploadCloud size={15} />}>
+                Tiếp nhận hồ sơ
+              </Button>
+            </Link>
+          </div>
+        )}
       </div>
 
-      {/* Mini KPI Dashboard Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+      {/* Chỉ số hồ sơ nghiệp vụ */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.85rem" }}>
         <div style={{
           backgroundColor: "#fff",
-          padding: "1rem 1.25rem",
-          borderRadius: "0.75rem",
+          padding: "0.85rem 1.15rem",
+          borderRadius: "var(--radius-md)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          borderLeft: "3px solid #1e3a8a",
           display: "flex",
           alignItems: "center",
-          gap: "1rem"
+          gap: "0.85rem"
         }}>
-          <div style={{ width: "42px", height: "42px", borderRadius: "0.5rem", backgroundColor: "var(--primary-50)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--primary-600)" }}>
-            <FileText size={22} />
-          </div>
           <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Tổng số hồ sơ</div>
-            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "var(--gray-900)" }}>{totalCount}</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Tổng số hồ sơ</div>
+            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--gray-900)", fontFamily: "var(--font-mono)" }}>{totalCount}</div>
           </div>
         </div>
 
         <div style={{
           backgroundColor: "#fff",
-          padding: "1rem 1.25rem",
-          borderRadius: "0.75rem",
+          padding: "0.85rem 1.15rem",
+          borderRadius: "var(--radius-md)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          borderLeft: "3px solid #d97706",
           display: "flex",
           alignItems: "center",
-          gap: "1rem"
+          gap: "0.85rem"
         }}>
-          <div style={{ width: "42px", height: "42px", borderRadius: "0.5rem", backgroundColor: "#fef3c7", display: "flex", alignItems: "center", justifyContent: "center", color: "#d97706" }}>
-            <Clock size={22} />
-          </div>
           <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Chờ phê duyệt</div>
-            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#d97706" }}>{pendingCount}</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Chờ phê duyệt</div>
+            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "#d97706", fontFamily: "var(--font-mono)" }}>{pendingCount}</div>
           </div>
         </div>
 
         <div style={{
           backgroundColor: "#fff",
-          padding: "1rem 1.25rem",
-          borderRadius: "0.75rem",
+          padding: "0.85rem 1.15rem",
+          borderRadius: "var(--radius-md)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          borderLeft: "3px solid #16a34a",
           display: "flex",
           alignItems: "center",
-          gap: "1rem"
+          gap: "0.85rem"
         }}>
-          <div style={{ width: "42px", height: "42px", borderRadius: "0.5rem", backgroundColor: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", color: "#16a34a" }}>
-            <CheckCircle2 size={22} />
-          </div>
           <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Đã phê duyệt</div>
-            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#16a34a" }}>{approvedCount}</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Đã phê duyệt</div>
+            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "#16a34a", fontFamily: "var(--font-mono)" }}>{approvedCount}</div>
           </div>
         </div>
 
         <div style={{
           backgroundColor: "#fff",
-          padding: "1rem 1.25rem",
-          borderRadius: "0.75rem",
+          padding: "0.85rem 1.15rem",
+          borderRadius: "var(--radius-md)",
           border: "1px solid var(--border-color)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          borderLeft: "3px solid #1e40af",
           display: "flex",
           alignItems: "center",
-          gap: "1rem"
+          gap: "0.85rem"
         }}>
-          <div style={{ width: "42px", height: "42px", borderRadius: "0.5rem", backgroundColor: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center", color: "#7c3aed" }}>
-            <Sparkles size={22} />
-          </div>
           <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase" }}>Số hóa hoàn tất</div>
-            <div style={{ fontSize: "1.375rem", fontWeight: 800, color: "#7c3aed" }}>{digitizedCount}</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Số hóa hoàn tất</div>
+            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "#1e40af", fontFamily: "var(--font-mono)" }}>{digitizedCount}</div>
           </div>
         </div>
       </div>
@@ -739,7 +735,12 @@ export const DocumentsPage: React.FC = () => {
                               )}
                               <span>{(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
                               <span>•</span>
-                              <span>{new Date(doc.created_at).toLocaleDateString("vi-VN")}</span>
+                              <span
+                                style={{ color: "#1e3a8a", fontWeight: 600 }}
+                                title={`Thời gian upload: ${new Date(doc.created_at).toLocaleString("vi-VN")}`}
+                              >
+                                {new Date(doc.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                              </span>
                             </div>
 
                             {/* Badges danh sách nhãn AI */}
@@ -830,7 +831,7 @@ export const DocumentsPage: React.FC = () => {
 
                             const barColor = isDone ? "#16a34a"
                               : isFailed ? "#dc2626"
-                              : "#6366f1";
+                              : "#1e40af";
 
                             const label = isDone ? "Hoàn thành"
                               : isFailed ? "Thất bại"
@@ -843,7 +844,7 @@ export const DocumentsPage: React.FC = () => {
                                   <span style={{
                                     fontSize: "0.7rem",
                                     fontWeight: 600,
-                                    color: isDone ? "#16a34a" : isFailed ? "#dc2626" : "#6366f1"
+                                    color: isDone ? "#16a34a" : isFailed ? "#dc2626" : "#1e40af"
                                   }}>
                                     {label}
                                   </span>

@@ -7,6 +7,7 @@ Cấu hình Elasticsearch client và khởi tạo index "documents" với Custom
 
 Ref: .ai/research/Elasticsearch.md, .ai/research/VietnameseSearch.md, ADR-005
 """
+
 import socket
 import time
 from typing import Any
@@ -21,6 +22,7 @@ try:
     from loguru import logger
 except ImportError:
     import logging
+
     logger = logging.getLogger("elasticsearch")
 logger: Any = logger
 from app.core.config import settings
@@ -87,7 +89,6 @@ async def close_es_client() -> None:
             logger.debug(f"Error closing Elasticsearch client: {exc}")
         finally:
             _es_client = None
-
 
 
 # ── Index Definition & Mapping ────────────────────────────────────────────────

@@ -7,10 +7,10 @@ Returns DATASET_STATUS = NOT_PROVIDED if dataset is empty.
 Does NOT generate fake data or fake numbers.
 """
 
-import os
 import json
+import os
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict
 
 
 def calculate_dataset_statistics(raw_dir: str, metadata_dir: str) -> Dict[str, Any]:
@@ -24,46 +24,19 @@ def calculate_dataset_statistics(raw_dir: str, metadata_dir: str) -> Dict[str, A
         "number_of_documents": 0,
         "number_of_files": 0,
         "file_types": {},
-        "file_sizes": {
-            "total_bytes": 0,
-            "min_bytes": 0,
-            "max_bytes": 0,
-            "mean_bytes": 0
-        },
-        "pages": {
-            "total_pages": 0,
-            "pages_per_doc_mean": 0
-        },
+        "file_sizes": {"total_bytes": 0, "min_bytes": 0, "max_bytes": 0, "mean_bytes": 0},
+        "pages": {"total_pages": 0, "pages_per_doc_mean": 0},
         "document_categories": {},
-        "resolution": {
-            "min_dpi": None,
-            "max_dpi": None,
-            "distribution": {}
-        },
-        "quality": {
-            "GOOD": 0,
-            "ACCEPTABLE": 0,
-            "REJECT": 0,
-            "UNAUDITED": 0
-        },
-        "annotation_status": {
-            "UNANNOTATED": 0,
-            "IN_PROGRESS": 0,
-            "ANNOTATED": 0,
-            "VERIFIED": 0
-        },
-        "split_distribution": {
-            "TRAIN": 0,
-            "VAL": 0,
-            "TEST": 0,
-            "UNASSIGNED": 0
-        }
+        "resolution": {"min_dpi": None, "max_dpi": None, "distribution": {}},
+        "quality": {"GOOD": 0, "ACCEPTABLE": 0, "REJECT": 0, "UNAUDITED": 0},
+        "annotation_status": {"UNANNOTATED": 0, "IN_PROGRESS": 0, "ANNOTATED": 0, "VERIFIED": 0},
+        "split_distribution": {"TRAIN": 0, "VAL": 0, "TEST": 0, "UNASSIGNED": 0},
     }
 
     if not os.path.isdir(raw_dir):
         return stats
 
-    raw_files = [f for f in os.listdir(raw_dir) if not f.startswith('.')]
+    raw_files = [f for f in os.listdir(raw_dir) if not f.startswith(".")]
     if not raw_files:
         return stats
 
@@ -120,7 +93,8 @@ def calculate_dataset_statistics(raw_dir: str, metadata_dir: str) -> Dict[str, A
 
 if __name__ == "__main__":
     import sys
-    sys.stdout.reconfigure(encoding='utf-8')
+
+    sys.stdout.reconfigure(encoding="utf-8")
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     raw_d = os.path.join(base_dir, "dataset", "raw")
     meta_d = os.path.join(base_dir, "dataset", "metadata")

@@ -113,6 +113,8 @@ elasticsearch/data/
 *.bak
 *.tmp
 *.orig
+*.backup.*
+batch_ocr_progress.json
 .mypy_cache/
 .ruff_cache/
 

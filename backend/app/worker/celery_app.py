@@ -3,7 +3,9 @@ backend/app/worker/celery_app.py — Celery App Instance
 
 Ref: ADR-011 trong .ai/DECISIONS.md
 """
+
 from celery import Celery
+
 from app.core.config import settings
 
 celery_app = Celery(
@@ -19,8 +21,8 @@ celery_app.conf.update(
     timezone="Asia/Ho_Chi_Minh",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=300,        # Max 5 phút cho 1 document
-    task_soft_time_limit=240,   # Cảnh báo ở phút thứ 4
+    task_time_limit=300,  # Max 5 phút cho 1 document
+    task_soft_time_limit=240,  # Cảnh báo ở phút thứ 4
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     broker_connection_retry_on_startup=True,

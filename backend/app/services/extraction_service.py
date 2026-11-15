@@ -10,6 +10,7 @@ Trích xuất tự động các trường dữ liệu thực thể từ văn b�
 - Lý do làm đơn (reason)
 - Ngày tháng văn bản (document_date)
 """
+
 import re
 from datetime import datetime
 from typing import Any
@@ -163,7 +164,8 @@ class ExtractionService:
         # 8.3 Nếu trong header không có, mới tìm ở các dòng không phải 'căn cứ', 'theo', 'kính gửi', 'nơi nhận'
         if not found_num:
             non_cancu_lines = [
-                l for l in clean_for_num.split("\n")
+                l
+                for l in clean_for_num.split("\n")
                 if not l.strip().lower().startswith(("căn cứ", "can cu", "theo ", "kính gửi", "nơi nhận"))
             ]
             non_cancu_text = "\n".join(non_cancu_lines)
@@ -177,8 +179,10 @@ class ExtractionService:
             clean_doc_num = re.sub(r"\s*/\s*", "/", found_num)
             clean_doc_num = re.sub(r"\s*-\s*", "-", clean_doc_num)
             clean_doc_num = clean_doc_num.strip(".,;: ")
-            extracted["document_number"] = clean_doc_num
-            extracted["extra"]["document_number"] = clean_doc_num
+            # Chỉ ghi nhận khi có số thực tế, không nhận placeholder chưa ban hành
+            if not any(ph in clean_doc_num for ph in ["...", "……", "[chưa", "chưa đọc"]) and re.search(r"\d", clean_doc_num):
+                extracted["document_number"] = clean_doc_num
+                extracted["extra"]["document_number"] = clean_doc_num
 
         return extracted
 

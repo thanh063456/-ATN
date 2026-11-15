@@ -12,6 +12,7 @@ import { DocumentsPage } from "./pages/DocumentsPage";
 import { DocumentDetailPage } from "./pages/DocumentDetailPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 import { CategoryManagementPage } from "./pages/CategoryManagementPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { useAuthStore } from "./stores/useAuthStore";
 import { supabase } from "./lib/supabase";
 
@@ -38,7 +39,7 @@ const useSupabaseAuth = () => {
           } else {
             // Không có session hợp lệ → xóa token cũ khỏi localStorage
             const storedToken = localStorage.getItem("access_token");
-            if (storedToken) {
+            if (storedToken && !storedToken.startsWith("demo_")) {
               console.warn("[Auth] Stored token invalid, clearing...");
               localStorage.removeItem("access_token");
               localStorage.removeItem("user_profile");
@@ -54,8 +55,11 @@ const useSupabaseAuth = () => {
           if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
             if (session) setSession(session);
           } else if (event === "SIGNED_OUT") {
-            // Token hết hạn hoặc bị thu hồi → logout sạch
-            logout();
+            // Token hết hạn hoặc bị thu hồi → chỉ gọi nếu còn token hoặc đang authenticated
+            const storedToken = localStorage.getItem("access_token");
+            if (storedToken || useAuthStore.getState().isAuthenticated) {
+              logout();
+            }
           }
         }
       );
@@ -82,15 +86,15 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#0f172a",
+          backgroundColor: "#0e1e33",
         }}
       >
         <div
           style={{
             width: 36,
             height: 36,
-            border: "3px solid rgba(99,102,241,0.3)",
-            borderTopColor: "#6366f1",
+            border: "3px solid rgba(255, 255, 255, 0.15)",
+            borderTopColor: "#60a5fa",
             borderRadius: "50%",
             animation: "spin 0.7s linear infinite",
           }}
@@ -130,9 +134,13 @@ export const App: React.FC = () => {
             <Route path="upload" element={<UploadPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="documents" element={<DocumentsPage />} />
+            <Route path="document" element={<Navigate to="/documents" replace />} />
+            <Route path="docs" element={<Navigate to="/documents" replace />} />
             <Route path="documents/:id" element={<DocumentDetailPage />} />
+            <Route path="document/:id" element={<Navigate to="/documents/:id" replace />} />
             <Route path="admin/users" element={<UserManagementPage />} />
             <Route path="admin/categories" element={<CategoryManagementPage />} />
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
 
           {/* Fallback */}

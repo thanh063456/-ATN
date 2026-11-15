@@ -6,6 +6,7 @@ Cung cấp:
 - get_current_user_optional: Xác thực nếu có token, không bắt buộc
 - require_roles: RBAC Guard chặn theo vai trò (ADMIN, STAFF, STUDENT)
 """
+
 from typing import Any
 from uuid import UUID
 
@@ -26,9 +27,7 @@ from app.models.users import User
 security_scheme = HTTPBearer(auto_error=False)
 
 
-async def _resolve_user_from_token(
-    token: str, db: AsyncSession
-) -> User | None:
+async def _resolve_user_from_token(token: str, db: AsyncSession) -> User | None:
     """
     Xác thực token theo 2 cơ chế:
     1. Local JWT token (được tạo bởi FastAPI backend)
@@ -39,11 +38,7 @@ async def _resolve_user_from_token(
     if payload and payload.get("sub"):
         try:
             user_id = UUID(payload["sub"])
-            stmt = (
-                select(User)
-                .where(User.id == user_id, User.is_active == True)
-                .options(selectinload(User.role))
-            )
+            stmt = select(User).where(User.id == user_id, User.is_active == True).options(selectinload(User.role))
             res = await db.execute(stmt)
             user = res.scalars().first()
             if user:
@@ -66,15 +61,14 @@ async def _resolve_user_from_token(
 
             # Kiểm tra trạng thái xác minh email của Supabase
             email_confirmed = bool(
-                getattr(supa_user, "email_confirmed_at", None)
-                or getattr(supa_user, "confirmed_at", None)
+                getattr(supa_user, "email_confirmed_at", None) or getattr(supa_user, "confirmed_at", None)
             )
 
             # Tìm trong DB: Luôn ưu tiên supabase_uid. Chỉ cho phép match theo email nếu email đã được xác nhận.
             if email_confirmed and email:
                 condition = (User.supabase_uid == supa_uid) | (User.email == email)
             else:
-                condition = (User.supabase_uid == supa_uid)
+                condition = User.supabase_uid == supa_uid
 
             stmt = (
                 select(User)
@@ -126,11 +120,7 @@ async def _resolve_user_from_token(
             db.add(new_user)
             await db.commit()
 
-            stmt = (
-                select(User)
-                .where(User.id == new_user.id)
-                .options(selectinload(User.role))
-            )
+            stmt = select(User).where(User.id == new_user.id).options(selectinload(User.role))
             res = await db.execute(stmt)
             return res.scalars().first()
 

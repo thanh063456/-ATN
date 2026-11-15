@@ -3,8 +3,9 @@ backend/tests/test_search.py — Elasticsearch Search API Tests
 
 Tuân thủ AAA Pattern (Arrange - Act - Assert).
 """
-import pytest
+
 import httpx
+import pytest
 
 
 @pytest.mark.asyncio
@@ -297,7 +298,10 @@ async def test_smart_search_alerts_lifecycle(async_client: httpx.AsyncClient, st
     # ── 3. So khớp tài liệu mới (Percolate matching) ───────────────────────
     match_res = await async_client.post(
         "/api/v1/search/alerts/match-new",
-        params={"title": "Thông báo xét tuyển Học bổng Hessen năm học 2026", "content": "Chi tiết tiêu chuẩn xét tuyển..."},
+        params={
+            "title": "Thông báo xét tuyển Học bổng Hessen năm học 2026",
+            "content": "Chi tiết tiêu chuẩn xét tuyển...",
+        },
         headers=headers,
     )
     assert match_res.status_code == 200
@@ -314,7 +318,9 @@ async def test_smart_search_alerts_lifecycle(async_client: httpx.AsyncClient, st
 async def test_pii_masking_for_students(async_client: httpx.AsyncClient, student_token: str, staff_token: str):
     """Kiểm tra che mờ dữ liệu cá nhân nhạy cảm (PII Masking) theo Nghị định 13."""
     # ── 1. Upload tài liệu có chứa thông tin nhạy cảm ───────────────────────
-    raw_content = b"%PDF-1.4 Ho so sinh vien Nguyen Van A, CCCD: 068199001234, SDT: 0987654321, email: nguyen.a@gmail.com"
+    raw_content = (
+        b"%PDF-1.4 Ho so sinh vien Nguyen Van A, CCCD: 068199001234, SDT: 0987654321, email: nguyen.a@gmail.com"
+    )
     files = {"file": ("don_pii_sample.pdf", raw_content, "application/pdf")}
     staff_headers = {"Authorization": f"Bearer {staff_token}"}
     student_headers = {"Authorization": f"Bearer {student_token}"}
@@ -421,7 +427,9 @@ async def test_staff_performance_endpoint(async_client: httpx.AsyncClient, staff
 async def test_ir_evaluation_benchmark_endpoint(async_client: httpx.AsyncClient):
     """Kiểm tra API đánh giá thực nghiệm khoa học chất lượng tìm kiếm IR Benchmark."""
     # Test GET với max_queries=5 để chạy nhanh
-    res = await async_client.get("/api/v1/search/evaluation/benchmark", params={"include_details": True, "max_queries": 5})
+    res = await async_client.get(
+        "/api/v1/search/evaluation/benchmark", params={"include_details": True, "max_queries": 5}
+    )
     assert res.status_code == 200
     data = res.json()
 
@@ -550,6 +558,7 @@ async def test_spatial_highlight_locations_endpoint(async_client: httpx.AsyncCli
 # ==============================================================================
 # TESTS CHO 5 TÍNH NĂNG ĐỀ XUẤT MỚI
 # ==============================================================================
+
 
 @pytest.mark.asyncio
 async def test_faq_ask_endpoint(async_client: httpx.AsyncClient):
@@ -942,6 +951,7 @@ async def test_active_watchers_lifecycle(async_client: httpx.AsyncClient):
 # TESTS CHO 2 ĐỀ XUẤT NÂNG CAO: HYBRID RRF & KIBANA CANVAS DASHBOARD
 # ==============================================================================
 
+
 @pytest.mark.asyncio
 async def test_hybrid_search_rrf_scoring(async_client: httpx.AsyncClient):
     """Kiểm tra Endpoint Tìm kiếm Lai RRF (BM25 + kNN Reciprocal Rank Fusion - ES 8.9+)."""
@@ -1021,6 +1031,3 @@ async def test_kibana_canvas_preview_and_export(async_client: httpx.AsyncClient)
     assert "dashboard-docuctsv-overview" in ndjson_text
     assert "workpad-docuctsv-executive" in ndjson_text
     assert "index-pattern" in ndjson_text
-
-
-

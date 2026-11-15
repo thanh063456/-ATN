@@ -1,5 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Menu,
   Search,
@@ -18,6 +19,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, logout } = useAuthStore();
 
   const getRoleBadgeVariant = () => {
@@ -90,8 +92,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             const term = target?.value?.trim();
             if (term) {
               navigate(`/search?q=${encodeURIComponent(term)}`);
-            } else {
-              navigate("/search");
             }
           }}
           style={{
@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           <input
             name="headerSearch"
             type="text"
-            placeholder="Tra cứu MSSV, tiêu đề, nội dung..."
+            placeholder="Tra cứu số hiệu văn bản, tiêu đề hoặc MSSV..."
             style={{
               border: "none",
               backgroundColor: "transparent",
@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
               padding: "0.1rem 0.35rem",
               backgroundColor: "#ffffff",
               border: "1px solid var(--border-color)",
-              borderRadius: "4px",
+              borderRadius: "3px",
               fontSize: "0.6875rem",
               color: "var(--gray-500)",
               cursor: "pointer",
@@ -137,10 +137,10 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
 
       {/* Right section: System status, Static Role Indicator, Profile */}
       <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-        {/* Backend & ES Live Status indicator */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "var(--success-700)", backgroundColor: "var(--success-50)", padding: "0.25rem 0.6rem", borderRadius: "9999px", border: "1px solid #bbf7d0" }}>
-          <Activity size={13} className="animate-pulse" />
-          <span style={{ fontWeight: 600 }}>Hệ thống Online</span>
+        {/* Backend Status indicator */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.75rem", color: "var(--gray-600)" }}>
+          <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#16a34a" }} />
+          <span style={{ fontWeight: 500 }}>Hệ thống sẵn sàng</span>
         </div>
 
         {/* Static Role Display (Fixed, no dropdown change) */}
@@ -157,36 +157,53 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         {/* User Info */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", paddingLeft: "0.75rem", borderLeft: "1px solid var(--border-color)" }}>
           <div
+            onClick={() => navigate("/profile")}
             style={{
-              width: "34px",
-              height: "34px",
-              borderRadius: "50%",
-              backgroundColor: "var(--primary-100)",
-              color: "var(--primary-700)",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: "0.875rem",
+              gap: "0.6rem",
+              cursor: "pointer",
+              padding: "0.25rem 0.5rem",
+              borderRadius: "var(--radius-md)",
+              transition: "background-color 0.15s ease",
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.05)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+            title="Xem hồ sơ cá nhân & các tài liệu đã tải lên"
           >
-            {user?.fullName?.charAt(0) || "U"}
-          </div>
+            <div
+              style={{
+                width: "34px",
+                height: "34px",
+                borderRadius: "50%",
+                backgroundColor: "var(--primary-100)",
+                color: "var(--primary-700)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 700,
+                fontSize: "0.875rem",
+              }}
+            >
+              {user?.fullName?.charAt(0) || "U"}
+            </div>
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-900)" }}>
-              {user?.fullName}
-            </span>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.6875rem", color: "var(--gray-500)" }}>
-              {getRoleIcon()}
-              <span>{user?.mssv ? `MSSV: ${user.mssv}` : user?.role}</span>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-900)" }}>
+                {user?.fullName}
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.6875rem", color: "var(--gray-500)" }}>
+                {getRoleIcon()}
+                <span>{user?.mssv ? `MSSV: ${user.mssv}` : user?.role}</span>
+              </div>
             </div>
           </div>
 
           <button
-            onClick={() => {
-              logout();
-              navigate("/login");
+            onClick={async () => {
+              queryClient.clear();
+              await logout();
+              navigate("/login", { replace: true });
             }}
             style={{
               padding: "0.45rem",

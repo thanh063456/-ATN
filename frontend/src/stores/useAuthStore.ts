@@ -65,7 +65,7 @@ const getInitialUser = (): UserProfile | null => {
 const initialToken = localStorage.getItem("access_token");
 const initialUser = getInitialUser();
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: initialUser,
   session: null,
   token: initialToken,
@@ -79,11 +79,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      // ignore
+    // 1. Kiểm tra nếu đã logout rồi thì return ngay, tránh lặp vòng từ onAuthStateChange
+    const storedToken = localStorage.getItem("access_token");
+    if (!storedToken && !get().isAuthenticated) {
+      return;
     }
+
+    // 2. XÓA LOCAL STORAGE VÀ TRẠNG THÁI NGAY TỨC THÌ (0ms)
+    // Giúp UI và ProtectedRoute / LoginPage phản hồi ngay lập tức, không chờ mạng Supabase
     localStorage.removeItem("access_token");
     localStorage.removeItem("user_profile");
     set({
@@ -93,6 +96,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: false,
       isLoading: false,
     });
+
+    // 3. Thu hồi session Supabase ngầm (background non-blocking, timeout 300ms)
+    try {
+      await Promise.race([
+        supabase.auth.signOut({ scope: "local" }),
+        new Promise((resolve) => setTimeout(resolve, 300)),
+      ]);
+    } catch {
+      // Bỏ qua lỗi mạng khi logout
+    }
   },
 
   setSession: (session) => {

@@ -1,7 +1,9 @@
 """
 backend/tests/test_access_log_filter.py — Unit test for token masking in access log
 """
+
 import logging
+
 from app.main import MaskTokenAccessLogFilter, setup_access_log_filter
 
 
@@ -79,7 +81,7 @@ def test_mask_token_in_record_msg():
         level=logging.INFO,
         pathname="",
         lineno=0,
-        msg='GET /api/v1/documents/123/file?token=SECRET_TOKEN HTTP/1.1 200',
+        msg="GET /api/v1/documents/123/file?token=SECRET_TOKEN HTTP/1.1 200",
         args=(),
         exc_info=None,
     )

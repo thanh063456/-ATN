@@ -15,6 +15,7 @@ Sử dụng:
 Biến môi trường:
     OCR_DEBUG_DUMP=1  — lưu overlay box debug vào logs/ocr_debug/<doc_id>/
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,7 @@ from pathlib import Path
 
 # ── Đảm bảo import được app.services từ repo root ─────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_BACKEND   = _REPO_ROOT / "backend"
+_BACKEND = _REPO_ROOT / "backend"
 sys.path.insert(0, str(_BACKEND))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -38,6 +39,7 @@ os.environ.setdefault("APP_ENV", "development")
 
 # ── Hàm tính CER / WER ────────────────────────────────────────────────────────
 
+
 def _edit_distance(a: list, b: list) -> int:
     """Levenshtein distance (thao tác: insert, delete, substitute)."""
     m, n = len(a), len(b)
@@ -45,10 +47,13 @@ def _edit_distance(a: list, b: list) -> int:
     for i in range(1, m + 1):
         prev, d[0] = d[0], i
         for j in range(1, n + 1):
-            prev, d[j] = d[j], min(
-                d[j] + 1,          # delete
-                d[j - 1] + 1,      # insert
-                prev + (0 if a[i - 1] == b[j - 1] else 1),  # substitute
+            prev, d[j] = (
+                d[j],
+                min(
+                    d[j] + 1,  # delete
+                    d[j - 1] + 1,  # insert
+                    prev + (0 if a[i - 1] == b[j - 1] else 1),  # substitute
+                ),
             )
     return d[n]
 
@@ -70,6 +75,7 @@ def _compute_wer(ref: str, hyp: str) -> float:
 
 
 # ── Debug overlay ─────────────────────────────────────────────────────────────
+
 
 def _save_debug_overlay(
     pil_image,
@@ -96,6 +102,7 @@ def _save_debug_overlay(
 
 # ── Segment dòng + trả về boxes ───────────────────────────────────────────────
 
+
 def _segment_with_boxes(
     pil_image,
 ) -> tuple[list, list[tuple[int, int, int, int]]]:
@@ -106,20 +113,14 @@ def _segment_with_boxes(
         from PIL import Image
 
         img_np = np.array(pil_image)
-        gray = (
-            cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-            if len(img_np.shape) == 3
-            else img_np.copy()
-        )
+        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY) if len(img_np.shape) == 3 else img_np.copy()
         h_img, w_img = gray.shape[:2]
         _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
         kw = max(40, w_img // 20)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, 1))
         dilated = cv2.dilate(binary, kernel, iterations=1)
-        contours, _ = cv2.findContours(
-            dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         raw_boxes = sorted(
             [cv2.boundingRect(c) for c in contours],
             key=lambda b: (b[1] // 20, b[0]),
@@ -128,13 +129,11 @@ def _segment_with_boxes(
         for x, y, w, h in raw_boxes:
             if w < 15 or h < 6 or h > h_img * 0.6:
                 continue
-            pad_top    = max(0, y - 10)
+            pad_top = max(0, y - 10)
             pad_bottom = min(h_img, y + h + 8)
-            pad_left   = max(0, x - 4)
-            pad_right  = min(w_img, x + w + 4)
-            line_images.append(
-                Image.fromarray(img_np[pad_top:pad_bottom, pad_left:pad_right])
-            )
+            pad_left = max(0, x - 4)
+            pad_right = min(w_img, x + w + 4)
+            line_images.append(Image.fromarray(img_np[pad_top:pad_bottom, pad_left:pad_right]))
             kept_boxes.append((x, y, w, h))
         return line_images, kept_boxes
     except Exception as exc:
@@ -144,6 +143,7 @@ def _segment_with_boxes(
 
 # ── Benchmark từng trang ──────────────────────────────────────────────────────
 
+
 def benchmark_pages(
     doc_prefix: str,
     page_ids: list[int] | None,
@@ -152,8 +152,8 @@ def benchmark_pages(
     debug_root: Path,
 ) -> list[dict]:
     """OCR danh sách trang, trả về list kết quả mỗi trang."""
-    from PIL import Image
     from app.services.vietocr_service import VietOCRService
+    from PIL import Image
 
     svc = VietOCRService()
 
@@ -187,14 +187,14 @@ def benchmark_pages(
         n_lines = len(line_imgs)
 
         # OCR toàn trang
-        processed    = svc.preprocess_image(pil_image)
+        processed = svc.preprocess_image(pil_image)
         line_results = svc._ocr_lines_with_engine(processed, page_num=idx + 1)
-        valid_lines  = [t for t, _ in line_results if t]
-        ocr_text     = "\n".join(valid_lines)
+        valid_lines = [t for t, _ in line_results if t]
+        ocr_text = "\n".join(valid_lines)
 
         elapsed = time.perf_counter() - t0
-        chars   = len(ocr_text)
-        words   = len(ocr_text.split())
+        chars = len(ocr_text)
+        words = len(ocr_text.split())
 
         print(f"     Dòng segment: {n_lines}  |  Dòng hợp lệ: {len(valid_lines)}")
         print(f"     Thời gian   : {elapsed:.2f}s  |  Ký tự: {chars}  |  Từ: {words}")
@@ -210,13 +210,13 @@ def benchmark_pages(
 
         results.append(
             {
-                "page"     : page_path.name,
+                "page": page_path.name,
                 "n_segment": n_lines,
-                "n_valid"  : len(valid_lines),
-                "time_s"   : round(elapsed, 3),
-                "chars"    : chars,
-                "words"    : words,
-                "text"     : ocr_text,
+                "n_valid": len(valid_lines),
+                "time_s": round(elapsed, 3),
+                "chars": chars,
+                "words": words,
+                "text": ocr_text,
             }
         )
 
@@ -225,13 +225,14 @@ def benchmark_pages(
 
 # ── Đánh giá CER/WER từ annotation_test.txt ──────────────────────────────────
 
+
 def benchmark_annotation(annotation_path: Path, crops_dir: Path) -> dict:
     """
     Tính CER/WER trên từng crop dòng từ annotation_test.txt.
     Format: <rel_path>\t<ground_truth>
     """
-    from PIL import Image
     from app.services.vietocr_service import VietOCRService
+    from PIL import Image
 
     svc = VietOCRService()
 
@@ -273,7 +274,7 @@ def benchmark_annotation(annotation_path: Path, crops_dir: Path) -> dict:
             wer_total += w
             n_ok += 1
             if i < 5:
-                print(f"    [{i+1}] GT : {gt!r}")
+                print(f"    [{i + 1}] GT : {gt!r}")
                 print(f"         HYP: {hyp!r}  CER={c:.3f} WER={w:.3f}")
         except Exception as exc:
             print(f"    [ERR] {crop_path.name}: {exc}")
@@ -282,33 +283,34 @@ def benchmark_annotation(annotation_path: Path, crops_dir: Path) -> dict:
         return {"cer_avg": None, "wer_avg": None, "n_samples": 0}
 
     return {
-        "cer_avg"  : round(cer_total / n_ok, 4),
-        "wer_avg"  : round(wer_total / n_ok, 4),
+        "cer_avg": round(cer_total / n_ok, 4),
+        "wer_avg": round(wer_total / n_ok, 4),
         "n_samples": n_ok,
     }
 
 
 # ── Ghi báo cáo Markdown ──────────────────────────────────────────────────────
 
+
 def write_benchmark_report(
-    page_results  : list[dict],
+    page_results: list[dict],
     annotation_res: dict,
-    out_path      : Path,
-    label         : str = "trước",
+    out_path: Path,
+    label: str = "trước",
 ) -> None:
     """Ghi kết quả vào docs/ocr_benchmark.md."""
     if page_results:
-        total_time  = sum(r["time_s"] for r in page_results)
-        avg_time    = total_time / len(page_results)
+        total_time = sum(r["time_s"] for r in page_results)
+        avg_time = total_time / len(page_results)
         total_lines = sum(r["n_segment"] for r in page_results)
         total_valid = sum(r["n_valid"] for r in page_results)
-        n_pages     = len(page_results)
+        n_pages = len(page_results)
     else:
         total_time = avg_time = 0.0
         total_lines = total_valid = n_pages = 0
 
-    cer   = annotation_res.get("cer_avg")
-    wer   = annotation_res.get("wer_avg")
+    cer = annotation_res.get("cer_avg")
+    wer = annotation_res.get("wer_avg")
     n_ann = annotation_res.get("n_samples", 0)
     cer_str = f"{cer:.4f}" if cer is not None else "N/A"
     wer_str = f"{wer:.4f}" if wer is not None else "N/A"
@@ -327,8 +329,7 @@ def write_benchmark_report(
     ]
     for r in page_results:
         md.append(
-            f"| {r['page']} | {r['n_segment']} | {r['n_valid']} "
-            f"| {r['time_s']:.2f} | {r['chars']} | {r['words']} |"
+            f"| {r['page']} | {r['n_segment']} | {r['n_valid']} | {r['time_s']:.2f} | {r['chars']} | {r['words']} |"
         )
 
     md += [
@@ -366,10 +367,9 @@ def write_benchmark_report(
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Benchmark baseline OCR — đo trước khi tối ưu"
-    )
+    parser = argparse.ArgumentParser(description="Benchmark baseline OCR — đo trước khi tối ưu")
     parser.add_argument(
         "--doc",
         default="CTSV_013",
@@ -406,15 +406,15 @@ def main() -> None:
         print(f"[DEBUG] OCR_DEBUG_DUMP=1 → overlay lưu vào {debug_root}")
 
     images_dir = _REPO_ROOT / "dataset" / "images"
-    ann_path   = _REPO_ROOT / "dataset" / "annotations" / "annotation_test.txt"
-    crops_dir  = _REPO_ROOT / "dataset" / "crops"
+    ann_path = _REPO_ROOT / "dataset" / "annotations" / "annotation_test.txt"
+    crops_dir = _REPO_ROOT / "dataset" / "crops"
 
     # ── Benchmark trang ───────────────────────────────────────────────────────
     page_results: list[dict] = []
     if not args.annotation_only:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  Benchmark OCR trang — doc prefix: {args.doc}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         page_results = benchmark_pages(
             doc_prefix=args.doc,
             page_ids=args.pages,
@@ -424,17 +424,17 @@ def main() -> None:
         )
 
     # ── CER/WER ───────────────────────────────────────────────────────────────
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Đánh giá CER/WER — annotation_test.txt")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     annotation_res = benchmark_annotation(ann_path, crops_dir)
 
     # ── Tóm tắt ───────────────────────────────────────────────────────────────
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  KẾT QUẢ BASELINE")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     if page_results:
-        n   = len(page_results)
+        n = len(page_results)
         avg = sum(r["time_s"] for r in page_results) / n
         aln = sum(r["n_segment"] for r in page_results) / n
         print(f"  Số trang đo      : {n}")
@@ -461,4 +461,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

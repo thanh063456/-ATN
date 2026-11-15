@@ -20,6 +20,8 @@ export interface SearchHit {
   needs_review?: boolean;
   student_id?: string;
   student_name?: string;
+  uploader_name?: string;
+  uploader_mssv?: string;
   document_date?: string;
   document_number?: string;
   ocr_status: string;
@@ -743,6 +745,7 @@ export interface HybridRrfHit {
   category_name: string;
   student_name?: string;
   student_id?: string;
+  uploader_name?: string;
   bm25_rank?: number;
   knn_rank?: number;
   bm25_score?: number;

@@ -15,6 +15,7 @@ Quy chuẩn phân loại và gán nhãn AI thông minh đa chiều theo thứ t�
 5. Khoa quản lý (nếu có) — vd: #KhoaCNTT, #KhoaSuPham, #KhoaKinhTe, #KhoaLuat, #KhoaNgoaiNgu
 6. Khóa học (nếu có) — vd: #K49, #K48, #K47, #K46, #K45, #K44
 """
+
 import re
 import unicodedata
 from typing import Any
@@ -24,24 +25,19 @@ def _strip_accents(text: str) -> str:
     """Chuyển đổi chuỗi tiếng Việt sang không dấu để so khớp regex chuẩn xác."""
     if not text:
         return ""
-    text = (
-        text.replace("đ", "d")
-        .replace("Đ", "D")
-        .replace("ð", "d")
-        .replace("Ð", "D")
-    )
+    text = text.replace("đ", "d").replace("Đ", "D").replace("ð", "d").replace("Ð", "D")
     normalized = unicodedata.normalize("NFD", text)
     return "".join(c for c in normalized if unicodedata.category(c) != "Mn").lower().strip()
 
 
 # Bảng trọng số nhóm nhãn ưu tiên (Từ Cao đến Thấp)
 TAG_GROUP_PRIORITY = {
-    "SO_HIEU": 100,      # 1. Số hiệu văn bản
-    "LOAI_DON": 85,      # 2. Loại đơn / Loại văn bản hành chính
-    "CHU_DE": 70,        # 3. Chủ đề nội dung chi tiết (Thông báo gì, Kế hoạch gì, Đơn gì)
-    "NGANH": 55,         # 4. Ngành đào tạo
-    "KHOA": 40,          # 5. Khoa / Viện
-    "KHOA_HOC": 25,      # 6. Khóa học (K49, K48...)
+    "SO_HIEU": 100,  # 1. Số hiệu văn bản
+    "LOAI_DON": 85,  # 2. Loại đơn / Loại văn bản hành chính
+    "CHU_DE": 70,  # 3. Chủ đề nội dung chi tiết (Thông báo gì, Kế hoạch gì, Đơn gì)
+    "NGANH": 55,  # 4. Ngành đào tạo
+    "KHOA": 40,  # 5. Khoa / Viện
+    "KHOA_HOC": 25,  # 6. Khóa học (K49, K48...)
 }
 
 
@@ -62,9 +58,17 @@ class TagService:
             return "KHOA_HOC"
         # Thể loại văn bản hành chính chung
         if t in [
-            "#THONGBAO", "#KEHOACH", "#QUYETDINH", "#HUONGDAN",
-            "#TOTRINH", "#BAOCAO", "#CONGVAN", "#GIAYMOI",
-            "#BIENBAN", "#DANHSACH", "#DONTU"
+            "#THONGBAO",
+            "#KEHOACH",
+            "#QUYETDINH",
+            "#HUONGDAN",
+            "#TOTRINH",
+            "#BAOCAO",
+            "#CONGVAN",
+            "#GIAYMOI",
+            "#BIENBAN",
+            "#DANHSACH",
+            "#DONTU",
         ]:
             return "LOAI_DON"
         # Tất cả các nhãn chủ đề nghiệp vụ / loại đơn chi tiết
@@ -149,7 +153,12 @@ class TagService:
         subject_lines = []
         for line in raw_text.split("\n")[:25]:
             l_low = line.strip().lower()
-            if l_low.startswith("căn cứ") or l_low.startswith("can cu") or l_low.startswith("điều 1") or l_low.startswith("dieu 1"):
+            if (
+                l_low.startswith("căn cứ")
+                or l_low.startswith("can cu")
+                or l_low.startswith("điều 1")
+                or l_low.startswith("dieu 1")
+            ):
                 break
             subject_lines.append(line)
         subject_zone = " ".join(subject_lines)
@@ -194,7 +203,8 @@ class TagService:
         # 1.3 Fallback: Tìm trong các dòng ngoài 'căn cứ', 'theo', 'kính gửi', 'nơi nhận'
         if not doc_num:
             non_cancu_lines = [
-                l for l in clean_no_hw.split("\n")
+                l
+                for l in clean_no_hw.split("\n")
                 if not l.strip().lower().startswith(("căn cứ", "can cu", "theo ", "kính gửi", "nơi nhận"))
             ]
             non_cancu_text = "\n".join(non_cancu_lines)
@@ -212,11 +222,29 @@ class TagService:
             tags.append(clean_num_tag)
 
         # ── 2. THỂ LOẠI VĂN BẢN CHÍNH ───────────────────────────────
-        if re.search(r"\b(ke\s*hoach|kế\s*hoạch)\b", clean_text) or "/kh-" in clean_text or "/kh-" in ascii_text or "kế hoạch" in trich_yeu or "kế hoạch" in title_meta:
+        if (
+            re.search(r"\b(ke\s*hoach|kế\s*hoạch)\b", clean_text)
+            or "/kh-" in clean_text
+            or "/kh-" in ascii_text
+            or "kế hoạch" in trich_yeu
+            or "kế hoạch" in title_meta
+        ):
             tags.append("#KeHoach")
-        elif re.search(r"\b(quyet\s*dinh|quyết\s*định)\b", clean_text) or "/qđ-" in clean_text or "/qd-" in ascii_text or "quyết định" in trich_yeu or "quyết định" in title_meta:
+        elif (
+            re.search(r"\b(quyet\s*dinh|quyết\s*định)\b", clean_text)
+            or "/qđ-" in clean_text
+            or "/qd-" in ascii_text
+            or "quyết định" in trich_yeu
+            or "quyết định" in title_meta
+        ):
             tags.append("#QuyetDinh")
-        elif re.search(r"\b(thong\s*bao|thông\s*báo)\b", clean_text) or "/tb-" in clean_text or "/tb-" in ascii_text or "thông báo" in trich_yeu or "thông báo" in title_meta:
+        elif (
+            re.search(r"\b(thong\s*bao|thông\s*báo)\b", clean_text)
+            or "/tb-" in clean_text
+            or "/tb-" in ascii_text
+            or "thông báo" in trich_yeu
+            or "thông báo" in title_meta
+        ):
             tags.append("#ThongBao")
         elif re.search(r"\b(huong\s*dan|hướng\s*dẫn)\b", clean_text) or "/hd-" in clean_text:
             tags.append("#HuongDan")
@@ -235,19 +263,29 @@ class TagService:
 
         # ── 3. CHỦ ĐỀ NỘI DUNG CHI TIẾT (THÔNG BÁO VỀ GÌ? KẾ HOẠCH GÌ? ĐƠN GÌ?) ───────
         # A. An ninh trật tự & An toàn giao thông
-        if re.search(r"\b(an\s*ninh\s*trat\s*tu|antt|trat\s*tu\s*an\s*ninh)\b", topic_target) or "an ninh trat tu" in topic_target:
+        if (
+            re.search(r"\b(an\s*ninh\s*trat\s*tu|antt|trat\s*tu\s*an\s*ninh)\b", topic_target)
+            or "an ninh trat tu" in topic_target
+        ):
             tags.append("#AnNinhTratTu")
-        if re.search(r"\b(an\s*toan\s*giao\s*thong|atgt|trat\s*tu\s*an\s*toan\s*giao\s*thong)\b", topic_target) or "an toan giao thong" in topic_target:
+        if (
+            re.search(r"\b(an\s*toan\s*giao\s*thong|atgt|trat\s*tu\s*an\s*toan\s*giao\s*thong)\b", topic_target)
+            or "an toan giao thong" in topic_target
+        ):
             tags.append("#AnToanGiaoThong")
         if re.search(r"(phong\s*chong\s*toi\s*pham|te\s*nan\s*xa\s*hoi)", topic_target):
             tags.append("#PhongChongToiPham")
 
         # B. Nghỉ Lễ & Nghỉ Tết
-        if re.search(r"\b(nghi\s*tet|tet\s*nguyen\s*dan|tet\s*binh\s*ngo|tet\s*am\s*lich|tet\s*duong\s*lich)\b", topic_target):
+        if re.search(
+            r"\b(nghi\s*tet|tet\s*nguyen\s*dan|tet\s*binh\s*ngo|tet\s*am\s*lich|tet\s*duong\s*lich)\b", topic_target
+        ):
             tags.append("#NghiTet")
             if "tet nguyen dan" in topic_target or "binh ngo" in topic_target:
                 tags.append("#TetNguyenDan")
-        elif re.search(r"\b(nghi\s*le|nghi\s*dip\s*le|dip\s*nghi\s*le)\b", topic_target) or "quoc khanh" in topic_target:
+        elif (
+            re.search(r"\b(nghi\s*le|nghi\s*dip\s*le|dip\s*nghi\s*le)\b", topic_target) or "quoc khanh" in topic_target
+        ):
             tags.append("#NghiLe")
 
         if re.search(r"(quoc\s*khanh|2[\/\-_]9|02[\/\-_]09)", topic_target) or "quoc khanh" in topic_target:
@@ -294,7 +332,10 @@ class TagService:
         # I. Học phí, Học bổng & Chế độ chính sách
         if re.search(r"mi[eễ]n\s*gi[aả]m\s*h[oọ]c\s*ph[ií]", clean_text) or "mien giam hoc phi" in topic_target:
             tags.append("#MienGiamHocPhi")
-        elif re.search(r"\b(thu\s*hoc\s*phi|nop\s*hoc\s*phi|dong\s*hoc\s*phi|thong\s*bao\s*hoc\s*phi|tien\s*hoc\s*phi)\b", topic_target):
+        elif re.search(
+            r"\b(thu\s*hoc\s*phi|nop\s*hoc\s*phi|dong\s*hoc\s*phi|thong\s*bao\s*hoc\s*phi|tien\s*hoc\s*phi)\b",
+            topic_target,
+        ):
             tags.append("#HocPhi")
 
         if re.search(r"h[oọ]c\s*b[oổ]ng\s*khuy[eế]n\s*kh[ií]ch", clean_text) or "hoc bong khuyen khich" in topic_target:
@@ -322,7 +363,9 @@ class TagService:
             tags.append("#BauCu")
 
         # L. Kiến tập / Thực tập
-        if re.search(r"(kien\s*tap|thuc\s*tap\s*tot\s*nghiep|thuc\s*tap\s*su\s*pham|thuc\s*tap\s*doanh\s*nghiep)", topic_target):
+        if re.search(
+            r"(kien\s*tap|thuc\s*tap\s*tot\s*nghiep|thuc\s*tap\s*su\s*pham|thuc\s*tap\s*doanh\s*nghiep)", topic_target
+        ):
             tags.append("#ThucTap")
 
         # M. Nghiên cứu khoa học
@@ -350,15 +393,30 @@ class TagService:
             tags.append("#NghiHocTamThoi")
         if re.search(r"tr[oờ]\s*l[aạ]i\s*h[oọ]c\s*t[aậ]p", clean_text) or "tro lai hoc tap" in all_ascii:
             tags.append("#TroLaiHocTap")
-        if re.search(r"xin\s*th[oô]i\s*h[oọ]c|r[uú]t\s*h[oồ]\s*s[oơ]", clean_text) or "thoi hoc" in all_ascii or "rut ho so" in all_ascii:
+        if (
+            re.search(r"xin\s*th[oô]i\s*h[oọ]c|r[uú]t\s*h[oồ]\s*s[oơ]", clean_text)
+            or "thoi hoc" in all_ascii
+            or "rut ho so" in all_ascii
+        ):
             tags.append("#XinThoiHoc")
-        if re.search(r"gia\s*h[aạ]n\s*th[oờ]i\s*gian\s*h[oọ]c\s*t[aậ]p|gia\s*h[aạ]n\s*h[oọ]c\s*t[aậ]p", clean_text) or "gia han hoc tap" in all_ascii:
+        if (
+            re.search(r"gia\s*h[aạ]n\s*th[oờ]i\s*gian\s*h[oọ]c\s*t[aậ]p|gia\s*h[aạ]n\s*h[oọ]c\s*t[aậ]p", clean_text)
+            or "gia han hoc tap" in all_ascii
+        ):
             tags.append("#GiaHanHocTap")
-        if re.search(r"gia\s*h[aạ]n\s*n[oọ]p\s*h[oọ]c\s*ph[ií]", clean_text) or "gia han nop hoc phi" in all_ascii or "gia han hoc phi" in all_ascii:
+        if (
+            re.search(r"gia\s*h[aạ]n\s*n[oọ]p\s*h[oọ]c\s*ph[ií]", clean_text)
+            or "gia han nop hoc phi" in all_ascii
+            or "gia han hoc phi" in all_ascii
+        ):
             tags.append("#GiaHanHocPhi")
         if re.search(r"x[aá]c\s*nh[aậ]n\s*sinh\s*vi[eê]n", clean_text) or "xac nhan sinh vien" in all_ascii:
             tags.append("#XacNhanSinhVien")
-        if re.search(r"c[aấ]p\s*l[aạ]i\s*th[eẻ]\s*sinh\s*vi[eê]n|l[aà]m\s*l[aạ]i\s*th[eẻ]", clean_text) or "cap lai the" in all_ascii or "lam lai the" in all_ascii:
+        if (
+            re.search(r"c[aấ]p\s*l[aạ]i\s*th[eẻ]\s*sinh\s*vi[eê]n|l[aà]m\s*l[aạ]i\s*th[eẻ]", clean_text)
+            or "cap lai the" in all_ascii
+            or "lam lai the" in all_ascii
+        ):
             tags.append("#CapLaiTheSV")
         if re.search(r"c[aấ]p\s*b[aả]ng\s*đi[eể]m", clean_text) or "cap bang diem" in all_ascii:
             tags.append("#CapBangDiem")
@@ -372,7 +430,10 @@ class TagService:
             tags.append("#CuuXet")
         if re.search(r"ho[aã]n\s*thi", clean_text) or "hoan thi" in all_ascii:
             tags.append("#HoanThi")
-        if re.search(r"mi[eễ]n\s*h[oọ]c\s*(?:gdtc|gi[aá]o\s*d[uụ]c\s*th[eể]\s*ch[aấ]t)", clean_text) or "mien hoc gdtc" in all_ascii:
+        if (
+            re.search(r"mi[eễ]n\s*h[oọ]c\s*(?:gdtc|gi[aá]o\s*d[uụ]c\s*th[eể]\s*ch[aấ]t)", clean_text)
+            or "mien hoc gdtc" in all_ascii
+        ):
             tags.append("#MienHocGDTC")
         if re.search(r"mi[eễ]n\s*h[oọ]c\s*(?:gdqp|qu[oố]c\s*ph[oò]ng)", clean_text) or "mien hoc gdqp" in all_ascii:
             tags.append("#MienHocGDQP")
@@ -380,13 +441,33 @@ class TagService:
             tags.append("#VayVonSinhVien")
 
         don_tu_specific = [
-            "#MienGiamHocPhi", "#HocBongKhuyenKhich", "#BaoLuu", "#NghiHocTamThoi",
-            "#TroLaiHocTap", "#XinThoiHoc", "#GiaHanHocTap", "#GiaHanHocPhi",
-            "#XacNhanSinhVien", "#CapLaiTheSV", "#CapBangDiem", "#ChuyenNganh",
-            "#ChuyenLop", "#PhucKhao", "#CuuXet", "#HoanThi",
-            "#MienHocGDTC", "#MienHocGDQP", "#VayVonSinhVien", "#TroCapXaHoi"
+            "#MienGiamHocPhi",
+            "#HocBongKhuyenKhich",
+            "#BaoLuu",
+            "#NghiHocTamThoi",
+            "#TroLaiHocTap",
+            "#XinThoiHoc",
+            "#GiaHanHocTap",
+            "#GiaHanHocPhi",
+            "#XacNhanSinhVien",
+            "#CapLaiTheSV",
+            "#CapBangDiem",
+            "#ChuyenNganh",
+            "#ChuyenLop",
+            "#PhucKhao",
+            "#CuuXet",
+            "#HoanThi",
+            "#MienHocGDTC",
+            "#MienHocGDQP",
+            "#VayVonSinhVien",
+            "#TroCapXaHoi",
         ]
-        if any(t in don_tu_specific for t in tags) or "đơn xin" in clean_text or "đơn đề nghị" in clean_text or "don xin" in all_ascii:
+        if (
+            any(t in don_tu_specific for t in tags)
+            or "đơn xin" in clean_text
+            or "đơn đề nghị" in clean_text
+            or "don xin" in all_ascii
+        ):
             if "#DonTu" not in tags:
                 tags.append("#DonTu")
 
@@ -424,7 +505,9 @@ class TagService:
 
         if re.search(r"(khoa\s*cong\s*nghe\s*thong\s*tin|khoa\s*cntt)", full_fac_text):
             tags.append("#KhoaCNTT")
-        elif re.search(r"(khoa\s*su\s*pham|su\s*pham\s*mam\s*non|giao\s*duc\s*mam\s*non|giao\s*duc\s*tieu\s*hoc)", full_fac_text):
+        elif re.search(
+            r"(khoa\s*su\s*pham|su\s*pham\s*mam\s*non|giao\s*duc\s*mam\s*non|giao\s*duc\s*tieu\s*hoc)", full_fac_text
+        ):
             tags.append("#KhoaSuPham")
         elif re.search(r"(khoa\s*kinh\s*te|khoa\s*qtkd|khoa\s*tai\s*chinh)", full_fac_text):
             tags.append("#KhoaKinhTe")
@@ -453,7 +536,12 @@ class TagService:
                 tags.append(f"#K{match_k_class.group(1)}")
 
         student_id = str(meta.get("student_id") or "").strip()
-        if student_id and len(student_id) >= 2 and student_id[:2].isdigit() and not any(t.startswith("#K") for t in tags):
+        if (
+            student_id
+            and len(student_id) >= 2
+            and student_id[:2].isdigit()
+            and not any(t.startswith("#K") for t in tags)
+        ):
             prefix = int(student_id[:2])
             if 15 <= prefix <= 35:
                 tags.append(f"#K{prefix + 24}")

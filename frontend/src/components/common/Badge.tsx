@@ -15,7 +15,7 @@ const variantStyles: Record<BadgeVariant, { bg: string; color: string; border: s
   warning: { bg: "#fffbeb", color: "#92400e", border: "#fde68a" },
   danger: { bg: "#fef2f2", color: "#991b1b", border: "#fecaca" },
   info: { bg: "#ecfeff", color: "#155e75", border: "#a5f3fc" },
-  primary: { bg: "#eef2ff", color: "#3730a3", border: "#c7d2fe" },
+  primary: { bg: "#eff6ff", color: "#1e40af", border: "#bfdbfe" },
 };
 
 export const Badge: React.FC<BadgeProps> = ({
@@ -35,7 +35,7 @@ export const Badge: React.FC<BadgeProps> = ({
         padding: size === "sm" ? "0.2rem 0.55rem" : "0.35rem 0.8rem",
         fontSize: size === "sm" ? "0.75rem" : "0.85rem",
         fontWeight: 600,
-        borderRadius: "9999px",
+        borderRadius: "var(--radius-sm)",
         backgroundColor: style.bg,
         color: style.color,
         border: `1px solid ${style.border}`,

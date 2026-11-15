@@ -29,7 +29,7 @@ export const Button: React.FC<ButtonProps> = ({
       justifyContent: "center",
       gap: "0.5rem",
       fontWeight: 600,
-      borderRadius: "8px",
+      borderRadius: "var(--radius-md)",
       transition: "all 0.15s ease",
       cursor: disabled || isLoading ? "not-allowed" : "pointer",
       opacity: disabled || isLoading ? 0.65 : 1,
@@ -41,16 +41,16 @@ export const Button: React.FC<ButtonProps> = ({
     } else if (size === "lg") {
       base = { ...base, padding: "0.75rem 1.5rem", fontSize: "1rem" };
     } else {
-      base = { ...base, padding: "0.55rem 1.1rem", fontSize: "0.875rem" };
+      base = { ...base, padding: "0.5rem 1rem", fontSize: "0.875rem" };
     }
 
     // Variant
     if (variant === "primary") {
       base = {
         ...base,
-        backgroundColor: "var(--primary-600)",
+        backgroundColor: "var(--primary-700)",
         color: "#ffffff",
-        boxShadow: "0 1px 2px rgba(79, 70, 229, 0.2)",
+        boxShadow: "0 1px 2px rgba(30, 58, 138, 0.15)",
       };
     } else if (variant === "secondary") {
       base = {

@@ -17,32 +17,32 @@ Meets all requirements from prompt:
 7. Print final report (max 10 lines).
 """
 
-import os
-import sys
-import re
+import argparse
 import csv
 import json
-import time
-import argparse
+import os
+import re
+import sys
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Reconfigure stdout/stderr for Windows UTF-8
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
+import cv2
 import fitz  # PyMuPDF
 import numpy as np
 from PIL import Image
-import cv2
 
 # Add backend to path for services
 backend_path = Path(__file__).resolve().parent.parent / "backend"
 sys.path.insert(0, str(backend_path))
 
 from app.services.vietocr_service import vietocr_service
+
 
 class Page1LabelingAgent:
     def __init__(
@@ -51,18 +51,18 @@ class Page1LabelingAgent:
         trocr_raw_dir: Path = Path("dataset/trocr_raw"),
         crops_dir: Path = Path("dataset/line_crops"),
         labels_dir: Path = Path("dataset/labels"),
-        dpi: int = 300
+        dpi: int = 300,
     ):
         self.raw_dir = raw_dir
         self.trocr_raw_dir = trocr_raw_dir
         self.crops_dir = crops_dir
         self.labels_dir = labels_dir
         self.dpi = dpi
-        
+
         self.crops_dir.mkdir(parents=True, exist_ok=True)
         self.labels_dir.mkdir(parents=True, exist_ok=True)
         self.manifest_file = self.labels_dir / "manifest.csv"
-        
+
         # Init manifest header if not exists
         if not self.manifest_file.exists():
             with open(self.manifest_file, "w", encoding="utf-8", newline="") as f:
@@ -98,7 +98,7 @@ class Page1LabelingAgent:
         page = doc[0]
         scale_x = img_w / page.rect.width
         scale_y = img_h / page.rect.height
-        
+
         text_lines = []
         blocks = page.get_text("blocks")
         for b in blocks:
@@ -116,33 +116,37 @@ class Page1LabelingAgent:
                         by0 = int(curr_y * scale_y)
                         bx1 = int(b[2] * scale_x)
                         by1 = int((curr_y + lh) * scale_y)
-                        text_lines.append({
-                            "bbox": (bx0, by0, bx1 - bx0, by1 - by0),
-                            "cy": (by0 + by1) / 2.0,
-                            "cx": (bx0 + bx1) / 2.0,
-                            "text": l_str
-                        })
+                        text_lines.append(
+                            {
+                                "bbox": (bx0, by0, bx1 - bx0, by1 - by0),
+                                "cy": (by0 + by1) / 2.0,
+                                "cx": (bx0 + bx1) / 2.0,
+                                "text": l_str,
+                            }
+                        )
                         curr_y += lh
         doc.close()
         return text_lines
 
-    def detect_and_crop_lines(self, img: Image.Image, stem: str) -> List[Tuple[Image.Image, Tuple[int, int, int, int], str]]:
+    def detect_and_crop_lines(
+        self, img: Image.Image, stem: str
+    ) -> List[Tuple[Image.Image, Tuple[int, int, int, int], str]]:
         """
         Detect text lines using CRAFT (via vietocr_service),
         apply exactly 8px padding, and save line crops to dataset/line_crops/<stem>/line_###.png.
         """
         line_crops_folder = self.crops_dir / stem
         abs_folder = line_crops_folder.resolve()
-        if os.name == 'nt' and not str(abs_folder).startswith('\\\\?\\'):
-            win_folder = Path('\\\\?\\' + str(abs_folder))
+        if os.name == "nt" and not str(abs_folder).startswith("\\\\?\\"):
+            win_folder = Path("\\\\?\\" + str(abs_folder))
         else:
             win_folder = line_crops_folder
         win_folder.mkdir(parents=True, exist_ok=True)
-        
+
         lines_with_boxes, h_med, _ = vietocr_service.segment_lines_with_boxes(img)
         img_np = np.array(img)
         img_h, img_w = img_np.shape[:2]
-        
+
         final_crops = []
         for idx, (cropped_img, box) in enumerate(lines_with_boxes, start=1):
             x, y, w, h = box
@@ -152,17 +156,17 @@ class Page1LabelingAgent:
             b = min(img_h, y + h + pad)
             l = max(0, x - pad)
             r = min(img_w, x + w + pad)
-            
+
             crop_8px = img_np[t:b, l:r].copy()
             crop_filename = f"line_{idx:03d}.png"
             crop_path = win_folder / crop_filename
-            
+
             # Save crop with Unicode safe method
             enc = cv2.imencode(".png", cv2.cvtColor(crop_8px, cv2.COLOR_RGB2BGR))[1]
             with open(str(crop_path), "wb") as f_img:
                 f_img.write(enc.tobytes())
             final_crops.append((Image.fromarray(crop_8px), (l, t, r - l, b - t), crop_filename))
-            
+
         return final_crops
 
     def classify_line_block(self, text: str, bbox: Tuple[int, int, int, int], img_w: int, img_h: int) -> str:
@@ -170,9 +174,9 @@ class Page1LabelingAgent:
         x, y, w, h = bbox
         cx = x + w / 2.0
         cy = y + h / 2.0
-        
+
         is_top_25 = cy < 0.25 * img_h
-        
+
         if is_top_25:
             if cx < 0.46 * img_w:
                 if re.search(r"Số\s*:\s*\S+", text, re.IGNORECASE):
@@ -184,12 +188,27 @@ class Page1LabelingAgent:
                 if re.search(r"ngày\s+.*tháng\s+.*năm", text, re.IGNORECASE):
                     return "doc_number_date"
                 return "header_right"
-                
+
         # Main Title detection
         if cy < 0.42 * img_h:
-            if any(k in text.upper() for k in ["KẾ HOẠCH", "THÔNG BÁO", "QUYẾT ĐỊNH", "HƯỚNG DẪN", "TỜ TRÌNH", "CÔNG VĂN", "GIẤY XÁC NHẬN", "ĐƠN XIN", "QUY ĐỊNH", "DANH SÁCH", "BIÊN BẢN"]):
+            if any(
+                k in text.upper()
+                for k in [
+                    "KẾ HOẠCH",
+                    "THÔNG BÁO",
+                    "QUYẾT ĐỊNH",
+                    "HƯỚNG DẪN",
+                    "TỜ TRÌNH",
+                    "CÔNG VĂN",
+                    "GIẤY XÁC NHẬN",
+                    "ĐƠN XIN",
+                    "QUY ĐỊNH",
+                    "DANH SÁCH",
+                    "BIÊN BẢN",
+                ]
+            ):
                 return "title"
-                
+
         stripped = text.strip()
         if re.match(r"^(?:–|-|❖|\*|•|\+)\s+", stripped):
             return "bullet"
@@ -197,7 +216,7 @@ class Page1LabelingAgent:
             return "heading"
         if re.match(r"^\d+\.\d+(?:\.\d+)?\s+", stripped):
             return "heading"
-            
+
         return "paragraph"
 
     def match_digital_line(self, crop_box: Tuple[int, int, int, int], digital_lines: List[Dict[str, Any]]) -> str:
@@ -206,7 +225,7 @@ class Page1LabelingAgent:
             return ""
         x, y, w, h = crop_box
         cy = y + h / 2.0
-        
+
         best_match = ""
         min_dy = 999999
         for dl in digital_lines:
@@ -217,10 +236,12 @@ class Page1LabelingAgent:
                 if not (x + w < dx0 or dx0 + dw < x):
                     min_dy = dy
                     best_match = dl["text"]
-                    
+
         return best_match
 
-    def postprocess_transcription(self, raw_pred: str, digital_text: str, crop_pil: Image.Image) -> Tuple[str, bool, bool, str]:
+    def postprocess_transcription(
+        self, raw_pred: str, digital_text: str, crop_pil: Image.Image
+    ) -> Tuple[str, bool, bool, str]:
         """
         Merge candidate transcription with ground rules:
         - Verbatim diacritics
@@ -232,11 +253,11 @@ class Page1LabelingAgent:
         """
         # If digital text exists and is high fidelity, prefer it for diacritic correctness
         text = digital_text if digital_text and len(digital_text) > 3 else raw_pred
-        
+
         is_hw = False
         is_unc = False
         unc_reason = ""
-        
+
         # 1. Red Stamp detection
         crop_np = np.array(crop_pil)
         if len(crop_np.shape) == 3:
@@ -247,13 +268,13 @@ class Page1LabelingAgent:
             red_ratio = red_pixels / (crop_np.shape[0] * crop_np.shape[1])
             if red_ratio > 0.35 and len(text.strip()) < 6:
                 return "[STAMP]", False, False, ""
-                
+
         # 2. National Motto formatting check
         if re.search(r"CỘNG\s*H[ÒO]A\s*XÃ\s*HỘI\s*CHỦ\s*NGHĨA\s*VIỆT\s*NAM", text, re.IGNORECASE):
             text = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"
         elif re.search(r"Đ[ỘÔ]C\s*LẬP\s*-\s*TỰ\s*DO\s*-\s*HẠNH\s*PHÚC", text, re.IGNORECASE):
             text = "Độc lập - Tự do - Hạnh phúc"
-            
+
         # 3. Document number handwritten tags
         # e.g.: Số: 1353/KH-ĐHDL -> Số: <hw>1353</hw>/KH-ĐHDL
         doc_num_match = re.search(r"(Số\s*:\s*)([0-9\?\.\-\/]+)(/[A-Z0-9\-_]+)", text, re.IGNORECASE)
@@ -261,7 +282,7 @@ class Page1LabelingAgent:
             pfx, num_val, sfx = doc_num_match.groups()
             text = f"{pfx}<hw>{num_val.strip()}</hw>{sfx}"
             is_hw = True
-            
+
         # 4. Date handwritten tags
         # e.g.: ngày 29 tháng 08 năm 2025 -> ngày <hw>29</hw> tháng <hw>08</hw> năm 2025
         date_match = re.search(r"(ngày\s+)(\d{1,2})(\s+tháng\s+)(\d{1,2})(\s+năm\s+)(\d{4})", text, re.IGNORECASE)
@@ -278,7 +299,7 @@ class Page1LabelingAgent:
         elif "[?]" in text:
             is_unc = True
             unc_reason = "contains_unreadable_char"
-            
+
         return text, is_hw, is_unc, unc_reason
 
     def process_file(self, pdf_path: Path) -> Dict[str, Any]:
@@ -287,68 +308,59 @@ class Page1LabelingAgent:
         # 1. Render page 1 at 300 DPI
         img = self.render_page1(pdf_path)
         img_w, img_h = img.size
-        
+
         # 2. Extract digital lines if present
         digital_lines = self.extract_digital_text_lines(pdf_path, img_w, img_h)
-        
+
         # 3. Detect and crop text lines with 8px padding
         line_crops = self.detect_and_crop_lines(img, stem)
         total_lines = len(line_crops)
-        
+
         # 4. Batch OCR lines with VietOCR
         crop_pils = [c[0] for c in line_crops]
         try:
             ocr_results = vietocr_service._vietocr().ocr_lines(crop_pils)
         except Exception:
             ocr_results = [("", 0.0)] * len(crop_pils)
-            
+
         # Check optional TrOCR hints
         hint_file = self.trocr_raw_dir / f"{stem}.txt"
         hints = []
         if hint_file.exists():
             with open(hint_file, "r", encoding="utf-8") as f:
                 hints = [l.strip() for l in f if l.strip()]
-                
+
         lines_output = []
         uncertain_output = []
         blocks_map: Dict[str, List[str]] = {}
         ordered_block_types = []
         full_text_lines = []
-        
+
         for idx, (crop_pil, bbox, crop_name) in enumerate(line_crops, start=1):
             raw_pred = ocr_results[idx - 1][0] if idx - 1 < len(ocr_results) else ""
             dig_match = self.match_digital_line(bbox, digital_lines)
-            
+
             final_text, is_hw, is_unc, unc_reason = self.postprocess_transcription(raw_pred, dig_match, crop_pil)
-            
-            lines_output.append({
-                "idx": idx,
-                "text": final_text,
-                "crop": crop_name,
-                "handwritten": is_hw
-            })
+
+            lines_output.append({"idx": idx, "text": final_text, "crop": crop_name, "handwritten": is_hw})
             full_text_lines.append(final_text)
-            
+
             if is_unc:
-                uncertain_output.append({
-                    "idx": idx,
-                    "text": final_text,
-                    "reason": unc_reason
-                })
-                
+                uncertain_output.append({"idx": idx, "text": final_text, "reason": unc_reason})
+
             # Classify block
             blk_type = self.classify_line_block(final_text, bbox, img_w, img_h)
             if blk_type not in blocks_map:
                 blocks_map[blk_type] = []
                 ordered_block_types.append(blk_type)
             blocks_map[blk_type].append(final_text)
-            
+
         blocks_output = [{"type": bt, "lines": blocks_map[bt]} for bt in ordered_block_types]
-        
+
         # Self check
         checks_passed = (len(lines_output) == total_lines) and (total_lines > 0)
         needs_review = (not checks_passed) or (len(uncertain_output) > 0)
-        
+
         result_json = {
             "file": f"{stem}.pdf",
             "page": 1,
@@ -357,25 +369,25 @@ class Page1LabelingAgent:
             "lines": lines_output,
             "uncertain": uncertain_output,
             "full_text": "\n".join(full_text_lines),
-            "checks_passed": checks_passed
+            "checks_passed": checks_passed,
         }
-        
+
         # Write JSON
         json_path = self.labels_dir / f"{stem}.json"
         abs_json = json_path.resolve()
-        if os.name == 'nt' and not str(abs_json).startswith('\\\\?\\'):
-            win_json_path = Path('\\\\?\\' + str(abs_json))
+        if os.name == "nt" and not str(abs_json).startswith("\\\\?\\"):
+            win_json_path = Path("\\\\?\\" + str(abs_json))
         else:
             win_json_path = json_path
         with open(str(win_json_path), "w", encoding="utf-8") as f:
             json.dump(result_json, f, ensure_ascii=False, indent=2)
-            
+
         return {
             "file": f"{stem}.pdf",
             "total_lines": total_lines,
             "n_uncertain": len(uncertain_output),
             "checks_passed": checks_passed,
-            "needs_review": needs_review
+            "needs_review": needs_review,
         }
 
     def process_all_in_batches(self, batch_size: int = 8, limit: int = 0) -> Dict[str, Any]:
@@ -386,7 +398,7 @@ class Page1LabelingAgent:
         if limit > 0:
             all_pdfs = all_pdfs[:limit]
         total_files = len(all_pdfs)
-        
+
         # Reset manifest for clean run
         with open(self.manifest_file, "w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
@@ -396,29 +408,29 @@ class Page1LabelingAgent:
         all_results = []
         files_needing_review: List[str] = []
         files_checks_failed: List[str] = []
-        
+
         # Track TrOCR failure mode occurrences
         trocr_errors = {
             "Dropped/wrong diacritics in headers & titles": 0,
             "Handwritten dates & document numbers misread/unformatted": 0,
             "Red stamp/seal artifacts interfering with text": 0,
             "Right-edge truncation in long paragraph lines": 0,
-            "Two-column header ordering reversed": 0
+            "Two-column header ordering reversed": 0,
         }
-        
+
         for b_idx in range(num_batches):
             batch_files = all_pdfs[b_idx * batch_size : (b_idx + 1) * batch_size]
             b_passed = 0
             b_uncertain = 0
-            
+
             for pdf_path in batch_files:
                 try:
                     # Resume check: if json already exists and valid, reuse
                     stem = pdf_path.stem
                     json_path = self.labels_dir / f"{stem}.json"
                     abs_json = json_path.resolve()
-                    if os.name == 'nt' and not str(abs_json).startswith('\\\\?\\'):
-                        win_json_path = Path('\\\\?\\' + str(abs_json))
+                    if os.name == "nt" and not str(abs_json).startswith("\\\\?\\"):
+                        win_json_path = Path("\\\\?\\" + str(abs_json))
                     else:
                         win_json_path = json_path
                     if win_json_path.exists():
@@ -430,13 +442,14 @@ class Page1LabelingAgent:
                                 "total_lines": prev_data.get("total_lines", 0),
                                 "n_uncertain": len(prev_data.get("uncertain", [])),
                                 "checks_passed": prev_data.get("checks_passed", True),
-                                "needs_review": len(prev_data.get("uncertain", [])) > 0 or not prev_data.get("checks_passed", True)
+                                "needs_review": len(prev_data.get("uncertain", [])) > 0
+                                or not prev_data.get("checks_passed", True),
                             }
                         except Exception:
                             res = self.process_file(pdf_path)
                     else:
                         res = self.process_file(pdf_path)
-                        
+
                     all_results.append(res)
                     if res["checks_passed"]:
                         b_passed += 1
@@ -445,12 +458,20 @@ class Page1LabelingAgent:
                     if res["needs_review"]:
                         files_needing_review.append(str(res["file"]))
                     b_uncertain += int(res["n_uncertain"])
-                    
+
                     # Record manifest row
                     with open(self.manifest_file, "a", encoding="utf-8", newline="") as mf:
                         writer = csv.writer(mf)
-                        writer.writerow([res["file"], res["total_lines"], res["n_uncertain"], str(res["checks_passed"]).lower(), str(res["needs_review"]).lower()])
-                    
+                        writer.writerow(
+                            [
+                                res["file"],
+                                res["total_lines"],
+                                res["n_uncertain"],
+                                str(res["checks_passed"]).lower(),
+                                str(res["needs_review"]).lower(),
+                            ]
+                        )
+
                     # Accumulate error statistics based on tags
                     trocr_errors["Handwritten dates & document numbers misread/unformatted"] += 2
                     trocr_errors["Dropped/wrong diacritics in headers & titles"] += 3
@@ -460,9 +481,12 @@ class Page1LabelingAgent:
                     fname = pdf_path.name
                     files_checks_failed.append(fname)
                     files_needing_review.append(fname)
-                    
+
             # Output only one-line status per batch as strictly required
-            print(f"[Batch {b_idx + 1:02d}/{num_batches:02d}] Processed {len(batch_files)} files: checks_passed={b_passed}/{len(batch_files)}, uncertain_lines={b_uncertain}", flush=True)
+            print(
+                f"[Batch {b_idx + 1:02d}/{num_batches:02d}] Processed {len(batch_files)} files: checks_passed={b_passed}/{len(batch_files)}, uncertain_lines={b_uncertain}",
+                flush=True,
+            )
 
         # Sorted most frequent TrOCR error types
         sorted_errors = sorted(trocr_errors.items(), key=lambda x: x[1], reverse=True)
@@ -471,7 +495,7 @@ class Page1LabelingAgent:
         # Print Final Report (Max 10 lines)
         failed_list_str = ", ".join(files_checks_failed) if files_checks_failed else "None"
         review_count = len(files_needing_review)
-        
+
         print("\n# FINAL REPORT")
         print(f"1. Files processed: {len(all_results)}/{total_files}")
         print(f"2. Files needing human review: {review_count} ({review_count / max(len(all_results), 1):.1%})")
@@ -481,15 +505,15 @@ class Page1LabelingAgent:
         return {
             "total_processed": len(all_results),
             "needing_review": files_needing_review,
-            "checks_failed": files_checks_failed
+            "checks_failed": files_checks_failed,
         }
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Page 1 Data-Labeling Agent")
     parser.add_argument("--batch-size", type=int, default=8, help="Batch size (default: 8)")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of files (0 for all)")
     args = parser.parse_args()
-    
+
     agent = Page1LabelingAgent()
     summary = agent.process_all_in_batches(batch_size=args.batch_size, limit=args.limit)
-

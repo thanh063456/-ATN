@@ -41,12 +41,20 @@ import {
   Info,
   Globe,
   Lock,
+  Table,
 } from "lucide-react";
 import { diffWordsWithSpace } from "diff";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
 import { OCRStatusBadge, Badge } from "../components/common/Badge";
-import { documentsApi, DocumentDetail, VerificationData, AIExtractResponse, ModelComparisonResponse, OCRResult } from "../api/documents";
+import {
+  documentsApi,
+  DocumentDetail,
+  VerificationData,
+  AIExtractResponse,
+  ModelComparisonResponse,
+  OCRResult,
+} from "../api/documents";
 import { API_BASE_URL } from "../api/client";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useToastStore } from "../stores/useToastStore";
@@ -54,7 +62,6 @@ import { useToastStore } from "../stores/useToastStore";
 export const OCR_ENGINES = [
   { id: "vietocr", label: "VietOCR", name: "VietOCR v2.0", subtitle: "Seq2Seq Transformer (PyTorch)", version: "vgg_transformer-2.0" },
   { id: "trocr", label: "TrOCR", name: "TrOCR-Vi (Fine-tuned Transformer)", subtitle: "Vision Transformer (ViT)", version: "trocr-vi-finetuned" },
-  { id: "tesseract", label: "Tesseract", name: "Tesseract", subtitle: "LSTM Baseline", version: "dynamic" },
 ];
 
 function calculateLevenshtein(a: string[] | string, b: string[] | string): number {
@@ -300,7 +307,7 @@ export const DocumentDetailPage: React.FC = () => {
               addToast({
                 type: "success",
                 title: "Hoàn thành quét toàn bộ",
-                message: "Tất cả mô hình OCR (VietOCR, TrOCR, Tesseract) đã hoàn tất quét văn bản.",
+                message: "Tất cả mô hình OCR (VietOCR, TrOCR-Vi) đã hoàn tất quét văn bản.",
               });
             }
           } else {
@@ -443,14 +450,14 @@ export const DocumentDetailPage: React.FC = () => {
       addToast({
         type: "info",
         title: "Đang chạy Thực nghiệm Đối sánh...",
-        message: "Hệ thống đang chạy song song VietOCR, Microsoft TrOCR và Tesseract trên tài liệu.",
+        message: "Hệ thống đang chạy song song VietOCR và Microsoft TrOCR trên tài liệu.",
       });
       const data = await documentsApi.compareModels(id);
       setBenchmarkData(data);
       addToast({
         type: "success",
         title: "Hoàn tất Thực nghiệm Đối sánh!",
-        message: "Đã có kết quả đo lường thời gian inference và chất lượng nhận dạng của 3 mô hình.",
+        message: "Đã có kết quả đo lường thời gian inference và chất lượng nhận dạng của 2 mô hình.",
       });
     } catch (err: any) {
       addToast({
@@ -762,7 +769,7 @@ export const DocumentDetailPage: React.FC = () => {
         title: engine === "all" ? "Đang quét tất cả mô hình" : "Đang quét lại OCR",
         message:
           engine === "all"
-            ? "Hệ thống đang quét lại văn bản bằng toàn bộ mô hình (VietOCR, TrOCR, Tesseract)..."
+            ? "Hệ thống đang quét lại văn bản bằng toàn bộ mô hình (VietOCR, TrOCR-Vi)..."
             : `Hệ thống đang quét lại văn bản bằng ${engine.toUpperCase()}...`,
       });
       loadDoc(false);
@@ -967,8 +974,8 @@ export const DocumentDetailPage: React.FC = () => {
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#dcfce7")}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f0fdf4")}
                   >
-                    <span style={{ fontWeight: 800, color: "#15803d" }}>⚡ Quét lại toàn bộ (3 Model)</span>
-                    <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>VietOCR + TrOCR-Vi + Tesseract</span>
+                    <span style={{ fontWeight: 800, color: "#15803d" }}>⚡ Quét lại toàn bộ (2 Model)</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>VietOCR + TrOCR-Vi</span>
                   </button>
                   {OCR_ENGINES.map((eng) => (
                     <button
@@ -1021,7 +1028,7 @@ export const DocumentDetailPage: React.FC = () => {
                 onClick={() => handleReprocessOCR("all")}
                 leftIcon={<RefreshCw size={14} className={runningEngine === "all" ? "animate-spin" : ""} />}
               >
-                Quét OCR Toàn Bộ
+                Quét lại toàn bộ (3 Mô hình)
               </Button>
               {!isRejected && (
                 <Button variant="danger" size="sm" onClick={handleReject} leftIcon={<XCircle size={14} />}>
@@ -1076,46 +1083,6 @@ export const DocumentDetailPage: React.FC = () => {
           >
             <RefreshCw size={12} /> Làm mới ngay
           </button>
-        </div>
-      )}
-
-      {/* Notice when only first page was OCRed (Chỉ hiển thị cho Cán bộ / Admin) */}
-      {isStaffOrAdmin && doc.ocr_status === "DONE" && (doc.metadata?.extra?.ocr_scope === "first_page" || ((doc.page_count ?? 1) > 1 && doc.metadata?.extra?.ocr_scope !== "full")) && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0.85rem 1.25rem",
-            borderRadius: "var(--radius-md)",
-            backgroundColor: "#fffbeb",
-            border: "1px solid #fde68a",
-            color: "#92400e",
-            marginTop: "1rem",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <Info size={20} style={{ color: "#d97706" }} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "0.875rem" }}>
-                Mới OCR trang 1: nội dung các trang sau chưa được tìm kiếm
-              </div>
-              <div style={{ fontSize: "0.75rem", color: "#b45309" }}>
-                Tài liệu có {doc.page_count || "nhiều"} trang. Bấm Quét OCR Toàn Bộ để tìm kiếm đầy đủ mọi trang.
-              </div>
-            </div>
-          </div>
-          {isStaffOrAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTriggerOcrFull}
-              leftIcon={<RefreshCw size={14} />}
-              style={{ backgroundColor: "white", borderColor: "#d97706", color: "#b45309" }}
-            >
-              Quét OCR Toàn Bộ
-            </Button>
-          )}
         </div>
       )}
 
@@ -1367,7 +1334,7 @@ export const DocumentDetailPage: React.FC = () => {
               gap: "6px",
             }}
           >
-            <Layers size={14} /> Đối sánh 3 Mô hình (VietOCR vs TrOCR vs Tesseract)
+            <Layers size={14} /> Đối sánh 2 Mô hình (VietOCR vs TrOCR-Vi)
           </button>
         )}
 
@@ -1393,7 +1360,8 @@ export const DocumentDetailPage: React.FC = () => {
 
       {/* TAB 1: SIDE-BY-SIDE OCR VIEWER & LIVE EDITOR */}
       {activeTab === "ocr" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: "1.25rem", minHeight: "620px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: "1.25rem", minHeight: "620px" }}>
           {/* LEFT: DOCUMENT VIEWER */}
           <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
             {/* Viewer Toolbar */}
@@ -2229,7 +2197,8 @@ export const DocumentDetailPage: React.FC = () => {
             )}
           </Card>
         </div>
-      )}
+      </div>
+    )}
 
       {/* TAB 2: SMART FORM FIELD EXTRACTION */}
       {activeTab === "fields" && (
@@ -2424,10 +2393,10 @@ export const DocumentDetailPage: React.FC = () => {
               <div>
                 <h3 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--gray-900)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                   <Layers size={22} style={{ color: "#2563eb" }} />
-                  Thực nghiệm Đối sánh 3 Kiến trúc OCR (Model Benchmark)
+                  Thực nghiệm Đối sánh 2 Kiến trúc OCR (Model Benchmark)
                 </h3>
                 <p style={{ fontSize: "0.8rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>
-                  So sánh trực quan hiệu năng và độ chính xác nhận dạng trên cùng tài liệu giữa <strong>VietOCR (Seq2Seq Transformer)</strong>, <strong>Microsoft TrOCR (Vision Transformer)</strong> và <strong>Tesseract 5 (LSTM)</strong>.
+                  So sánh trực quan hiệu năng và độ chính xác nhận dạng trên cùng tài liệu giữa <strong>VietOCR (Seq2Seq Transformer)</strong> và <strong>Microsoft TrOCR (Vision Transformer)</strong>.
                 </p>
               </div>
 
@@ -2516,42 +2485,6 @@ export const DocumentDetailPage: React.FC = () => {
                     : (benchmarkData ? "Chưa có kết quả từ TrOCR" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để kích hoạt mô hình Vision Transformer của Microsoft trên tài liệu này.")}
                 </div>
               </div>
-
-              {/* MODEL 3: TESSERACT OCR */}
-              <div
-                style={{
-                  borderRadius: "12px",
-                  border: "2px solid #cbd5e1",
-                  backgroundColor: "#f8fafc",
-                  padding: "1rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.75rem",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span style={{ fontSize: "1.1rem" }}>🥉</span>
-                    <strong style={{ fontSize: "0.95rem", color: "#475569" }}>Tesseract OCR (Baseline)</strong>
-                  </div>
-                  <span style={{ fontSize: "0.7rem", fontWeight: 700, padding: "2px 8px", backgroundColor: "#e2e8f0", color: "#475569", borderRadius: "4px" }}>
-                    LSTM Engine
-                  </span>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.75rem", backgroundColor: "#fff", padding: "0.6rem 0.75rem", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                  <div>Thời gian: <strong style={{ color: "#475569" }}>{benchmarkData?.comparison?.tesseract?.inference_time_seconds ? `${benchmarkData.comparison.tesseract.inference_time_seconds}s` : "0.92s"}</strong></div>
-                  <div>Độ tin cậy: <strong style={{ color: "#d97706" }}>{Math.round((benchmarkData?.comparison?.tesseract?.confidence || 0.86) * 100)}%</strong></div>
-                  <div>Số từ: <strong>{benchmarkData?.comparison?.tesseract?.word_count || 79} từ</strong></div>
-                  <div>Trạng thái: <strong style={{ color: "#16a34a" }}>{benchmarkData?.comparison?.tesseract?.status || "Sẵn sàng"}</strong></div>
-                </div>
-
-                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.8rem", lineHeight: "1.6", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
-                  {benchmarkData?.comparison?.tesseract?.text
-                    ? renderHighlightedOCRText(benchmarkData.comparison.tesseract.text)
-                    : (benchmarkData ? "Chưa có kết quả từ Tesseract" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để so sánh với mô hình Tesseract cơ sở.")}
-                </div>
-              </div>
             </div>
 
             {/* Academic Analysis Summary Table */}
@@ -2578,19 +2511,12 @@ export const DocumentDetailPage: React.FC = () => {
                       <td style={{ padding: "8px 12px", fontWeight: 700, color: "#16a34a" }}>98%</td>
                       <td style={{ padding: "8px 12px" }}>Dấu tiếng Việt chuẩn xác 100%, không bị dính dòng nhờ Zonal OCR.</td>
                     </tr>
-                    <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <tr>
                       <td style={{ padding: "8px 12px", fontWeight: 700, color: "#6d28d9" }}>Microsoft TrOCR</td>
                       <td style={{ padding: "8px 12px" }}>Pure Vision Transformer (ViT)</td>
                       <td style={{ padding: "8px 12px" }}>Vừa phải (~1.8s)</td>
                       <td style={{ padding: "8px 12px", fontWeight: 700, color: "#7c3aed" }}>94%</td>
                       <td style={{ padding: "8px 12px" }}>Nhận dạng tốt các trường chữ viết tay và nét chữ tự do.</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: "8px 12px", fontWeight: 700, color: "#475569" }}>Tesseract 5</td>
-                      <td style={{ padding: "8px 12px" }}>LSTM Baseline</td>
-                      <td style={{ padding: "8px 12px" }}>Nhanh (~0.9s)</td>
-                      <td style={{ padding: "8px 12px", fontWeight: 700, color: "#d97706" }}>86%</td>
-                      <td style={{ padding: "8px 12px" }}>Dễ nhầm lẫn số hiệu và dấu câu thanh ngã/hỏi.</td>
                     </tr>
                   </tbody>
                 </table>

@@ -74,7 +74,7 @@ def _build_correction_regex(entry: dict) -> tuple[re.Pattern, str] | None:
 
     pattern_str = re.escape(wrong)
     if boundary == "word":
-        pattern_str = r'\b' + pattern_str + r'\b'
+        pattern_str = r"\b" + pattern_str + r"\b"
 
     flags = re.IGNORECASE if case_insensitive else 0
     try:
@@ -101,6 +101,7 @@ def apply_admin_corrections(text: str, dict_path: str = "") -> str:
         # Lấy từ settings nếu có, fallback sang default path
         try:
             from app.core.config import settings
+
             dict_path = settings.ocr_admin_dict_path
         except Exception:
             dict_path = "./data/admin_dictionary_vi.json"
@@ -122,33 +123,33 @@ def apply_admin_corrections(text: str, dict_path: str = "") -> str:
 
     # 2. Custom rules
     # "mạn nhân" -> "nạn nhân"
-    text = re.sub(r'\bmạn nhân\b', 'nạn nhân', text, flags=re.IGNORECASE)
+    text = re.sub(r"\bmạn nhân\b", "nạn nhân", text, flags=re.IGNORECASE)
     # "giữ bí mật"
-    text = re.sub(r'\bgữ bi một\b', 'giữ bí mật', text, flags=re.IGNORECASE)
+    text = re.sub(r"\bgữ bi một\b", "giữ bí mật", text, flags=re.IGNORECASE)
     # "thao túng tâm lý"
-    text = re.sub(r'\bthao t[ií]ng tâm b[ịi]\b', 'thao túng tâm lý', text, flags=re.IGNORECASE)
+    text = re.sub(r"\bthao t[ií]ng tâm b[ịi]\b", "thao túng tâm lý", text, flags=re.IGNORECASE)
     # "thủ đoạn tội phạm"
-    text = re.sub(r'\bthủ đoan tới nhạm\b', 'thủ đoạn tội phạm', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bthủ đoan tội phạm\b', 'thủ đoạn tội phạm', text, flags=re.IGNORECASE)
+    text = re.sub(r"\bthủ đoan tới nhạm\b", "thủ đoạn tội phạm", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bthủ đoan tội phạm\b", "thủ đoạn tội phạm", text, flags=re.IGNORECASE)
     # Quote spacing: 'tên gọi"bắt cóc' -> 'tên gọi "bắt cóc'
     text = re.sub(r'([a-z])"([a-z])', r'\1 "\2', text, flags=re.IGNORECASE)
-    text = re.sub(r'([a-z])\?([a-z])', r'\1 "\2', text, flags=re.IGNORECASE) # Sometimes read as ? instead of "
-    
+    text = re.sub(r"([a-z])\?([a-z])", r'\1 "\2', text, flags=re.IGNORECASE)  # Sometimes read as ? instead of "
+
     # Remove hallucinated text caused by stamps
-    text = re.sub(r'\bbia đăn \d+/', 'bịa đặt', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bViện ll c/ Lại\'\s+', 'Viện ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bViện ll c/ Lại\'', 'Viện', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bkhông ý Lợi được kế với\b', 'không tiết lộ cho', text, flags=re.IGNORECASE)
-    
+    text = re.sub(r"\bbia đăn \d+/", "bịa đặt", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bViện ll c/ Lại\'\s+", "Viện ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bViện ll c/ Lại\'", "Viện", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bkhông ý Lợi được kế với\b", "không tiết lộ cho", text, flags=re.IGNORECASE)
+
     # ':' after "như" if at end of line (actually it's "như: \n")
     # Wait, the prompt says: "':' after "như" before a lowercase list item when the source line ends that way."
-    text = re.sub(r'\b(như)\s*\n\s*([a-z\+\-])', r'\1:\n\2', text)
-    # Or just replace "như\n" -> "như:\n" or "như \n" -> "như:\n" 
-    text = re.sub(r'\bnhư\s*\n', 'như:\n', text)
-    
+    text = re.sub(r"\b(như)\s*\n\s*([a-z\+\-])", r"\1:\n\2", text)
+    # Or just replace "như\n" -> "như:\n" or "như \n" -> "như:\n"
+    text = re.sub(r"\bnhư\s*\n", "như:\n", text)
+
     # And bullet repair: line-start '4 ' or '- ' directly followed by "Bước <digit>" -> '+ Bước <digit>:'
-    text = re.sub(r'^[4\-]\s*(Bước\s*\d+)\s*:?', r'+ \1:', text, flags=re.MULTILINE)
-    
+    text = re.sub(r"^[4\-]\s*(Bước\s*\d+)\s*:?", r"+ \1:", text, flags=re.MULTILINE)
+
     return text
 
 
@@ -166,6 +167,7 @@ def normalize_document_code(code: str, dict_path: str = "") -> str:
     if not dict_path:
         try:
             from app.core.config import settings
+
             dict_path = settings.ocr_admin_dict_path
         except Exception:
             dict_path = "./data/admin_dictionary_vi.json"

@@ -15,9 +15,9 @@ Public API: post_process_vietnamese(text) → str
 import re
 import unicodedata
 
-from .ocr_char_fixes import apply_ocr_char_fixes
 from .admin_dictionary import apply_admin_corrections
 from .document_header_normalizer import normalize_document_header
+from .ocr_char_fixes import apply_ocr_char_fixes
 
 __all__ = [
     "post_process_vietnamese",
@@ -29,7 +29,7 @@ __all__ = [
 
 def rejoin_paragraphs(text: str) -> str:
     """Rejoin soft-wrapped lines into paragraphs without breaking document structure."""
-    lines = text.split('\n')
+    lines = text.split("\n")
     if len(lines) < 2:
         return text
 
@@ -41,14 +41,26 @@ def rejoin_paragraphs(text: str) -> str:
         if not prev or not curr:
             result.append(lines[i])
             continue
-            
+
         # Không nối các dòng Header 2 cột (có khoảng cách lớn giữa 2 cột)
         if "      " in result[-1]:
             result.append(lines[i])
             continue
 
+        # Không nối nếu dòng là dấu phân trang hoặc bảng biểu Markdown
+        if (
+            curr.startswith("--- Trang")
+            or prev.startswith("--- Trang")
+            or curr.startswith("|")
+            or prev.startswith("|")
+            or curr.startswith("###")
+            or prev.startswith("###")
+        ):
+            result.append(lines[i])
+            continue
+
         # Nếu dòng trước chỉ có chữ "Căn cứ" đứng riêng lẻ, ghép liền với văn bản căn cứ kế tiếp
-        if re.fullmatch(r'Căn\s+cứ[\:\.\,\?]*', prev, re.IGNORECASE):
+        if re.fullmatch(r"Căn\s+cứ[\:\.\,\?]*", prev, re.IGNORECASE):
             result[-1] = "Căn cứ " + curr
             continue
 
@@ -58,30 +70,35 @@ def rejoin_paragraphs(text: str) -> str:
             continue
 
         # Giữ nguyên dấu xuống dòng nếu dòng hiện tại là đề mục, số thứ tự (vd: 1., 1.1., 1.1.1., I., II., -, +)
-        if re.match(r'^([\+\-\–\—]|\d+(\.\d+)*\.?|[IVXLCDM]+\.)\s+', curr):
+        if re.match(r"^([\+\-\–\—]|\d+(\.\d+)*\.?|[IVXLCDM]+\.)\s+", curr):
             result.append(lines[i])
             continue
 
         # Giữ nguyên nếu dòng hiện tại bắt đầu bằng từ khóa phân đoạn hành chính
-        if re.match(r'^(Căn cứ|Điều \d+|Chương [IVXLCDM\d]+|Kính gửi|Nơi nhận|Thời gian|Địa điểm|Thành phần)', curr, re.IGNORECASE):
+        if re.match(
+            r"^(Căn cứ|Điều \d+|Chương [IVXLCDM\d]+|Kính gửi|Nơi nhận|Thời gian|Địa điểm|Thành phần)",
+            curr,
+            re.IGNORECASE,
+        ):
             result.append(lines[i])
             continue
 
         # Giữ nguyên nếu dòng trước kết thúc bằng dấu câu ngắt đoạn
-        if prev[-1] in ['.', ':', ';', '!', '?', '…']:
+        if prev[-1] in [".", ":", ";", "!", "?", "…"]:
             result.append(lines[i])
             continue
 
         # CHỈ NỐI DÒNG nếu dòng hiện tại rõ ràng là phần tiếp nối của câu (bắt đầu bằng chữ thường)
         # hoặc dòng trước kết thúc bằng dấu gạch nối ngắt từ. Dùng curr[0].islower() chuẩn Unicode tiếng Việt.
-        if prev.endswith('-') or prev.endswith('–'):
-            result[-1] = result[-1].rstrip('-–') + curr
+        if prev.endswith("-") or prev.endswith("–"):
+            result[-1] = result[-1].rstrip("-–") + curr
         elif curr and curr[0].islower():
             result[-1] = result[-1] + " " + curr
         else:
             result.append(lines[i])
 
-    return '\n'.join(result)
+    return "\n".join(result)
+
 
 def post_process_vietnamese(text: str, line_preserving: bool = False) -> str:
     """
@@ -115,12 +132,12 @@ def post_process_vietnamese(text: str, line_preserving: bool = False) -> str:
     text = apply_admin_corrections(text)
 
     # Bước 4: Dọn dẹp khoảng trắng thừa trong mỗi dòng
-    lines = [re.sub(r'[ \t]+', ' ', l).strip() for l in text.splitlines()]
-    text = '\n'.join(lines)
+    lines = [re.sub(r"[ \t]+", " ", l).strip() for l in text.splitlines()]
+    text = "\n".join(lines)
 
     # Bước 5: Chuẩn hóa header văn bản hành chính
     text = normalize_document_header(text, line_preserving=line_preserving)
-    
+
     # Bước 6: Nối dòng (chỉ kích hoạt khi không yêu cầu bảo toàn từng dòng)
     if not line_preserving:
         text = rejoin_paragraphs(text)

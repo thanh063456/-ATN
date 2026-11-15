@@ -14,10 +14,10 @@ export const DocTypeBadge: React.FC<DocTypeBadgeProps> = ({ code, name }) => {
         display: "inline-flex",
         alignItems: "center",
         fontSize: "0.75rem",
-        color: "var(--primary-700, #3730a3)",
-        backgroundColor: "var(--primary-50, #eef2ff)",
+        color: "var(--primary-700, #1e40af)",
+        backgroundColor: "var(--primary-50, #eff6ff)",
         padding: "0.15rem 0.5rem",
-        borderRadius: "4px",
+        borderRadius: "var(--radius-sm)",
         fontWeight: 600,
       }}
     >
@@ -89,11 +89,11 @@ export const FacetFilterChips: React.FC<FacetFilterChipsProps> = ({
         onClick={() => onSelect("")}
         style={{
           padding: "0.2rem 0.6rem",
-          borderRadius: "9999px",
+          borderRadius: "var(--radius-sm)",
           fontSize: "0.75rem",
           fontWeight: 600,
-          backgroundColor: !selectedCode ? "#4f46e5" : "#f3f4f6",
-          color: !selectedCode ? "#ffffff" : "#374151",
+          backgroundColor: !selectedCode ? "var(--primary-700, #1e40af)" : "#f1f5f9",
+          color: !selectedCode ? "#ffffff" : "#334155",
           cursor: "pointer",
         }}
       >
@@ -107,11 +107,11 @@ export const FacetFilterChips: React.FC<FacetFilterChipsProps> = ({
           onClick={() => onSelect(code)}
           style={{
             padding: "0.2rem 0.6rem",
-            borderRadius: "9999px",
+            borderRadius: "var(--radius-sm)",
             fontSize: "0.75rem",
             fontWeight: 600,
-            backgroundColor: selectedCode === code ? "#4f46e5" : "#f3f4f6",
-            color: selectedCode === code ? "#ffffff" : "#374151",
+            backgroundColor: selectedCode === code ? "var(--primary-700, #1e40af)" : "#f1f5f9",
+            color: selectedCode === code ? "#ffffff" : "#334155",
             cursor: "pointer",
           }}
         >

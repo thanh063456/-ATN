@@ -4,6 +4,7 @@ backend/app/core/database.py — Async SQLAlchemy engine & session
 Tự động kết nối PostgreSQL nếu có; nếu PostgreSQL offline/lỗi, tự động fallback SQLite (aiosqlite)
 để hệ thống luôn chạy được ổn định ở môi trường phát triển local.
 """
+
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -13,6 +14,7 @@ try:
     from loguru import logger
 except ImportError:
     import logging
+
     logger = logging.getLogger("database")
 logger: Any = logger
 from sqlalchemy import select, text
@@ -25,12 +27,14 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
+
 # ── Base declarative ───────────────────────────────────────────────────────────
 class Base(DeclarativeBase):
     """
     Base class cho tất cả SQLAlchemy models.
     Import từ đây: from app.core.database import Base
     """
+
     pass
 
 
@@ -55,7 +59,8 @@ try:
             echo=False,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
-            pool_timeout=5,
+            pool_timeout=getattr(settings, "db_pool_timeout", 30),
+            pool_recycle=getattr(settings, "db_pool_recycle", 1800),
             pool_pre_ping=True,
             connect_args=connect_args,
         )
@@ -78,7 +83,7 @@ AsyncSessionLocal = async_sessionmaker(
 async def init_db() -> None:
     """Khởi tạo các bảng và dữ liệu ban đầu nếu chưa có."""
     global engine, AsyncSessionLocal
-    
+
     # Thử kết nối PostgreSQL nếu được cấu hình
     if "postgresql" in settings.database_url:
         try:
@@ -93,7 +98,8 @@ async def init_db() -> None:
                 echo=False,
                 pool_size=settings.db_pool_size,
                 max_overflow=settings.db_max_overflow,
-                pool_timeout=5,
+                pool_timeout=getattr(settings, "db_pool_timeout", 30),
+                pool_recycle=getattr(settings, "db_pool_recycle", 1800),
                 pool_pre_ping=True,
                 connect_args=connect_args,
             )
@@ -111,9 +117,7 @@ async def init_db() -> None:
                     f"Không thể kết nối cơ sở dữ liệu PostgreSQL trong môi trường '{settings.app_env}': {str(exc)}"
                 ) from exc
 
-            logger.warning(
-                f"PostgreSQL connection failed ({exc}). Using SQLite local DB: {SQLITE_DB_PATH}"
-            )
+            logger.warning(f"PostgreSQL connection failed ({exc}). Using SQLite local DB: {SQLITE_DB_PATH}")
             engine = create_async_engine(SQLITE_URL, echo=False, connect_args={"timeout": 30})
             AsyncSessionLocal.configure(bind=engine)
     else:
@@ -127,9 +131,8 @@ async def init_db() -> None:
 
     # Tạo bảng tự động và cập nhật cột
     try:
-        from app.models import (
-            Role, User
-        )
+        from app.models import Role, User
+
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
@@ -156,13 +159,31 @@ async def init_db() -> None:
         ]
 
         is_postgres = engine.dialect.name == "postgresql"
+        existing_cols: set[tuple[str, str]] = set()
+        if is_postgres:
+            try:
+                async with engine.connect() as check_conn:
+                    res = await check_conn.execute(
+                        text("SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'")
+                    )
+                    existing_cols = {(r[0], r[1]) for r in res.fetchall()}
+            except Exception as schema_err:
+                logger.debug(f"Không thể đọc information_schema.columns: {schema_err}")
+
         for item in columns_to_add:
             tbl = item["table"]
             col = item["column"]
             col_type = item["type"]
+            # Bỏ qua nếu cột đã tồn tại trong schema để tránh chạy ALTER TABLE gây AccessExclusiveLock tranh chấp
+            if (tbl, col) in existing_cols:
+                logger.debug(f"Column {col} on table {tbl} đã tồn tại trong schema.")
+                continue
+
             try:
                 async with engine.begin() as conn:
                     if is_postgres:
+                        # Giới hạn lock_timeout 3s để tránh treo startup nếu có session khác đang giữ lock
+                        await conn.execute(text("SET LOCAL lock_timeout = '3s';"))
                         stmt = f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {col_type};"
                     else:
                         stmt = f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type};"
@@ -181,9 +202,14 @@ async def init_db() -> None:
         async with AsyncSessionLocal() as session:
             try:
                 from app.core.security import get_password_hash
+
                 # Ensure roles exist
                 role_map = {}
-                for r_name, r_desc in [("ADMIN", "Quản trị viên hệ thống"), ("STAFF", "Cán bộ CTSV"), ("STUDENT", "Sinh viên")]:
+                for r_name, r_desc in [
+                    ("ADMIN", "Quản trị viên hệ thống"),
+                    ("STAFF", "Cán bộ CTSV"),
+                    ("STUDENT", "Sinh viên"),
+                ]:
                     r_check = await session.execute(select(Role).where(Role.name == r_name))
                     role_obj = r_check.scalars().first()
                     if not role_obj:
@@ -196,12 +222,35 @@ async def init_db() -> None:
                 # Mật khẩu được đọc từ cấu hình (seed_admin_password, seed_staff_password...), không hardcode.
                 if settings.app_env == "development":
                     user_configs = [
-                        ("admin_hethong", "admin@dlu.edu.vn", settings.seed_admin_password, "Quản trị viên Hệ thống (DLU)", "ADMIN", None),
-                        ("canbo_ctsv", "canbo_ctsv@dlu.edu.vn", settings.seed_staff_password, "Cán bộ CTSV (STAFF)", "STAFF", None),
-                        ("sinhvien_demo", "sinhvien@dlu.edu.vn", settings.seed_student_password, "Sinh Viên Mẫu (DLU)", "STUDENT", "2210001"),
+                        (
+                            "admin_hethong",
+                            "admin@dlu.edu.vn",
+                            settings.seed_admin_password,
+                            "Quản trị viên Hệ thống (DLU)",
+                            "ADMIN",
+                            None,
+                        ),
+                        (
+                            "canbo_ctsv",
+                            "canbo_ctsv@dlu.edu.vn",
+                            settings.seed_staff_password,
+                            "Cán bộ CTSV (STAFF)",
+                            "STAFF",
+                            None,
+                        ),
+                        (
+                            "sinhvien_demo",
+                            "sinhvien@dlu.edu.vn",
+                            settings.seed_student_password,
+                            "Sinh Viên Mẫu (DLU)",
+                            "STUDENT",
+                            "2210001",
+                        ),
                     ]
                     for uname, email, pwd, fname, rname, mssv in user_configs:
-                        u_check = await session.execute(select(User).where((User.username == uname) | (User.email == email)))
+                        u_check = await session.execute(
+                            select(User).where((User.username == uname) | (User.email == email))
+                        )
                         if not u_check.scalars().first():
                             u_obj = User(
                                 username=uname,
@@ -221,6 +270,7 @@ async def init_db() -> None:
 
                 # Ensure document categories are seeded
                 from app.core.doc_types_config import seed_document_categories
+
                 await seed_document_categories(session)
             except Exception as seed_exc:
                 await session.rollback()
@@ -241,4 +291,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
-

@@ -7,6 +7,7 @@ Quy tắc:
   - Router/handler chuyển sang HTTPException.
   - AppException handler đăng ký toàn cục trong main.py.
 """
+
 from __future__ import annotations
 
 
@@ -26,6 +27,7 @@ class AppException(Exception):
 
 
 # ── 400 Bad Request ────────────────────────────────────────────────────────────
+
 
 class ValidationException(AppException):
     """Dữ liệu đầu vào không hợp lệ (nghiệp vụ, không phải Pydantic)."""
@@ -56,6 +58,7 @@ class UnsupportedFileTypeException(AppException):
 
 # ── 401 Unauthorized ──────────────────────────────────────────────────────────
 
+
 class UnauthorizedException(AppException):
     """Chưa xác thực (token thiếu hoặc hết hạn)."""
 
@@ -79,6 +82,7 @@ class TokenExpiredException(AppException):
 
 # ── 403 Forbidden ─────────────────────────────────────────────────────────────
 
+
 class PermissionDeniedException(AppException):
     """Không đủ quyền thực hiện hành động này."""
 
@@ -90,6 +94,7 @@ class PermissionDeniedException(AppException):
 
 
 # ── 404 Not Found ─────────────────────────────────────────────────────────────
+
 
 class NotFoundException(AppException):
     """Resource không tìm thấy (base)."""
@@ -113,6 +118,7 @@ class UserNotFoundException(NotFoundException):
 
 # ── 409 Conflict ──────────────────────────────────────────────────────────────
 
+
 class DuplicateResourceException(AppException):
     """Resource đã tồn tại."""
 
@@ -125,6 +131,7 @@ class DuplicateResourceException(AppException):
 
 # ── 422 Unprocessable ─────────────────────────────────────────────────────────
 
+
 class DocumentNotReadyException(AppException):
     """Tài liệu chưa hoàn thành OCR, không thể thực hiện thao tác."""
 
@@ -136,6 +143,7 @@ class DocumentNotReadyException(AppException):
 
 
 # ── 500 Internal ──────────────────────────────────────────────────────────────
+
 
 class OCRProcessingException(AppException):
     """Lỗi trong quá trình xử lý OCR."""
@@ -160,6 +168,7 @@ class SearchIndexException(AppException):
 
 # ── 503 Service Unavailable ───────────────────────────────────────────────────
 
+
 class EngineUnavailableError(AppException):
     """Mô hình/Engine OCR không khả dụng, thiếu thư viện hoặc file traineddata."""
 
@@ -168,4 +177,3 @@ class EngineUnavailableError(AppException):
         if reason:
             msg = f"{msg}: {reason}"
         super().__init__(msg, status_code=503)
-

@@ -3,6 +3,7 @@ backend/app/schemas/search.py — Pydantic Schemas for Search API
 
 Định nghĩa cấu trúc response cho full-text search, highlights, và thống kê tìm kiếm.
 """
+
 from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class SearchHit(BaseModel):
     """Một kết quả tìm kiếm khớp."""
+
     model_config = ConfigDict(from_attributes=True)
 
     document_id: UUID
@@ -21,6 +23,8 @@ class SearchHit(BaseModel):
     category_name: str | None = None
     student_id: str | None = None
     student_name: str | None = None
+    uploader_name: str | None = None
+    uploader_mssv: str | None = None
     document_date: str | None = None
     document_number: str | None = None
     tags: list[str] = Field(default_factory=list)
@@ -37,6 +41,7 @@ class SearchHit(BaseModel):
 
 class SearchResponse(BaseModel):
     """Response trả về cho GET /search."""
+
     model_config = ConfigDict(from_attributes=True)
 
     query: str
@@ -58,6 +63,7 @@ class SearchResponse(BaseModel):
 
 class SimilarDocumentHit(BaseModel):
     """Một tài liệu có nội dung / biểu mẫu tương đồng."""
+
     model_config = ConfigDict(from_attributes=True)
 
     document_id: UUID
@@ -75,6 +81,7 @@ class SimilarDocumentHit(BaseModel):
 
 class SimilarDocumentsResponse(BaseModel):
     """Response trả về cho GET /search/documents/{document_id}/similar (More Like This)."""
+
     model_config = ConfigDict(from_attributes=True)
 
     source_document_id: UUID
@@ -108,6 +115,7 @@ class ConfidenceStats(BaseModel):
 
 class SearchDashboardResponse(BaseModel):
     """Response trả về cho GET /search/analytics/dashboard."""
+
     model_config = ConfigDict(from_attributes=True)
 
     total_documents: int
@@ -121,6 +129,7 @@ class SearchDashboardResponse(BaseModel):
 # ── Mục 1: Duplicate / Plagiarism Detection Schemas ───────────────────────────
 class DuplicateCandidateHit(BaseModel):
     """Một hồ sơ có dấu hiệu trùng lặp / sao chép nội dung."""
+
     document_id: UUID
     title: str
     student_name: str | None = None
@@ -134,6 +143,7 @@ class DuplicateCandidateHit(BaseModel):
 
 class DuplicateCheckResponse(BaseModel):
     """Kết quả kiểm tra gian lận / trùng lặp hồ sơ."""
+
     source_document_id: UUID
     source_title: str
     is_suspect_duplicate: bool
@@ -147,6 +157,7 @@ class DuplicateCheckResponse(BaseModel):
 # ── Mục 2: SLA Tracking & Deadline Schemas ───────────────────────────────────
 class SlaDocumentItem(BaseModel):
     """Hồ sơ kèm thông số tiến độ SLA."""
+
     document_id: UUID
     title: str
     category_name: str | None = None
@@ -160,6 +171,7 @@ class SlaDocumentItem(BaseModel):
 
 class SlaSummaryResponse(BaseModel):
     """Báo cáo tổng quan tiến độ giải quyết hồ sơ (SLA) phòng CTSV."""
+
     total_pending: int
     overdue_count: int
     expiring_soon_count: int
@@ -171,6 +183,7 @@ class SlaSummaryResponse(BaseModel):
 # ── Mục 3: Smart Search Alert Subscriptions Schemas ──────────────────────────
 class AlertSubscriptionCreate(BaseModel):
     """Đăng ký từ khóa thông báo mới."""
+
     keyword: str
     category: str | None = None
     description: str | None = None
@@ -178,6 +191,7 @@ class AlertSubscriptionCreate(BaseModel):
 
 class AlertSubscriptionItem(BaseModel):
     """Thông tin một quy tắc theo dõi hồ sơ."""
+
     id: UUID
     user_id: UUID
     keyword: str
@@ -189,12 +203,14 @@ class AlertSubscriptionItem(BaseModel):
 
 class AlertSubscriptionListResponse(BaseModel):
     """Danh sách các từ khóa đang đăng ký theo dõi."""
+
     total: int
     items: list[AlertSubscriptionItem] = Field(default_factory=list)
 
 
 class AlertMatchResponse(BaseModel):
     """Kết quả kiểm tra tài liệu mới khớp với các luật cảnh báo."""
+
     matched_alerts_count: int
     matched_keywords: list[str] = Field(default_factory=list)
 
@@ -202,6 +218,7 @@ class AlertMatchResponse(BaseModel):
 # ── Chức năng 1: Student 360 Profile & Timeline Schemas ─────────────────────
 class StudentTimelineEvent(BaseModel):
     """Một mốc sự kiện hồ sơ trong vòng đời học tập của sinh viên."""
+
     document_id: UUID
     title: str
     category_name: str | None = None
@@ -214,6 +231,7 @@ class StudentTimelineEvent(BaseModel):
 
 class StudentProfile360Response(BaseModel):
     """Hồ sơ tổng hợp 360 độ của sinh viên qua các năm học."""
+
     student_id: str
     student_name: str | None = None
     total_documents: int
@@ -226,6 +244,7 @@ class StudentProfile360Response(BaseModel):
 # ── Chức năng 3: Document Validity & Superseded Tracker Schemas ──────────────
 class DocumentValidityResponse(BaseModel):
     """Thông tin hiệu lực pháp lý và văn bản thay thế."""
+
     document_id: UUID
     title: str
     is_effective: bool
@@ -240,6 +259,7 @@ class DocumentValidityResponse(BaseModel):
 # ── Chức năng 4: Trending Topics & Significant Terms Schemas ────────────────
 class TrendingTopicItem(BaseModel):
     """Một chủ đề / từ khóa đang tăng trưởng đột biến."""
+
     term: str
     frequency: int
     growth_rate: float  # Tỷ lệ tăng trưởng %
@@ -248,6 +268,7 @@ class TrendingTopicItem(BaseModel):
 
 class TrendingTopicsResponse(BaseModel):
     """Báo cáo các điểm nóng và từ khóa phản ánh đột biến."""
+
     timeframe: str
     total_terms_analyzed: int
     trending_topics: list[TrendingTopicItem] = Field(default_factory=list)
@@ -256,6 +277,7 @@ class TrendingTopicsResponse(BaseModel):
 # ── Chức năng 6: Staff Performance Analytics Schemas ────────────────────────
 class StaffPerformanceMetric(BaseModel):
     """Chỉ số đo lường hiệu suất xử lý hồ sơ của từng cán bộ CTSV."""
+
     staff_id: UUID | None = None
     staff_name: str
     total_processed: int
@@ -267,6 +289,7 @@ class StaffPerformanceMetric(BaseModel):
 
 class StaffPerformanceResponse(BaseModel):
     """Báo cáo đánh giá năng suất xử lý hồ sơ toàn phòng CTSV."""
+
     total_staff: int
     overall_avg_hours: float
     metrics: list[StaffPerformanceMetric] = Field(default_factory=list)
@@ -275,6 +298,7 @@ class StaffPerformanceResponse(BaseModel):
 # ── Đề xuất Thực tế 1: IR Evaluation Benchmark Schemas ──────────────────────
 class IRMetricQueryDetail(BaseModel):
     """Chi tiết kết quả đánh giá cho một truy vấn trong tập Ground Truth."""
+
     id: str
     type: str  # "EASY" | "HARD" | "NEGATIVE"
     query: str
@@ -292,6 +316,7 @@ class IRMetricQueryDetail(BaseModel):
 
 class IRTierMetricSummary(BaseModel):
     """Tổng hợp chỉ số theo phân tầng truy vấn (EASY, HARD, NEGATIVE)."""
+
     count: int
     precision_at_5: float
     precision_at_10: float
@@ -303,6 +328,7 @@ class IRTierMetricSummary(BaseModel):
 
 class IREvaluationBenchmarkResponse(BaseModel):
     """Báo cáo đánh giá thực nghiệm khoa học chất lượng truy hồi thông tin (IR)."""
+
     total_queries: int
     engine_evaluated: str
     precision_at_5: float
@@ -320,6 +346,7 @@ class IREvaluationBenchmarkResponse(BaseModel):
 # ── Đề xuất Thực tế 2: Cryptographic Verification Schemas ───────────────────
 class DocumentVerificationCertificate(BaseModel):
     """Chứng thư điện tử xác thực tính toàn vẹn và chống làm giả văn bản CTSV."""
+
     is_valid: bool
     status: str  # "VALID" | "TAMPERED" | "NOT_FOUND"
     verification_code: str
@@ -338,6 +365,7 @@ class DocumentVerificationCertificate(BaseModel):
 # ── Đề xuất Thực tế 3: OCR Error-Tolerant Typo Search Schemas ───────────────
 class OcrCorrectionSuggestion(BaseModel):
     """Đề xuất tự động sửa lỗi chính tả / lỗi OCR do nhận dạng chữ viết tay."""
+
     original_term: str
     corrected_term: str
     confidence: float
@@ -346,6 +374,7 @@ class OcrCorrectionSuggestion(BaseModel):
 
 class OcrTolerantSearchRequest(BaseModel):
     """Yêu cầu tìm kiếm dung lỗi nhận dạng OCR."""
+
     query: str
     category_code: str | None = None
     page: int = 1
@@ -354,6 +383,7 @@ class OcrTolerantSearchRequest(BaseModel):
 
 class OcrTolerantSearchResponse(BaseModel):
     """Kết quả tìm kiếm chịu lỗi OCR và sai số chữ viết tay."""
+
     query: str
     normalized_query: str
     suggested_corrections: list[OcrCorrectionSuggestion] = Field(default_factory=list)
@@ -364,6 +394,7 @@ class OcrTolerantSearchResponse(BaseModel):
 # ── Đề xuất Thực tế 4: Spatial Bounding Box Search Schemas ──────────────────
 class SpatialHighlightBox(BaseModel):
     """Tọa độ khung chữ nhật (Bounding Box) trên trang tài liệu phục vụ Side-by-Side Live Editor."""
+
     page: int
     box: list[float]  # [ymin, xmin, ymax, xmax] hoặc [x, y, width, height]
     matched_text: str
@@ -372,6 +403,7 @@ class SpatialHighlightBox(BaseModel):
 
 class SpatialHighlightResponse(BaseModel):
     """Danh sách tọa độ xuất hiện của từ khóa trên file PDF/Ảnh scan gốc."""
+
     document_id: UUID
     keyword: str
     total_occurrences: int
@@ -381,6 +413,7 @@ class SpatialHighlightResponse(BaseModel):
 # ── Đề xuất Thực tế Mới 1: Natural Language FAQ & Regulation Q&A ──────────────
 class RequiredFormItem(BaseModel):
     """Biểu mẫu đính kèm cần nộp tương ứng với quy chế."""
+
     form_code: str
     form_name: str
     download_url: str
@@ -389,6 +422,7 @@ class RequiredFormItem(BaseModel):
 
 class FaqAnswerResponse(BaseModel):
     """Phản hồi câu trả lời hỏi đáp quy chế đào tạo & CTSV bằng ngôn ngữ tự nhiên."""
+
     query: str
     matched_article: str
     regulation_title: str
@@ -402,6 +436,7 @@ class FaqAnswerResponse(BaseModel):
 # ── Đề xuất Thực tế Mới 2: Policy Eligibility Auto-Audit ──────────────────────
 class PolicyCriteriaCheck(BaseModel):
     """Từng tiêu chí kiểm tra theo quy định chính sách của Nhà nước/Nhà trường."""
+
     rule_code: str
     title: str
     passed: bool
@@ -411,6 +446,7 @@ class PolicyCriteriaCheck(BaseModel):
 
 class PolicyAuditResponse(BaseModel):
     """Kết quả tự động đối soát và thẩm định điều kiện hồ sơ CTSV."""
+
     document_id: UUID
     policy_name: str
     policy_code: str
@@ -425,6 +461,7 @@ class PolicyAuditResponse(BaseModel):
 # ── Đề xuất Thực tế Mới 3: Cross-Document Anti-Fraud & Collision Detection ───
 class CollisionDetail(BaseModel):
     """Chi tiết xung đột hoặc trùng lặp mã chứng từ giữa các hồ sơ."""
+
     collision_type: str  # SERIAL_NUMBER_DUPLICATION | RECEIPT_REUSE | SIGNATURE_CONFLICT
     serial_number: str
     conflicting_document_id: str
@@ -435,6 +472,7 @@ class CollisionDetail(BaseModel):
 
 class CrossDocumentFraudResponse(BaseModel):
     """Kết quả phân tích gian lận, tái sử dụng giấy tờ hoặc trùng lặp con dấu/số hiệu."""
+
     document_id: UUID
     student_id: str | None = None
     risk_level: str  # SAFE | WARNING | CRITICAL
@@ -447,6 +485,7 @@ class CrossDocumentFraudResponse(BaseModel):
 # ── Đề xuất Thực tế Mới 4: Nested Table Structured Search ────────────────────
 class TableSearchRequest(BaseModel):
     """Yêu cầu tìm kiếm dòng bảng biểu cấu trúc trong các văn bản đa trang."""
+
     student_id: str | None = None
     student_name: str | None = None
     class_name: str | None = None
@@ -459,6 +498,7 @@ class TableSearchRequest(BaseModel):
 
 class TableRowHit(BaseModel):
     """Một dòng dữ liệu trích xuất từ bảng scan trong quyết định/danh sách."""
+
     document_id: UUID
     document_title: str
     decision_number: str | None = None
@@ -474,6 +514,7 @@ class TableRowHit(BaseModel):
 
 class TableSearchResponse(BaseModel):
     """Kết quả tìm kiếm bảng biểu cấu trúc."""
+
     total_hits: int
     page: int
     page_size: int
@@ -484,6 +525,7 @@ class TableSearchResponse(BaseModel):
 # ── Đề xuất Thực tế Mới 5: PII Security Audit & Anomaly SIEM ─────────────────
 class PiiAccessRecord(BaseModel):
     """Nhật ký truy xuất thông tin cá nhân nhạy cảm của sinh viên."""
+
     id: str
     timestamp: str
     user_id: str
@@ -496,6 +538,7 @@ class PiiAccessRecord(BaseModel):
 
 class PiiAnomalyItem(BaseModel):
     """Cảnh báo truy cập bất thường dữ liệu sinh viên."""
+
     alert_id: str
     severity: str  # LOW | MEDIUM | HIGH | CRITICAL
     user_id: str
@@ -508,6 +551,7 @@ class PiiAnomalyItem(BaseModel):
 
 class PiiAuditSummaryResponse(BaseModel):
     """Báo cáo tổng hợp giám sát an toàn thông tin PII theo Nghị định 13/2023/NĐ-CP."""
+
     total_pii_accesses: int
     unique_documents_accessed: int
     top_accessors: list[dict[str, Any]] = Field(default_factory=list)
@@ -518,6 +562,7 @@ class PiiAuditSummaryResponse(BaseModel):
 # ── Đề tài CTSV: Percolator Reverse Document Routing ──────────────────────────
 class PercolateRuleMatch(BaseModel):
     """Từng quy tắc chính sách CTSV mà văn bản scan đã kích hoạt."""
+
     rule_id: str
     policy_name: str
     category_target: str
@@ -530,6 +575,7 @@ class PercolateRuleMatch(BaseModel):
 
 class PercolateRoutingResponse(BaseModel):
     """Kết quả phân luồng tự động văn bản bằng Elasticsearch Percolator."""
+
     document_id: UUID
     document_title: str
     matched_rules_count: int
@@ -543,6 +589,7 @@ class PercolateRoutingResponse(BaseModel):
 # ── Đề tài CTSV: Multi-faceted CTSV Analytics Aggregations ───────────────────
 class FacultyBreakdownItem(BaseModel):
     """Thống kê hồ sơ sinh viên theo từng Khoa chuyên môn."""
+
     faculty_code: str
     faculty_name: str
     total_applications: int
@@ -554,6 +601,7 @@ class FacultyBreakdownItem(BaseModel):
 
 class PolicyDistributionItem(BaseModel):
     """Phân bổ các diện chính sách sinh viên."""
+
     policy_code: str
     policy_name: str
     count: int
@@ -562,6 +610,7 @@ class PolicyDistributionItem(BaseModel):
 
 class CtsvMultiDimensionalAnalyticsResponse(BaseModel):
     """Báo cáo tổng hợp đa chiều về tình hình chính sách sinh viên toàn trường."""
+
     total_student_documents: int
     total_active_students: int
     total_budget_allocated: float
@@ -574,6 +623,7 @@ class CtsvMultiDimensionalAnalyticsResponse(BaseModel):
 # ── Đề tài CTSV Đợt 2: 1. OCR Quality & Review Queue ────────────────────────
 class OcrQualityBucket(BaseModel):
     """Phân khúc dải chất lượng OCR."""
+
     range_label: str
     min_score: float
     max_score: float
@@ -584,18 +634,20 @@ class OcrQualityBucket(BaseModel):
 
 class OcrQualityDistributionResponse(BaseModel):
     """Báo cáo tổng hợp phân bổ chất lượng nhận dạng scan OCR toàn hệ thống."""
+
     total_scanned_documents: int
     avg_confidence: float
-    excellent_count: int      # >= 90%
-    good_count: int           # 75% - 89%
+    excellent_count: int  # >= 90%
+    good_count: int  # 75% - 89%
     review_needed_count: int  # 60% - 74%
-    poor_count: int           # < 60%
+    poor_count: int  # < 60%
     skewed_count: int
     distribution: list[OcrQualityBucket] = Field(default_factory=list)
 
 
 class OcrReviewQueueItem(BaseModel):
     """Văn bản trong hàng đợi kiểm duyệt & hiệu đính thủ công (Human-in-the-Loop)."""
+
     document_id: UUID
     title: str
     document_number: Optional[str] = None
@@ -610,15 +662,17 @@ class OcrReviewQueueItem(BaseModel):
 
 class OcrReviewQueueResponse(BaseModel):
     """Danh sách hàng đợi hiệu đính văn bản chất lượng kém."""
+
     total_items: int
     page: int
     page_size: int
     items: list[OcrReviewQueueItem] = Field(default_factory=list)
 
 
-# ── Đề tài CTSV Đợt 2: 2. Auto-Tagging & Entity Extraction (significant_text) 
+# ── Đề tài CTSV Đợt 2: 2. Auto-Tagging & Entity Extraction (significant_text)
 class AutoTagItem(BaseModel):
     """Thẻ nhãn tự động trích xuất từ văn cảnh bằng thuật toán significant_text."""
+
     tag: str
     category: str
     significance_score: float
@@ -628,6 +682,7 @@ class AutoTagItem(BaseModel):
 
 class DocumentAutoTagsResponse(BaseModel):
     """Kết quả tự động gán nhãn chính sách & thực thể cho tài liệu OCR."""
+
     document_id: UUID
     document_title: str
     total_tags: int
@@ -639,6 +694,7 @@ class DocumentAutoTagsResponse(BaseModel):
 # ── Đề tài CTSV Đợt 2: 3. Geo-Distance & Area Verification (NĐ 81/2021) ───────
 class GeoAreaVerifyRequest(BaseModel):
     """Yêu cầu thẩm định địa giới thường trú hưởng chính sách NĐ 81/2021."""
+
     student_id: Optional[str] = None
     address_raw: Optional[str] = ""
     commune: Optional[str] = None
@@ -650,6 +706,7 @@ class GeoAreaVerifyRequest(BaseModel):
 
 class GeoAreaVerifyResponse(BaseModel):
     """Kết quả thẩm định địa giới ưu tiên theo tọa độ & Nghị định 81."""
+
     is_priority_area: bool
     area_category: str  # KHU_VUC_III | KHU_VUC_II | KHU_VUC_I | KHONG_THUOC_DIEN
     matched_commune: str
@@ -665,6 +722,7 @@ class GeoAreaVerifyResponse(BaseModel):
 # ── Đề tài CTSV Đợt 2: 4. Entity Graph & Dropout Risk (Adjacency Matrix) ─────
 class GraphNode(BaseModel):
     """Nút thực thể trong đồ thị liên kết sinh viên - giấy tờ."""
+
     id: str
     label: str
     type: str  # STUDENT | FACULTY | POLICY | DOCUMENT | WARNING | AWARD
@@ -674,6 +732,7 @@ class GraphNode(BaseModel):
 
 class GraphEdge(BaseModel):
     """Cạnh quan hệ giữa các thực thể."""
+
     source: str
     target: str
     relationship: str
@@ -682,6 +741,7 @@ class GraphEdge(BaseModel):
 
 class DropoutRiskFactor(BaseModel):
     """Từng chỉ báo rủi ro học vụ / thôi học."""
+
     factor_code: str
     severity: str  # CRITICAL | HIGH | MEDIUM | LOW
     description: str
@@ -690,6 +750,7 @@ class DropoutRiskFactor(BaseModel):
 
 class DropoutRiskAssessment(BaseModel):
     """Đánh giá toàn diện nguy cơ thôi học của sinh viên."""
+
     risk_level: str  # SAFE | LOW | MEDIUM | HIGH | CRITICAL
     risk_score: float  # Thang điểm 0 - 100
     primary_reason: str
@@ -699,6 +760,7 @@ class DropoutRiskAssessment(BaseModel):
 
 class StudentEntityGraphResponse(BaseModel):
     """Đồ thị thực thể 360 độ và phân tích rủi ro học vụ của sinh viên."""
+
     student_id: str
     student_name: str
     faculty: str
@@ -711,6 +773,7 @@ class StudentEntityGraphResponse(BaseModel):
 # ── Đề tài CTSV Đợt 2: 5. Audit Trail & Searchable Diffs ─────────────────────
 class FieldDiffItem(BaseModel):
     """So sánh thay đổi từng trường giữa bản OCR thô và bản hiệu đính."""
+
     field_name: str
     original_ocr_value: Any
     curated_value: Any
@@ -719,6 +782,7 @@ class FieldDiffItem(BaseModel):
 
 class DocumentRevisionItem(BaseModel):
     """Phiên bản lịch sử chỉnh sửa tài liệu."""
+
     revision_number: int
     editor_name: str
     editor_role: str
@@ -729,6 +793,7 @@ class DocumentRevisionItem(BaseModel):
 
 class DocumentAuditTrailResponse(BaseModel):
     """Toàn bộ nhật ký kiểm toán và so sánh diffs của văn bản."""
+
     document_id: UUID
     title: str
     current_version: int
@@ -740,6 +805,7 @@ class DocumentAuditTrailResponse(BaseModel):
 # ── Đề tài CTSV Đợt 2: 6. Smart Watchers & Real-Time Alerting Engine ─────────
 class CreateWatcherRequest(BaseModel):
     """Tạo bộ giám sát chỉ mục tự động cho cán bộ CTSV."""
+
     name: str
     query_text: str
     category_code: Optional[str] = None
@@ -750,6 +816,7 @@ class CreateWatcherRequest(BaseModel):
 
 class WatcherItem(BaseModel):
     """Bộ giám sát đang hoạt động trong hệ thống."""
+
     watcher_id: str
     name: str
     query_text: str
@@ -762,6 +829,7 @@ class WatcherItem(BaseModel):
 
 class WatcherTriggeredEvent(BaseModel):
     """Sự kiện văn bản mới kích hoạt điều kiện Watcher."""
+
     event_id: str
     watcher_id: str
     watcher_name: str
@@ -776,6 +844,7 @@ class WatcherTriggeredEvent(BaseModel):
 
 class WatcherListResponse(BaseModel):
     """Danh sách các Watchers đang chạy."""
+
     total_watchers: int
     watchers: list[WatcherItem] = Field(default_factory=list)
 
@@ -783,15 +852,19 @@ class WatcherListResponse(BaseModel):
 # ── Đề tài CTSV Đợt 3: 1. Hybrid Search (BM25 + kNN Reciprocal Rank Fusion) ──────
 class HybridRrfRequest(BaseModel):
     """Yêu cầu tìm kiếm lai Hybrid Search kết hợp BM25 & kNN Dense Vector."""
+
     query: str
     limit: int = Field(default=10, ge=1, le=50)
-    rank_constant_k: int = Field(default=20, ge=1, le=100, description="Hằng số làm mịn k trong công thức RRF (thường là 20 hoặc 60)")
+    rank_constant_k: int = Field(
+        default=20, ge=1, le=100, description="Hằng số làm mịn k trong công thức RRF (thường là 20 hoặc 60)"
+    )
     category_code: Optional[str] = None
     min_confidence: Optional[float] = None
 
 
 class HybridRrfHit(BaseModel):
     """Kết quả tài liệu sau khi dung hòa thứ hạng bằng RRF."""
+
     document_id: UUID
     title: str
     category_name: str
@@ -809,6 +882,7 @@ class HybridRrfHit(BaseModel):
 
 class HybridRrfSearchResponse(BaseModel):
     """Báo cáo so sánh và xếp hạng tìm kiếm lai RRF (ES 8.9+)."""
+
     query: str
     rank_constant_k: int
     total_results: int
@@ -819,6 +893,7 @@ class HybridRrfSearchResponse(BaseModel):
 # ── Đề tài CTSV Đợt 3: 5. Kibana Canvas Dashboard ────────────────────────────
 class KibanaCanvasWorkpadPreview(BaseModel):
     """Cấu trúc dữ liệu trực quan hóa Canvas Workpad phục vụ trình chiếu điều hành."""
+
     title: str
     version: str
     executive_kpis: dict[str, Any]
@@ -827,8 +902,3 @@ class KibanaCanvasWorkpadPreview(BaseModel):
     ocr_quality_gauge: dict[str, Any]
     canvas_elements_count: int
     download_ndjson_url: str
-
-
-
-
-

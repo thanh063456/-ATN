@@ -7,6 +7,7 @@ Quy ước đặt tên theo .ai/CODING_RULES.md:
 - <Entity>Response
 - <Entity>DetailResponse
 """
+
 from datetime import datetime
 from uuid import UUID
 
@@ -66,17 +67,22 @@ class DocumentMetadataResponse(BaseModel):
 
 class OCRCorrectionRequest(BaseModel):
     """Payload gửi lên khi cán bộ hiệu chỉnh văn bản OCR."""
+
     corrected_text: str = Field(..., min_length=1, description="Nội dung văn bản sau khi hiệu chỉnh")
     engine: str | None = Field(default=None, description="Tên engine đang được hiệu chỉnh (vietocr, trocr, tesseract)")
 
 
 class SetPublicRequest(BaseModel):
     """Payload cập nhật quyền công khai của tài liệu cho sinh viên."""
-    is_public: bool = Field(..., description="Trạng thái công khai của tài liệu (True: Cho phép sinh viên xem, False: Nội bộ CTSV)")
+
+    is_public: bool = Field(
+        ..., description="Trạng thái công khai của tài liệu (True: Cho phép sinh viên xem, False: Nội bộ CTSV)"
+    )
 
 
 class FieldExtractionUpdateRequest(BaseModel):
     """Payload cập nhật metadata bóc tách thông tin sinh viên."""
+
     student_id: str | None = None
     student_name: str | None = None
     document_number: str | None = None
@@ -87,11 +93,13 @@ class FieldExtractionUpdateRequest(BaseModel):
 
 class UpdateTagsRequest(BaseModel):
     """Payload cập nhật danh sách nhãn (tags) của tài liệu."""
+
     tags: list[str] = Field(default_factory=list, description="Danh sách các nhãn gán cho tài liệu")
 
 
 class TagSummaryItem(BaseModel):
     """Thống kê từng nhãn trong hệ thống."""
+
     tag: str
     count: int
     priority: int
@@ -101,17 +109,22 @@ class TagSummaryItem(BaseModel):
 
 class TagSummaryResponse(BaseModel):
     """Danh sách thống kê toàn bộ nhãn phục vụ thanh lọc 1-Click."""
+
     items: list[TagSummaryItem]
     total_tags: int
 
 
 class AIRefineRequest(BaseModel):
     """Payload yêu cầu AI hiệu chỉnh chính tả & cấu trúc văn bản OCR."""
-    text: str | None = Field(default=None, description="Văn bản OCR cần AI tinh chỉnh (nếu None sẽ lấy từ OCRResult mới nhất)")
+
+    text: str | None = Field(
+        default=None, description="Văn bản OCR cần AI tinh chỉnh (nếu None sẽ lấy từ OCRResult mới nhất)"
+    )
 
 
 class AIRefineResponse(BaseModel):
     """Kết quả AI hiệu chỉnh văn bản."""
+
     original_text: str
     refined_text: str
     provider: str
@@ -122,6 +135,7 @@ class AIRefineResponse(BaseModel):
 
 class AIExtractResponse(BaseModel):
     """Kết quả AI trích xuất thông tin thông minh."""
+
     student_name: str | None = None
     student_id: str | None = None
     class_name: str | None = None
@@ -142,6 +156,7 @@ class AIExtractResponse(BaseModel):
 
 class VerificationResponse(BaseModel):
     """Payload phản hồi khi quét mã QR xác thực hồ sơ."""
+
     is_valid: bool
     document_id: UUID
     title: str
@@ -159,6 +174,7 @@ class VerificationResponse(BaseModel):
 # ── Main Document Schemas ────────────────────────────────────────────────────
 class DocumentUploadResponse(BaseModel):
     """Response trả về ngay sau khi upload (202 Accepted)."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -176,6 +192,7 @@ class DocumentUploadResponse(BaseModel):
 
 class DocumentResponse(BaseModel):
     """Thông tin cơ bản của Document."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -196,6 +213,7 @@ class DocumentResponse(BaseModel):
 
 class DocumentListItem(DocumentResponse):
     """Thông tin item trong danh sách tài liệu."""
+
     uploader_name: str | None = None
     uploader_mssv: str | None = None
     category_name: str | None = None
@@ -212,6 +230,7 @@ class DocumentListItem(DocumentResponse):
 
 class DocumentListResponse(BaseModel):
     """Danh sách tài liệu có phân trang."""
+
     items: list[DocumentListItem]
     total: int
     page: int
@@ -221,6 +240,7 @@ class DocumentListResponse(BaseModel):
 
 class DocumentDetailResponse(DocumentResponse):
     """Thông tin chi tiết tài liệu kèm kết quả OCR mới nhất và trạng thái Job."""
+
     ocr_result: OCRResultResponse | None = None
     all_ocr_results: list[OCRResultResponse] = Field(default_factory=list)
     processing_job: ProcessingJobResponse | None = None
@@ -229,5 +249,53 @@ class DocumentDetailResponse(DocumentResponse):
     priority_score: int = 0
     file_url: str | None = None
 
+
 class TypeOverrideReq(BaseModel):
     category_code: str = Field(..., description="Mã loại tài liệu (category code)")
+
+
+# ── Stamp & Table Extraction Schemas ─────────────────────────────────────────
+class DetectedStampSchema(BaseModel):
+    bbox: tuple[int, int, int, int]
+    confidence: float
+    area: float
+    aspect_ratio: float
+    image_base64: str = ""
+    is_circular: bool = False
+
+
+class StampDetectionResponse(BaseModel):
+    document_id: UUID
+    has_stamp: bool
+    stamps: list[DetectedStampSchema] = Field(default_factory=list)
+    cleaned_image_base64: str = ""
+    red_pixel_ratio: float = 0.0
+
+
+class TableCellSchema(BaseModel):
+    row_idx: int
+    col_idx: int
+    bbox: tuple[int, int, int, int]
+    text: str = ""
+
+
+class ExtractedTableSchema(BaseModel):
+    table_idx: int
+    page_num: int = 1
+    bbox: tuple[int, int, int, int]
+    headers: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+    cells: list[TableCellSchema] = Field(default_factory=list)
+    row_count: int = 0
+    col_count: int = 0
+    markdown: str = ""
+    html: str = ""
+
+
+class TableExtractionResponse(BaseModel):
+    document_id: UUID
+    has_table: bool
+    tables: list[ExtractedTableSchema] = Field(default_factory=list)
+    total_tables: int = 0
+    total_cells: int = 0
+

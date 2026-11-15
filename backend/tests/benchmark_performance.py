@@ -9,6 +9,7 @@ Thực hiện đo lường hiệu năng hệ thống theo yêu cầu phi chức 
 
 Ref: tests/PerformanceTest.md, .ai/design/NonFunctionalRequirement.md
 """
+
 import asyncio
 import json
 import os
@@ -16,32 +17,43 @@ import statistics
 import sys
 import time
 import uuid
+
 import httpx
 
 # Ensure app is in path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from elasticsearch import AsyncElasticsearch
 from app.core.config import settings
+from elasticsearch import AsyncElasticsearch
 
 
 async def benchmark_search_latency(num_requests: int = 200, concurrency: int = 10) -> dict:
     """Benchmark độ trễ của API /search dưới tải đồng thời."""
     queries = [
-        "học phí", "miễn giảm học phí", "bảo lưu kết quả học tập",
-        "20210678", "nghỉ học tạm thời", "khen thưởng nckh",
-        "xác nhận sinh viên", "don xin nghi hoc", "hoc bong khuyen khich",
-        "20204512", "đơn đề nghị", "thẻ sinh viên"
+        "học phí",
+        "miễn giảm học phí",
+        "bảo lưu kết quả học tập",
+        "20210678",
+        "nghỉ học tạm thời",
+        "khen thưởng nckh",
+        "xác nhận sinh viên",
+        "don xin nghi hoc",
+        "hoc bong khuyen khich",
+        "20204512",
+        "đơn đề nghị",
+        "thẻ sinh viên",
     ]
 
     latencies_ms: list[float] = []
     semaphore = asyncio.Semaphore(concurrency)
 
     from app.main import create_app
+
     app_instance = create_app()
     transport = httpx.ASGITransport(app=app_instance)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver", timeout=15.0) as client:
+
         async def make_request(query: str):
             async with semaphore:
                 start = time.perf_counter()
@@ -55,10 +67,7 @@ async def benchmark_search_latency(num_requests: int = 200, concurrency: int = 1
                 except Exception as e:
                     print("Search exception:", e)
 
-        tasks = [
-            make_request(queries[i % len(queries)])
-            for i in range(num_requests)
-        ]
+        tasks = [make_request(queries[i % len(queries)]) for i in range(num_requests)]
 
         overall_start = time.perf_counter()
         await asyncio.gather(*tasks)
@@ -115,7 +124,7 @@ async def seed_benchmark_elasticsearch(count: int = 1000) -> int:
     for i in range(count):
         doc_id = str(uuid.uuid4())
         cat_code, cat_name = sample_categories[i % len(sample_categories)]
-        student_id = f"202{i%4}{i%1000:04d}"
+        student_id = f"202{i % 4}{i % 1000:04d}"
         student_name = f"{sample_names[i % len(sample_names)]} {i}"
 
         doc_body = {
@@ -127,7 +136,7 @@ async def seed_benchmark_elasticsearch(count: int = 1000) -> int:
             "student_id": student_id,
             "student_name": student_name,
             "document_date": "2026-08-20",
-            "document_number": f"{i+1}/ĐN-CTSV",
+            "document_number": f"{i + 1}/ĐN-CTSV",
             "ocr_status": "DONE",
             "ocr_confidence": 0.96,
             "is_deleted": False,

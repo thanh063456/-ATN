@@ -12,41 +12,38 @@ Tính năng:
 6. Cơ chế Resume: Bỏ qua các tài liệu đã OCR hoàn thành (status=DONE), có thể tạm dừng và tiếp tục an toàn.
 """
 
-import os
-import sys
-import glob
+import argparse
+import asyncio
 import json
+import sys
 import time
 import uuid
-import asyncio
-import argparse
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # UTF-8 stdout configuration for Windows
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Add backend directory to sys.path
 backend_path = Path(__file__).resolve().parent.parent / "backend"
 sys.path.insert(0, str(backend_path))
 
 import fitz  # PyMuPDF
-from loguru import logger
-from sqlalchemy import select, update
-from sqlalchemy.orm import selectinload
-
 from app.core.database import AsyncSessionLocal, init_db
 from app.models import Document, DocumentCategory, DocumentMetadata, ProcessingJob
 from app.models.ocr_results import OCRResult
 from app.models.users import User
-from app.services.storage_service import storage_service
-from app.services.vietocr_service import vietocr_service
-from app.services.tag_service import tag_service
 from app.services.doctype_service import DocTypeService
 from app.services.search_index_service import search_index_service
+from app.services.storage_service import storage_service
+from app.services.tag_service import tag_service
+from app.services.vietocr_service import vietocr_service
+from loguru import logger
+from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 
 
 def find_pdf_entries(base_dir: Path) -> list[dict]:
@@ -75,21 +72,25 @@ def find_pdf_entries(base_dir: Path) -> list[dict]:
                     continue
                 seen_files.add(real_p)
 
-                entries.append({
-                    "pdf_path": p,
-                    "folder_name": item.name,
-                    "metadata_json": meta_json,
-                })
+                entries.append(
+                    {
+                        "pdf_path": p,
+                        "folder_name": item.name,
+                        "metadata_json": meta_json,
+                    }
+                )
         elif item.is_file() and item.suffix.lower() == ".pdf":
             real_p = item.resolve()
             if real_p in seen_files:
                 continue
             seen_files.add(real_p)
-            entries.append({
-                "pdf_path": item,
-                "folder_name": "",
-                "metadata_json": {},
-            })
+            entries.append(
+                {
+                    "pdf_path": item,
+                    "folder_name": "",
+                    "metadata_json": {},
+                }
+            )
 
     return entries
 
@@ -355,6 +356,7 @@ async def process_single_pdf(
 
     try:
         import torch
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception:
@@ -374,22 +376,10 @@ async def process_single_pdf(
 async def main():
     parser = argparse.ArgumentParser(description="Batch import and OCR all PDFs in CTSV_output")
     parser.add_argument(
-        "--input", "-i",
-        type=str,
-        default=r"d:\Đồ án tốt nghiệp\CTSV_output",
-        help="Thư mục CTSV_output"
+        "--input", "-i", type=str, default=r"d:\Đồ án tốt nghiệp\CTSV_output", help="Thư mục CTSV_output"
     )
-    parser.add_argument(
-        "--limit", "-l",
-        type=int,
-        default=0,
-        help="Giới hạn số file xử lý (0 = không giới hạn)"
-    )
-    parser.add_argument(
-        "--force", "-f",
-        action="store_true",
-        help="Xử lý lại kể cả khi đã có trong DB"
-    )
+    parser.add_argument("--limit", "-l", type=int, default=0, help="Giới hạn số file xử lý (0 = không giới hạn)")
+    parser.add_argument("--force", "-f", action="store_true", help="Xử lý lại kể cả khi đã có trong DB")
     args = parser.parse_args()
 
     input_dir = Path(args.input)
@@ -402,9 +392,7 @@ async def main():
 
     # Lấy tài khoản cán bộ CTSV làm người tải lên mặc định
     async with AsyncSessionLocal() as session:
-        user_res = await session.execute(
-            select(User).where(User.username.in_(["canbo_ctsv", "admin_hethong"]))
-        )
+        user_res = await session.execute(select(User).where(User.username.in_(["canbo_ctsv", "admin_hethong"])))
         staff_user = user_res.scalars().first()
         if not staff_user:
             staff_user = (await session.execute(select(User))).scalars().first()
@@ -420,7 +408,7 @@ async def main():
     logger.info(f"📂 Tìm thấy {total_found} tệp PDF trong {input_dir}")
 
     if args.limit > 0:
-        entries = entries[:args.limit]
+        entries = entries[: args.limit]
         logger.info(f"Áp dụng giới hạn xử lý: {len(entries)} tệp.")
 
     processed_count = 0
@@ -459,7 +447,7 @@ async def main():
     logger.info(f"- Đã xử lý mới: {processed_count}")
     logger.info(f"- Đã bỏ qua (đã có sẵn): {skipped_count}")
     logger.info(f"- Lỗi: {error_count}")
-    logger.info(f"- Thời gian thực hiện: {elapsed:.1f}s ({elapsed/60:.2f} phút)")
+    logger.info(f"- Thời gian thực hiện: {elapsed:.1f}s ({elapsed / 60:.2f} phút)")
     logger.info("=======================================================")
 
 

@@ -153,6 +153,12 @@ export const authApi = {
     return res.data;
   },
 
+  /** Cập nhật thông tin profile cá nhân */
+  updateProfile: async (data: { full_name?: string; mssv?: string }): Promise<UserResponse> => {
+    const res = await apiClient.put<UserResponse>("/auth/me", data);
+    return res.data;
+  },
+
   /** Đăng xuất khỏi Supabase session. */
   signOut: async () => {
     await supabase.auth.signOut();

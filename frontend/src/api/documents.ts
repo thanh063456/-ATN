@@ -348,4 +348,64 @@ export const documentsApi = {
     if (categoryId) params.append("category_id", categoryId);
     return `${API_BASE_URL}/documents/export/excel?${params.toString()}`;
   },
+
+  detectStamp: async (id: string, page = 0): Promise<StampDetectionData> => {
+    const res = await apiClient.post<StampDetectionData>(`/documents/${id}/detect-stamp?page=${page}`);
+    return res.data;
+  },
+
+  extractTables: async (id: string, page?: number, ocrCells = true): Promise<TableExtractionData> => {
+    const url =
+      page !== undefined && page >= 0
+        ? `/documents/${id}/extract-tables?page=${page}&ocr_cells=${ocrCells}`
+        : `/documents/${id}/extract-tables?ocr_cells=${ocrCells}`;
+    const res = await apiClient.post<TableExtractionData>(url);
+    return res.data;
+  },
 };
+
+export interface DetectedStampItem {
+  bbox: [number, number, number, number];
+  confidence: number;
+  area: number;
+  aspect_ratio: number;
+  image_base64: string;
+  is_circular: boolean;
+}
+
+export interface StampDetectionData {
+  document_id: string;
+  has_stamp: boolean;
+  stamps: DetectedStampItem[];
+  cleaned_image_base64: string;
+  red_pixel_ratio: number;
+}
+
+export interface TableCellItem {
+  row_idx: number;
+  col_idx: number;
+  bbox: [number, number, number, number];
+  text: string;
+}
+
+export interface ExtractedTableItem {
+  table_idx: number;
+  page_num?: number;
+  bbox: [number, number, number, number];
+  headers: string[];
+  rows: string[][];
+  cells: TableCellItem[];
+  row_count: number;
+  col_count: number;
+  markdown: string;
+  html: string;
+}
+
+export interface TableExtractionData {
+  document_id: string;
+  has_table: boolean;
+  tables: ExtractedTableItem[];
+  total_tables: number;
+  total_cells: number;
+}
+

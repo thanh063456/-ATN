@@ -7,7 +7,6 @@ import {
   Calendar,
   User,
   GraduationCap,
-  Sparkles,
   ArrowRight,
   Info,
   Clock,
@@ -55,6 +54,7 @@ import {
   HybridRrfSearchResponse,
 } from "../api/search";
 import { useToastStore } from "../stores/useToastStore";
+import { useAuthStore } from "../stores/useAuthStore";
 
 function formatDisplayTitle(rawTitle: string): { mainTitle: string; code?: string } {
   if (!rawTitle) return { mainTitle: "Tài liệu không tên" };
@@ -91,6 +91,8 @@ function convertHybridHitToSearchHit(h: HybridRrfHit): SearchHit {
 }
 
 export const SearchPage: React.FC = () => {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "ADMIN";
   const { addToast } = useToastStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -514,11 +516,11 @@ export const SearchPage: React.FC = () => {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)" }}>
-            Tra cứu & Thẩm định Hồ sơ CTSV Thông minh
+          <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--gray-900)" }}>
+            Tra cứu Văn bản & Hồ sơ Công tác Sinh viên
           </h1>
-          <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>
-            Hệ sinh thái tìm kiếm thông minh Elasticsearch 8 & OCR CSDL: Tra cứu toàn văn, Tìm kiếm Lai RRF, Thống kê CTSV, Hỏi đáp pháp quy & Giám sát an toàn PII.
+          <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", marginTop: "0.2rem" }}>
+            Tìm kiếm theo số hiệu văn bản (vd: 1395/KH-ĐHĐL), họ tên, mã số sinh viên hoặc nội dung toàn văn.
           </p>
         </div>
       </div>
@@ -690,7 +692,7 @@ export const SearchPage: React.FC = () => {
                   onFocus={() => {
                     if (suggestions.length > 0) setShowSuggestions(true);
                   }}
-                  placeholder="Nhập từ khóa, tiêu đề, họ tên SV hoặc MSSV (vd: 'học phí', '20210678', 'bảo lưu')..."
+                  placeholder="Tìm theo từ khóa, tiêu đề, mã số sinh viên (MSSV) hoặc tên người upload (vd: '2212461', 'canbo_ctsv', 'bảo lưu')..."
                   style={{
                     width: "100%",
                     border: "none",
@@ -800,95 +802,97 @@ export const SearchPage: React.FC = () => {
           </div>
         </form>
 
-        {/* Hybrid RRF Mode Switcher & Parameters */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "0.75rem",
-            marginTop: "1rem",
-            padding: "0.6rem 0.85rem",
-            backgroundColor: isHybridMode ? "#f5f3ff" : "#f8fafc",
-            border: isHybridMode ? "1px solid #c7d2fe" : "1px solid var(--border-color)",
-            borderRadius: "var(--radius-md)",
-            transition: "all 0.2s ease",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <label
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.45rem",
-                fontSize: "0.8125rem",
-                fontWeight: 700,
-                color: isHybridMode ? "#4338ca" : "var(--gray-700)",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={isHybridMode}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  setIsHybridMode(enabled);
-                  if (enabled && query.trim()) {
-                    handleSearchHybridRrf(query.trim(), hybridConstantK);
-                  }
+        {/* Hybrid RRF Mode Switcher & Parameters (Chỉ hiển thị cho Quản trị viên ADMIN để đánh giá IR thực nghiệm) */}
+        {isAdmin && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              marginTop: "1rem",
+              padding: "0.6rem 0.85rem",
+              backgroundColor: isHybridMode ? "#f5f3ff" : "#f8fafc",
+              border: isHybridMode ? "1px solid #c7d2fe" : "1px solid var(--border-color)",
+              borderRadius: "var(--radius-md)",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.45rem",
+                  fontSize: "0.8125rem",
+                  fontWeight: 700,
+                  color: isHybridMode ? "#4338ca" : "var(--gray-700)",
+                  cursor: "pointer",
                 }}
-                style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#4f46e5" }}
-              />
-              <Cpu size={16} color={isHybridMode ? "#4f46e5" : "var(--gray-500)"} />
-              <span>Chế độ Tìm kiếm Lai RRF (BM25 + kNN Vector Ngữ nghĩa 768 chiều)</span>
-            </label>
-            <span
-              style={{
-                fontSize: "0.625rem",
-                fontWeight: 700,
-                backgroundColor: isHybridMode ? "#4f46e5" : "#e2e8f0",
-                color: isHybridMode ? "#ffffff" : "var(--gray-600)",
-                padding: "0.15rem 0.45rem",
-                borderRadius: "9999px",
-              }}
-            >
-              Elasticsearch 8.9+
-            </span>
-          </div>
-
-          {isHybridMode && (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <span style={{ fontSize: "0.75rem", color: "var(--gray-600)", fontWeight: 600 }}>Hằng số RRF (k):</span>
-              {[
-                { label: "k = 20 (Chuẩn ES 8.9)", val: 20 },
-                { label: "k = 60 (Cormack)", val: 60 },
-              ].map((preset) => (
-                <button
-                  key={preset.val}
-                  type="button"
-                  onClick={() => {
-                    setHybridConstantK(preset.val);
-                    if (query.trim()) handleSearchHybridRrf(query.trim(), preset.val);
+              >
+                <input
+                  type="checkbox"
+                  checked={isHybridMode}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setIsHybridMode(enabled);
+                    if (enabled && query.trim()) {
+                      handleSearchHybridRrf(query.trim(), hybridConstantK);
+                    }
                   }}
-                  style={{
-                    padding: "0.2rem 0.5rem",
-                    borderRadius: "4px",
-                    fontSize: "0.75rem",
-                    fontWeight: hybridConstantK === preset.val ? 700 : 500,
-                    backgroundColor: hybridConstantK === preset.val ? "#4f46e5" : "#ffffff",
-                    color: hybridConstantK === preset.val ? "#ffffff" : "var(--gray-700)",
-                    border: "1px solid",
-                    borderColor: hybridConstantK === preset.val ? "#4f46e5" : "var(--border-color)",
-                    cursor: "pointer",
-                  }}
-                >
-                  {preset.label}
-                </button>
-              ))}
+                  style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#4f46e5" }}
+                />
+                <Cpu size={16} color={isHybridMode ? "#4f46e5" : "var(--gray-500)"} />
+                <span>Chế độ Tìm kiếm Lai RRF (BM25 + kNN Vector Ngữ nghĩa 768 chiều)</span>
+              </label>
+              <span
+                style={{
+                  fontSize: "0.625rem",
+                  fontWeight: 700,
+                  backgroundColor: isHybridMode ? "#4f46e5" : "#e2e8f0",
+                  color: isHybridMode ? "#ffffff" : "var(--gray-600)",
+                  padding: "0.15rem 0.45rem",
+                  borderRadius: "9999px",
+                }}
+              >
+                Elasticsearch 8.9+
+              </span>
             </div>
-          )}
-        </div>
+
+            {isHybridMode && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--gray-600)", fontWeight: 600 }}>Hằng số RRF (k):</span>
+                {[
+                  { label: "k = 20 (Chuẩn ES 8.9)", val: 20 },
+                  { label: "k = 60 (Cormack)", val: 60 },
+                ].map((preset) => (
+                  <button
+                    key={preset.val}
+                    type="button"
+                    onClick={() => {
+                      setHybridConstantK(preset.val);
+                      if (query.trim()) handleSearchHybridRrf(query.trim(), preset.val);
+                    }}
+                    style={{
+                      padding: "0.2rem 0.5rem",
+                      borderRadius: "4px",
+                      fontSize: "0.75rem",
+                      fontWeight: hybridConstantK === preset.val ? 700 : 500,
+                      backgroundColor: hybridConstantK === preset.val ? "#4f46e5" : "#ffffff",
+                      color: hybridConstantK === preset.val ? "#ffffff" : "var(--gray-700)",
+                      border: "1px solid",
+                      borderColor: hybridConstantK === preset.val ? "#4f46e5" : "var(--border-color)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Quick Sample Queries */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
@@ -1108,41 +1112,60 @@ export const SearchPage: React.FC = () => {
           {isHybridMode && hybridData && hybridData.results.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginBottom: "0.5rem" }}>
               {/* Hybrid Header & Metrics */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  backgroundColor: "#f5f3ff",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid #c7d2fe",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <Sparkles size={18} color="#6366f1" />
-                  <span style={{ fontWeight: 800, fontSize: "0.9375rem", color: "#3730a3" }}>
-                    Kết quả Xếp hạng Lai RRF (Dense Vector 768d + BM25 Lexical)
-                  </span>
-                  <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-                    ({hybridData.results.length} tài liệu tối ưu nhất, k = {hybridData.rank_constant_k})
-                  </span>
-                </div>
+              {isAdmin ? (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "0.75rem",
+                    padding: "0.75rem 1rem",
+                    backgroundColor: "#eff6ff",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid #bfdbfe",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <Layers size={18} color="#1d4ed8" />
+                    <span style={{ fontWeight: 700, fontSize: "0.9375rem", color: "#1e3a8a" }}>
+                      Kết quả Xếp hạng Lai RRF (Dense Vector 768d + BM25 Lexical)
+                    </span>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                      ({hybridData.results.length} tài liệu tối ưu nhất, k = {hybridData.rank_constant_k})
+                    </span>
+                  </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#dcfce7", color: "#166534" }}>
-                    ⚡ Khớp kép: {hybridData.metrics?.both_count ?? hybridData.results.filter(r => r.match_type === "HYBRID_BOTH").length}
-                  </span>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#dbeafe", color: "#1e40af" }}>
-                    🔍 BM25 từ khóa: {hybridData.metrics?.keyword_only_count ?? hybridData.results.filter(r => r.match_type === "KEYWORD_ONLY").length}
-                  </span>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#f3e8ff", color: "#6b21a8" }}>
-                    🧠 kNN Ngữ nghĩa: {hybridData.metrics?.semantic_only_count ?? hybridData.results.filter(r => r.match_type === "SEMANTIC_ONLY").length}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#dcfce7", color: "#166534" }}>
+                      Khớp kép: {hybridData.metrics?.both_count ?? hybridData.results.filter(r => r.match_type === "HYBRID_BOTH").length}
+                    </span>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#dbeafe", color: "#1e40af" }}>
+                      BM25 từ khóa: {hybridData.metrics?.keyword_only_count ?? hybridData.results.filter(r => r.match_type === "KEYWORD_ONLY").length}
+                    </span>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "9999px", backgroundColor: "#f1f5f9", color: "#334155" }}>
+                      kNN Ngữ nghĩa: {hybridData.metrics?.semantic_only_count ?? hybridData.results.filter(r => r.match_type === "SEMANTIC_ONLY").length}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    padding: "0.6rem 0.85rem",
+                    backgroundColor: "#f8fafc",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--border-color)",
+                  }}
+                >
+                  <CheckCircle2 size={16} color="var(--primary-600)" />
+                  <span style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--gray-800)" }}>
+                    Kết quả tìm kiếm phù hợp nhất ({hybridData.results.length} tài liệu)
                   </span>
                 </div>
-              </div>
+              )}
 
               {/* Hybrid Hits Cards */}
               {hybridData.results.map((hit, hIdx) => {
@@ -1164,22 +1187,24 @@ export const SearchPage: React.FC = () => {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
                       <div style={{ flex: 1, minWidth: "280px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
-                          <span
-                            style={{
-                              padding: "0.2rem 0.6rem",
-                              borderRadius: "9999px",
-                              fontSize: "0.6875rem",
-                              fontWeight: 800,
-                              backgroundColor: isBoth ? "#dcfce7" : isBm25 ? "#dbeafe" : "#f3e8ff",
-                              color: isBoth ? "#166534" : isBm25 ? "#1e40af" : "#6b21a8",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "0.3rem",
-                            }}
-                          >
-                            {isBoth ? <Sparkles size={12} /> : isBm25 ? <Search size={12} /> : <Cpu size={12} />}
-                            {isBoth ? "⚡ KHỚP KÉP (HYBRID BOTH)" : isBm25 ? "🔍 TỪ KHÓA CHÍNH XÁC (BM25)" : "🧠 NGỮ NGHĨA VECTOR (kNN)"}
-                          </span>
+                          {isAdmin && (
+                            <span
+                              style={{
+                                padding: "0.2rem 0.6rem",
+                                borderRadius: "9999px",
+                                fontSize: "0.6875rem",
+                                fontWeight: 700,
+                                backgroundColor: isBoth ? "#dcfce7" : isBm25 ? "#dbeafe" : "#f1f5f9",
+                                color: isBoth ? "#166534" : isBm25 ? "#1e40af" : "#334155",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.3rem",
+                              }}
+                            >
+                              {isBoth ? <CheckCircle2 size={12} /> : isBm25 ? <Search size={12} /> : <Cpu size={12} />}
+                              {isBoth ? "KHỚP KÉP (HYBRID)" : isBm25 ? "TỪ KHÓA CHÍNH XÁC (BM25)" : "NGỮ NGHĨA VECTOR (kNN)"}
+                            </span>
+                          )}
                           <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", backgroundColor: "var(--gray-100)", padding: "0.15rem 0.45rem", borderRadius: "4px" }}>
                             {hit.category_name}
                           </span>
@@ -1204,12 +1229,16 @@ export const SearchPage: React.FC = () => {
                           {titleInfo.mainTitle}
                         </Link>
 
-                        {(hit.student_name || hit.student_id) && (
-                          <div style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.25rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                            <span>Sinh viên: <strong>{hit.student_name || "N/A"}</strong></span>
-                            <span>MSSV: <code style={{ color: "var(--primary-700)", fontWeight: 700 }}>{hit.student_id || "N/A"}</code></span>
-                          </div>
-                        )}
+                        <div style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.25rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                          {(hit.student_name || hit.student_id) && (
+                            <>
+                              <span>Sinh viên: <strong>{hit.student_name || "N/A"}</strong></span>
+                              <span>MSSV: <code style={{ color: "var(--primary-700)", fontWeight: 700, backgroundColor: "#eff6ff", padding: "0.1rem 0.35rem", borderRadius: "3px" }}>{hit.student_id || "N/A"}</code></span>
+                            </>
+                          )}
+                          <span style={{ color: "var(--gray-400)" }}>•</span>
+                          <span>Người upload: <strong style={{ color: "#1e3a8a" }}>{hit.uploader_name || "Cán bộ CTSV"}</strong></span>
+                        </div>
 
                         {hit.content_snippet && (
                           <p style={{ fontSize: "0.8125rem", color: "var(--gray-600)", marginTop: "0.4rem", lineHeight: 1.5 }}>
@@ -1218,140 +1247,152 @@ export const SearchPage: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Rank & RRF Score Badges Box */}
+                      {/* Rank & RRF Score Badges Box (Chỉ hiển thị cho Admin; Sinh viên & Cán bộ chỉ xem nút chi tiết) */}
+                      {isAdmin ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            gap: "0.4rem",
+                            backgroundColor: "#f8fafc",
+                            padding: "0.6rem 0.85rem",
+                            borderRadius: "var(--radius-md)",
+                            border: "1px solid #e2e8f0",
+                            minWidth: "210px",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
+                            <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Điểm RRF:</span>
+                            <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "#1d4ed8", fontFamily: "monospace" }}>
+                              {hit.rrf_score.toFixed(5)}
+                            </span>
+                          </div>
+
+                          <div style={{ display: "flex", gap: "0.5rem", fontSize: "0.75rem" }}>
+                            <span style={{ color: hit.bm25_rank ? "#1e40af" : "var(--gray-400)", backgroundColor: hit.bm25_rank ? "#dbeafe" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
+                              BM25: {hit.bm25_rank ? `#${hit.bm25_rank}` : "Không khớp"}
+                            </span>
+                            <span style={{ color: hit.knn_rank ? "#6b21a8" : "var(--gray-400)", backgroundColor: hit.knn_rank ? "#f3e8ff" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
+                              kNN: {hit.knn_rank ? `#${hit.knn_rank}` : "Không khớp"}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)", textAlign: "right", marginTop: "0.15rem" }}>
+                            {hit.explanation}
+                          </div>
+
+                          <Link to={`/documents/${hit.document_id}`} style={{ marginTop: "0.25rem" }}>
+                            <Button variant="outline" size="sm" rightIcon={<ArrowRight size={13} />} style={{ fontSize: "0.75rem", padding: "0.2rem 0.55rem", height: "26px" }}>
+                              Xem chi tiết
+                            </Button>
+                          </Link>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <Link to={`/documents/${hit.document_id}`}>
+                            <Button variant="outline" size="sm" rightIcon={<ArrowRight size={13} />} style={{ fontSize: "0.75rem", padding: "0.25rem 0.65rem", height: "28px" }}>
+                              Xem chi tiết
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons for Hybrid Hit (Chỉ hiển thị cho Admin khi đánh giá các công cụ chuyên sâu) */}
+                    {isAdmin && (
                       <div
                         style={{
                           display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-end",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginTop: "0.75rem",
+                          paddingTop: "0.65rem",
+                          borderTop: "1px solid var(--gray-100)",
+                          flexWrap: "wrap",
                           gap: "0.4rem",
-                          backgroundColor: "#f8fafc",
-                          padding: "0.6rem 0.85rem",
-                          borderRadius: "var(--radius-md)",
-                          border: "1px solid #e2e8f0",
-                          minWidth: "210px",
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-                          <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Điểm RRF:</span>
-                          <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "#1d4ed8", fontFamily: "monospace" }}>
-                            {hit.rrf_score.toFixed(5)}
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
+                          <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase" }}>
+                            Công cụ:
                           </span>
-                        </div>
-
-                        <div style={{ display: "flex", gap: "0.5rem", fontSize: "0.75rem" }}>
-                          <span style={{ color: hit.bm25_rank ? "#1e40af" : "var(--gray-400)", backgroundColor: hit.bm25_rank ? "#dbeafe" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
-                            BM25: {hit.bm25_rank ? `#${hit.bm25_rank}` : "Không khớp"}
-                          </span>
-                          <span style={{ color: hit.knn_rank ? "#6b21a8" : "var(--gray-400)", backgroundColor: hit.knn_rank ? "#f3e8ff" : "#f1f5f9", padding: "0.15rem 0.4rem", borderRadius: "3px" }}>
-                            kNN: {hit.knn_rank ? `#${hit.knn_rank}` : "Không khớp"}
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)", textAlign: "right", marginTop: "0.15rem" }}>
-                          {hit.explanation}
-                        </div>
-
-                        <Link to={`/documents/${hit.document_id}`} style={{ marginTop: "0.25rem" }}>
-                          <Button variant="outline" size="sm" rightIcon={<ArrowRight size={13} />} style={{ fontSize: "0.75rem", padding: "0.2rem 0.55rem", height: "26px" }}>
-                            Xem chi tiết
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon={<GitBranch size={12} color="#4f46e5" />}
+                            onClick={() => handleOpenPercolateRouting(searchHitEquivalent)}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#eef2ff", borderColor: "#c7d2fe", color: "#3730a3" }}
+                          >
+                            Phân luồng Percolator
                           </Button>
-                        </Link>
-                      </div>
-                    </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon={<Scan size={12} color="#0284c7" />}
+                            onClick={() => handleOpenSpatialHighlights(searchHitEquivalent)}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f0f9ff", borderColor: "#bae6fd", color: "#0369a1" }}
+                          >
+                            Tọa độ Scan OCR
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon={<CopyCheck size={12} color="#be123c" />}
+                            onClick={() => handleOpenDuplicateCheck(searchHitEquivalent)}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#fff1f2", borderColor: "#fecdd3", color: "#9f1239" }}
+                          >
+                            Trùng lặp MLT
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon={<Tag size={12} color="#059669" />}
+                            onClick={() => handleOpenAutoTags(searchHitEquivalent)}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46" }}
+                          >
+                            Gán nhãn Tags
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon={<History size={12} color="#7c3aed" />}
+                            onClick={() => handleOpenAuditTrail(searchHitEquivalent)}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f5f3ff", borderColor: "#ddd6fe", color: "#5b21b6" }}
+                          >
+                            Nhật ký Diffs
+                          </Button>
+                        </div>
 
-                    {/* Action Buttons for Hybrid Hit */}
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        marginTop: "0.75rem",
-                        paddingTop: "0.65rem",
-                        borderTop: "1px solid var(--gray-100)",
-                        flexWrap: "wrap",
-                        gap: "0.4rem",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase" }}>
-                          Công cụ:
-                        </span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          leftIcon={<GitBranch size={12} color="#4f46e5" />}
-                          onClick={() => handleOpenPercolateRouting(searchHitEquivalent)}
-                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#eef2ff", borderColor: "#c7d2fe", color: "#3730a3" }}
-                        >
-                          Phân luồng Percolator
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          leftIcon={<Scan size={12} color="#0284c7" />}
-                          onClick={() => handleOpenSpatialHighlights(searchHitEquivalent)}
-                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f0f9ff", borderColor: "#bae6fd", color: "#0369a1" }}
-                        >
-                          Tọa độ Scan OCR
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          leftIcon={<CopyCheck size={12} color="#be123c" />}
-                          onClick={() => handleOpenDuplicateCheck(searchHitEquivalent)}
-                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#fff1f2", borderColor: "#fecdd3", color: "#9f1239" }}
-                        >
-                          Trùng lặp MLT
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          leftIcon={<Tag size={12} color="#059669" />}
-                          onClick={() => handleOpenAutoTags(searchHitEquivalent)}
-                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46" }}
-                        >
-                          Gán nhãn Tags
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          leftIcon={<History size={12} color="#7c3aed" />}
-                          onClick={() => handleOpenAuditTrail(searchHitEquivalent)}
-                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f5f3ff", borderColor: "#ddd6fe", color: "#5b21b6" }}
-                        >
-                          Nhật ký Diffs
-                        </Button>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon={<FileCheck size={12} color="#059669" />}
+                            onClick={() => handleOpenPolicyAudit(searchHitEquivalent, "NGHI_DINH_81")}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f0fdf4", borderColor: "#a7f3d0", color: "#065f46" }}
+                          >
+                            Thẩm định NĐ 81
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon={<ShieldCheck size={12} color="#d97706" />}
+                            onClick={() => handleOpenFraudAudit(searchHitEquivalent)}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#fffbeb", borderColor: "#fde68a", color: "#92400e" }}
+                          >
+                            Đối soát Gian lận
+                          </Button>
+                        </div>
                       </div>
-
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          leftIcon={<FileCheck size={12} color="#059669" />}
-                          onClick={() => handleOpenPolicyAudit(searchHitEquivalent, "NGHI_DINH_81")}
-                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#f0fdf4", borderColor: "#a7f3d0", color: "#065f46" }}
-                        >
-                          Thẩm định NĐ 81
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          leftIcon={<ShieldCheck size={12} color="#d97706" />}
-                          onClick={() => handleOpenFraudAudit(searchHitEquivalent)}
-                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem", height: "26px", backgroundColor: "#fffbeb", borderColor: "#fde68a", color: "#92400e" }}
-                        >
-                          Đối soát Gian lận
-                        </Button>
-                      </div>
-                    </div>
+                    )}
                   </Card>
                 );
               })}
@@ -1363,7 +1404,9 @@ export const SearchPage: React.FC = () => {
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "0.5rem 0 0.25rem", borderTop: "2px dashed var(--gray-200)", paddingTop: "1rem" }}>
               <FileText size={16} color="var(--primary-600)" />
               <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--gray-800)" }}>
-                Toàn bộ Danh mục Văn bản Khớp Từ khóa & Bộ lọc Phân loại ({searchResponse.total_hits} tài liệu)
+                {isAdmin
+                  ? `Toàn bộ Danh mục Văn bản Khớp Từ khóa & Bộ lọc Phân loại (${searchResponse.total_hits} tài liệu)`
+                  : `Danh sách tất cả văn bản phù hợp (${searchResponse.total_hits} tài liệu)`}
               </span>
             </div>
           )}
@@ -1373,11 +1416,11 @@ export const SearchPage: React.FC = () => {
             <div>
               {searchResponse.query ? (
                 <>
-                  Tìm thấy <strong style={{ color: "var(--gray-900)" }}>{searchResponse.total_hits}</strong> kết quả cho từ khóa "<strong>{searchResponse.query}</strong>" ({searchResponse.took_ms} ms)
+                  Tìm thấy <strong style={{ color: "var(--gray-900)" }}>{searchResponse.total_hits}</strong> kết quả cho từ khóa "<strong>{searchResponse.query}</strong>" {isAdmin && `(${searchResponse.took_ms} ms)`}
                 </>
               ) : (
                 <>
-                  Hiển thị <strong style={{ color: "var(--gray-900)" }}>{searchResponse.total_hits}</strong> văn bản và hồ sơ CTSV mới nhất ({searchResponse.took_ms} ms)
+                  Hiển thị <strong style={{ color: "var(--gray-900)" }}>{searchResponse.total_hits}</strong> văn bản và hồ sơ CTSV mới nhất {isAdmin && `(${searchResponse.took_ms} ms)`}
                 </>
               )}
             </div>
@@ -1592,9 +1635,11 @@ export const SearchPage: React.FC = () => {
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                      <span style={{ fontSize: "0.75rem", color: "var(--gray-400)" }}>
-                        Độ phù hợp: <strong style={{ color: "var(--gray-600)" }}>{hit.score}</strong>
-                      </span>
+                      {isAdmin && (
+                        <span style={{ fontSize: "0.75rem", color: "var(--gray-400)" }}>
+                          Độ phù hợp: <strong style={{ color: "var(--gray-600)" }}>{hit.score}</strong>
+                        </span>
+                      )}
                       <Link to={`/documents/${hit.document_id}`}>
                         <Button variant="outline" size="sm" rightIcon={<ArrowRight size={13} />} style={{ fontSize: "0.75rem", padding: "0.25rem 0.65rem", height: "28px" }}>
                           Xem chi tiết
@@ -1625,7 +1670,7 @@ export const SearchPage: React.FC = () => {
                   <div style={{ display: "flex", gap: "1.25rem", marginTop: "0.35rem", fontSize: "0.8125rem", color: "var(--gray-600)", flexWrap: "wrap", alignItems: "center" }}>
                     {hit.student_name && (
                       <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                        <User size={14} style={{ color: "var(--gray-400)" }} /> {hit.student_name}
+                        <User size={14} style={{ color: "var(--gray-400)" }} /> Sinh viên: <strong>{hit.student_name}</strong>
                       </span>
                     )}
                     {hit.student_id && (
@@ -1633,6 +1678,9 @@ export const SearchPage: React.FC = () => {
                         <GraduationCap size={14} style={{ color: "var(--gray-400)" }} /> MSSV: <strong style={{ color: "var(--gray-800)" }}>{hit.student_id}</strong>
                       </span>
                     )}
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                      <User size={14} style={{ color: "#2563eb" }} /> Người upload: <strong style={{ color: "#1e3a8a" }}>{hit.uploader_name || "Cán bộ CTSV"}</strong>
+                    </span>
                     {hit.created_at && (
                       <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                         <Calendar size={14} style={{ color: "var(--gray-400)" }} /> {new Date(hit.created_at).toLocaleDateString("vi-VN")}
@@ -1657,8 +1705,9 @@ export const SearchPage: React.FC = () => {
                     />
                   )}
 
-                  {/* 5. Card Bottom Action Bar: Dedicated, balanced, grouped actions */}
-                  <div
+                  {/* 5. Card Bottom Action Bar: Dedicated, balanced, grouped actions (Chỉ hiển thị cho Admin) */}
+                  {isAdmin && (
+                    <div
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1756,6 +1805,7 @@ export const SearchPage: React.FC = () => {
                       </Button>
                     </div>
                   </div>
+                  )}
                 </Card>
               ))}
 
@@ -1817,21 +1867,22 @@ export const SearchPage: React.FC = () => {
           <Card
             padding="lg"
             style={{
-              background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",
+              backgroundColor: "#0e1e33",
+              border: "1px solid #1e3a8a",
               color: "#ffffff",
               borderRadius: "var(--radius-lg)",
             }}
           >
             <div style={{ maxWidth: "800px" }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.25rem 0.75rem", borderRadius: "9999px", backgroundColor: "rgba(255,255,255,0.15)", fontSize: "0.75rem", fontWeight: 700, marginBottom: "0.75rem" }}>
-                <Sparkles size={14} color="#facc15" />
-                TRỢ LÝ PHÁP QUY & QUY CHẾ CTSV ĐẠI HỌC ĐÀ LẠT
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.25rem 0.75rem", borderRadius: "9999px", backgroundColor: "rgba(255,255,255,0.1)", fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.75rem", color: "#93c5fd" }}>
+                <HelpCircle size={14} color="#60a5fa" />
+                HỖ TRỢ PHÁP QUY & QUY CHẾ CTSV ĐẠI HỌC ĐÀ LẠT
               </div>
-              <h2 style={{ fontSize: "1.6rem", fontWeight: 800, marginBottom: "0.5rem" }}>
-                Hỏi đáp Quy chế bằng Ngôn ngữ Tự nhiên
+              <h2 style={{ fontSize: "1.4rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+                Tra cứu Quy chế & Thủ tục Hành chính
               </h2>
-              <p style={{ fontSize: "0.9375rem", color: "#c7d2fe", lineHeight: 1.6, marginBottom: "1.25rem" }}>
-                Đặt bất kỳ câu hỏi nào về điều kiện xét học bổng, chính sách miễn giảm học phí theo Nghị định 81, điểm rèn luyện hoặc thủ tục tạm hoãn nghĩa vụ quân sự. Hệ thống tự động trích dẫn chính xác Điều/Khoản và cung cấp biểu mẫu hành chính tương ứng.
+              <p style={{ fontSize: "0.875rem", color: "#94a3b8", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                Đặt câu hỏi về điều kiện xét học bổng, chính sách miễn giảm học phí theo Nghị định 81, điểm rèn luyện hoặc thủ tục tạm hoãn nghĩa vụ quân sự. Hệ thống tự động trích dẫn chính xác Điều/Khoản và cung cấp biểu mẫu hành chính tương ứng.
               </p>
 
               {/* Input Form */}
@@ -1863,10 +1914,10 @@ export const SearchPage: React.FC = () => {
                   type="submit"
                   variant="primary"
                   isLoading={isFaqLoading}
-                  leftIcon={<Sparkles size={16} />}
-                  style={{ backgroundColor: "#f59e0b", color: "#1e1b4b", fontWeight: 700, border: "none" }}
+                  leftIcon={<Search size={16} />}
+                  style={{ backgroundColor: "#1e40af", color: "#ffffff", fontWeight: 600, border: "none" }}
                 >
-                  Hỏi đáp Quy chế
+                  Tra cứu Quy chế
                 </Button>
               </form>
             </div>

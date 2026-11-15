@@ -37,15 +37,14 @@ Phụ thuộc
 
 import argparse
 import sys
-import os
 from pathlib import Path
 from typing import List, Tuple
 
 # Ensure UTF-8 output on Windows
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Cố gắng import — báo lỗi rõ ràng nếu thiếu
 try:
@@ -57,17 +56,18 @@ except ImportError as e:
     sys.exit(1)
 
 # ── Tham số mặc định ──────────────────────────────────────────────────────────
-DEFAULT_MIN_LINE_HEIGHT   = 8    # px — loại bỏ vùng quá thỏng (nhiễu)
-DEFAULT_MAX_LINE_HEIGHT   = 200  # px — loại bỏ vùng quá cao (khả năng không phải dòng chữ)
-DEFAULT_ROW_THRESHOLD     = 3    # số pixel đen tối thiểu để coi hàng là "có chữ"
-DEFAULT_PADDING           = 4    # px padding thêm trên/dưới mỗi dòng
-DEFAULT_MERGE_GAP         = 3    # px — gộp hai vùng cách nhau ≤ gap này thành 1
+DEFAULT_MIN_LINE_HEIGHT = 8  # px — loại bỏ vùng quá thỏng (nhiễu)
+DEFAULT_MAX_LINE_HEIGHT = 200  # px — loại bỏ vùng quá cao (khả năng không phải dòng chữ)
+DEFAULT_ROW_THRESHOLD = 3  # số pixel đen tối thiểu để coi hàng là "có chữ"
+DEFAULT_PADDING = 4  # px padding thêm trên/dưới mỗi dòng
+DEFAULT_MERGE_GAP = 3  # px — gộp hai vùng cách nhau ≤ gap này thành 1
 
 
 SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tiff", ".bmp"}
 
 
 # ── Core functions ─────────────────────────────────────────────────────────────
+
 
 def load_and_binarize(image_path: Path) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -127,7 +127,7 @@ def find_line_regions(
             in_line = False
             regions.append((start, row))
 
-    if in_line:                         # ảnh kết thúc trong vùng có chữ
+    if in_line:  # ảnh kết thúc trong vùng có chữ
         regions.append((start, n_rows))
 
     # ── Bước 2: gộp các vùng cách nhau quá nhỏ (merge_gap) ──────────────────
@@ -136,16 +136,13 @@ def find_line_regions(
         for r_start, r_end in regions[1:]:
             prev_start, prev_end = merged[-1]
             if r_start - prev_end <= merge_gap:
-                merged[-1] = (prev_start, r_end)   # gộp
+                merged[-1] = (prev_start, r_end)  # gộp
             else:
                 merged.append((r_start, r_end))
         regions = merged
 
     # ── Bước 3: lọc theo chiều cao ───────────────────────────────────────────
-    regions = [
-        (s, e) for s, e in regions
-        if min_height <= (e - s) <= max_height
-    ]
+    regions = [(s, e) for s, e in regions if min_height <= (e - s) <= max_height]
 
     return regions
 
@@ -155,7 +152,7 @@ def imwrite_unicode(path: Path, img: np.ndarray) -> bool:
     cv2.imwrite() trên Windows không hỗ trợ path có ký tự Unicode/tiếng Việt.
     Dùng cv2.imencode() + numpy.tofile() để bypass.
     """
-    ext = path.suffix.lower()   # ".png", ".jpg", ...
+    ext = path.suffix.lower()  # ".png", ".jpg", ...
     ret, buf = cv2.imencode(ext, img)
     if ret:
         buf.tofile(str(path))
@@ -178,8 +175,8 @@ def crop_and_save(
     saved: List[Path] = []
 
     for idx, (r_start, r_end) in enumerate(regions):
-        top    = max(0, r_start - padding)
-        bottom = min(h, r_end   + padding)
+        top = max(0, r_start - padding)
+        bottom = min(h, r_end + padding)
 
         crop = img_bgr[top:bottom, 0:w]
         out_path = output_dir / f"{stem}_line_{idx:03d}.png"
@@ -201,8 +198,8 @@ def process_image(
 ) -> List[Path]:
     """Pipeline đầy đủ cho 1 ảnh: load → binarize → project → detect → crop → save."""
     img_bgr, binary = load_and_binarize(image_path)
-    projection      = compute_horizontal_projection(binary)
-    regions         = find_line_regions(
+    projection = compute_horizontal_projection(binary)
+    regions = find_line_regions(
         projection,
         row_threshold=row_threshold,
         merge_gap=merge_gap,
@@ -226,10 +223,7 @@ def collect_images(input_path: Path) -> List[Path]:
             print(f"[WARN] Bỏ qua: {input_path} (không phải định dạng ảnh hỗ trợ)")
             return []
     elif input_path.is_dir():
-        imgs = sorted([
-            p for p in input_path.rglob("*")
-            if p.is_file() and p.suffix.lower() in SUPPORTED_IMAGE_EXTS
-        ])
+        imgs = sorted([p for p in input_path.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_IMAGE_EXTS])
         return imgs
     else:
         print(f"[ERROR] Không tìm thấy: {input_path}", file=sys.stderr)
@@ -238,19 +232,22 @@ def collect_images(input_path: Path) -> List[Path]:
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Cắt ảnh tài liệu thành từng dòng văn bản (horizontal projection).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         type=Path,
         required=True,
         help="File ảnh hoặc thư mục chứa ảnh đầu vào (dataset/raw/)",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=Path("dataset/crops"),
         help="Thư mục lưu ảnh crop từng dòng (dataset/crops/)",
@@ -286,7 +283,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Padding (px) thêm trên/dưới mỗi dòng khi crop",
     )
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Không in log từng ảnh",
     )
@@ -296,7 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = build_parser()
-    args   = parser.parse_args()
+    args = parser.parse_args()
 
     images = collect_images(args.input)
     if not images:

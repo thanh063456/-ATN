@@ -12,9 +12,10 @@ Luồng xử lý chuẩn theo .ai/AGENTS.md:
 8. Cập nhật Document.ocr_status = "DONE", ProcessingJob.status = "SUCCESS".
 9. Backend chủ động index sang Elasticsearch (search_index_service).
 """
+
 import asyncio
-from datetime import datetime
 import time
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -30,11 +31,11 @@ from app.models.documents import Document
 from app.models.ocr_results import OCRResult
 from app.models.processing_jobs import ProcessingJob
 from app.services.ai_service import ai_service
-from app.services.vietocr_service import vietocr_service
-from app.services.trocr_service import trocr_service
 from app.services.search_index_service import search_index_service
 from app.services.storage_service import storage_service
 from app.services.tag_service import tag_service
+from app.services.trocr_service import trocr_service
+from app.services.vietocr_service import vietocr_service
 from app.worker.celery_app import celery_app
 
 
@@ -78,7 +79,9 @@ async def _process_secondary_engine(doc_uuid: UUID, engine_name: str) -> None:
 
         doc = await session.get(Document, doc_uuid)
         if not doc:
-            logger.warning("Document {id} not found when running secondary OCR engine {eng}", id=doc_uuid, eng=engine_name)
+            logger.warning(
+                "Document {id} not found when running secondary OCR engine {eng}", id=doc_uuid, eng=engine_name
+            )
             return
 
         minio_key = doc.minio_object_key
@@ -91,13 +94,14 @@ async def _process_secondary_engine(doc_uuid: UUID, engine_name: str) -> None:
         engine_version = getattr(trocr_service, "VERSION", "trocr-vi-finetuned")
     elif engine_name == "tesseract":
         from app.services.tesseract_service import tesseract_service
+
         service = tesseract_service
         engine_version = getattr(tesseract_service, "VERSION", "5.3.0")
     else:
         service = vietocr_service
         engine_version = getattr(vietocr_service, "VERSION", "vgg_transformer-2.0")
 
-    ocr_scope = getattr(settings, "ocr_scope", "first_page")
+    ocr_scope = getattr(settings, "ocr_scope", "full")
     ocr_first_page_count = getattr(settings, "ocr_first_page_count", 1)
     target_pages = None
     if ocr_scope == "first_page":
@@ -127,8 +131,9 @@ async def _process_secondary_engine(doc_uuid: UUID, engine_name: str) -> None:
             ocr_failed = True
             ocr_err_msg = f"{type(exc).__name__}: {str(exc)}"
             status_val = "FAILED"
-            logger.warning("Secondary OCR engine {eng} failed for doc {id}: {err}",
-                           eng=engine_name, id=doc_uuid, err=ocr_err_msg)
+            logger.warning(
+                "Secondary OCR engine {eng} failed for doc {id}: {err}", eng=engine_name, id=doc_uuid, err=ocr_err_msg
+            )
 
     processing_time_ms = round((time.perf_counter() - t_start) * 1000)
 
@@ -166,8 +171,13 @@ async def _process_secondary_engine(doc_uuid: UUID, engine_name: str) -> None:
             session.add(record)
 
         await session.commit()
-    logger.info("Secondary OCR engine {eng} finished for doc {id} (status={st}, {ms}ms)",
-                eng=engine_name, id=doc_uuid, st=status_val, ms=processing_time_ms)
+    logger.info(
+        "Secondary OCR engine {eng} finished for doc {id} (status={st}, {ms}ms)",
+        eng=engine_name,
+        id=doc_uuid,
+        st=status_val,
+        ms=processing_time_ms,
+    )
 
 
 async def async_process_ocr(document_id: str, task_id: str | None = None, engine: str | None = None) -> dict:
@@ -180,9 +190,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
         """Cập nhật tiến độ OCR (0-100%) vào ProcessingJob và commit ngay."""
         try:
             await session.execute(
-                update(ProcessingJob)
-                .where(ProcessingJob.document_id == doc_uuid)
-                .values(ocr_progress=progress)
+                update(ProcessingJob).where(ProcessingJob.document_id == doc_uuid).values(ocr_progress=progress)
             )
             await session.commit()
         except Exception:
@@ -192,9 +200,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
         try:
             # ── 1. Đánh dấu RUNNING & PROCESSING (progress: 10%) ──────────────
             await session.execute(
-                update(Document)
-                .where(Document.id == doc_uuid)
-                .values(ocr_status="PROCESSING", updated_at=now)
+                update(Document).where(Document.id == doc_uuid).values(ocr_status="PROCESSING", updated_at=now)
             )
             await session.execute(
                 update(ProcessingJob)
@@ -218,8 +224,11 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             # ── 3. Đọc file từ Supabase Storage (progress: 35%) ───────────────
             await _set_progress(session, 35)
             file_bytes = await asyncio.to_thread(storage_service.get_file, doc.minio_object_key)
-            logger.info("Retrieved file from Supabase Storage: key={key}, bytes={len}",
-                        key=doc.minio_object_key, len=len(file_bytes))
+            logger.info(
+                "Retrieved file from Supabase Storage: key={key}, bytes={len}",
+                key=doc.minio_object_key,
+                len=len(file_bytes),
+            )
 
             # ── 4. Chạy OCR (progress: 45% → 85% sau khi xong) ───────────
             await _set_progress(session, 45)
@@ -230,6 +239,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 engine_version = getattr(trocr_service, "VERSION", "trocr-base-printed")
             elif target_engine == "tesseract":
                 from app.services.tesseract_service import tesseract_service
+
                 service = tesseract_service
                 engine_version = getattr(tesseract_service, "VERSION", "5.3.0")
             else:
@@ -259,7 +269,9 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             except Exception as exc:
                 ocr_failed = True
                 ocr_err_msg = f"{type(exc).__name__}: {str(exc)}"
-                logger.exception(f"OCR execution failed for engine {target_engine} on document {doc_uuid}: {ocr_err_msg}")
+                logger.exception(
+                    f"OCR execution failed for engine {target_engine} on document {doc_uuid}: {ocr_err_msg}"
+                )
 
             processing_time_ms = round((time.perf_counter() - t_ocr_start) * 1000)
 
@@ -311,7 +323,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             # Dùng processed_text (đã qua post-process) để cải thiện độ chính xác metadata
             meta_text = processed_text if processed_text else raw_text
             meta_dict = await asyncio.to_thread(vietocr_service.extract_metadata, meta_text)
-            
+
             try:
                 ai_fields = await ai_service.extract_smart_fields(raw_text)
             except Exception as ai_err:
@@ -341,6 +353,8 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 "class_name": ai_fields.get("class_name"),
                 "document_type": ai_fields.get("document_type"),
                 "ai_summary": ai_fields.get("summary"),
+                "ocr_scope": "full",
+                "pages_ocr": page_count or 1,
             }
 
             # Lấy hoặc tạo metadata mới (truy vấn tươi từ DB để tránh race condition)
@@ -373,11 +387,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             if page_count and page_count > 0:
                 doc_update_values["page_count"] = page_count
 
-            await session.execute(
-                update(Document)
-                .where(Document.id == doc_uuid)
-                .values(**doc_update_values)
-            )
+            await session.execute(update(Document).where(Document.id == doc_uuid).values(**doc_update_values))
             await session.execute(
                 update(ProcessingJob)
                 .where(ProcessingJob.document_id == doc_uuid)
@@ -425,9 +435,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
         except Exception as exc:
             logger.error(f"OCR task failed for document_id={document_id}: {exc}")
             await session.execute(
-                update(Document)
-                .where(Document.id == doc_uuid)
-                .values(ocr_status="FAILED", updated_at=datetime.now())
+                update(Document).where(Document.id == doc_uuid).values(ocr_status="FAILED", updated_at=datetime.now())
             )
             await session.execute(
                 update(ProcessingJob)
@@ -459,8 +467,8 @@ async def async_process_all_ocr_engines(document_id: str, task_id: str | None = 
     logger.info("Starting ALL OCR engines pipeline for document_id={doc_id}", doc_id=document_id)
 
     # 1. Đặt placeholder PENDING cho các engine phụ
-    primary_engine = getattr(settings, "ocr_engine", "trocr") if hasattr(settings, "ocr_engine") else "trocr"
-    secondary_engines = [e for e in ["trocr", "vietocr", "tesseract"] if e != primary_engine]
+    primary_engine = getattr(settings, "ocr_engine", "vietocr") if hasattr(settings, "ocr_engine") else "vietocr"
+    secondary_engines = [e for e in ["vietocr", "trocr"] if e != primary_engine]
 
     async with AsyncSessionLocal() as session:
         try:
@@ -475,28 +483,39 @@ async def async_process_all_ocr_engines(document_id: str, task_id: str | None = 
                     p_ver = getattr(trocr_service, "VERSION", "trocr-vi-finetuned")
                 elif p_eng == "tesseract":
                     from app.services.tesseract_service import tesseract_service
+
                     p_ver = getattr(tesseract_service, "VERSION", "5.3.0")
                 else:
                     p_ver = getattr(vietocr_service, "VERSION", "vgg_transformer-2.0")
-                session.add(OCRResult(
-                    document_id=doc_uuid,
-                    ocr_engine=p_eng,
-                    ocr_engine_version=p_ver,
-                    status="PENDING",
-                    is_latest=True,
-                ))
+                session.add(
+                    OCRResult(
+                        document_id=doc_uuid,
+                        ocr_engine=p_eng,
+                        ocr_engine_version=p_ver,
+                        status="PENDING",
+                        is_latest=True,
+                    )
+                )
             await session.commit()
         except Exception as exc:
             logger.warning("Failed to initialize pending OCRResult records: {err}", err=str(exc))
 
     # 2. Chạy engine chính theo cấu hình (Fast-First: trả kết quả cho người dùng sớm nhất)
-    logger.info("Pipeline Step 1/2: Running primary engine {eng} for document_id={id}", eng=primary_engine, id=document_id)
+    logger.info(
+        "Pipeline Step 1/2: Running primary engine {eng} for document_id={id}", eng=primary_engine, id=document_id
+    )
     primary_res = await async_process_ocr(document_id, task_id=task_id, engine=primary_engine)
 
     # 3. Chạy các engine phụ còn lại song song (concurrent) để tiết kiệm 50% thời gian so sánh
-    logger.info("Pipeline Step 2/2: Running secondary engines {engs} concurrently for document_id={id}", engs=secondary_engines, id=document_id)
+    logger.info(
+        "Pipeline Step 2/2: Running secondary engines {engs} concurrently for document_id={id}",
+        engs=secondary_engines,
+        id=document_id,
+    )
     try:
-        await asyncio.gather(*[_process_secondary_engine(doc_uuid, eng) for eng in secondary_engines], return_exceptions=True)
+        await asyncio.gather(
+            *[_process_secondary_engine(doc_uuid, eng) for eng in secondary_engines], return_exceptions=True
+        )
     except Exception as exc:
         logger.warning("Secondary engines execution note: {err}", err=str(exc))
 
@@ -524,7 +543,11 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
 
     async with AsyncSessionLocal() as session:
         try:
-            stmt = select(Document).where(Document.id == doc_uuid).options(selectinload(Document.category), selectinload(Document.metadata_))
+            stmt = (
+                select(Document)
+                .where(Document.id == doc_uuid)
+                .options(selectinload(Document.category), selectinload(Document.metadata_))
+            )
             res = await session.execute(stmt)
             doc = res.scalars().first()
             if not doc:
@@ -548,7 +571,9 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
             remaining_pages = list(range(ocr_first_page_count, page_count))
 
             # Set status to PROCESSING
-            await session.execute(update(Document).where(Document.id == doc_uuid).values(ocr_status="PROCESSING", updated_at=now))
+            await session.execute(
+                update(Document).where(Document.id == doc_uuid).values(ocr_status="PROCESSING", updated_at=now)
+            )
             await session.commit()
 
             # Read file
@@ -577,16 +602,18 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
             confidence = sum(conf_list) / len(conf_list) if conf_list else 0.8
 
             # Get latest OCR result
-            ocr_res = await session.execute(select(OCRResult).where(OCRResult.document_id == doc_uuid, OCRResult.is_latest == True))
+            ocr_res = await session.execute(
+                select(OCRResult).where(OCRResult.document_id == doc_uuid, OCRResult.is_latest == True)
+            )
             latest_ocr = ocr_res.scalars().first()
 
             if latest_ocr:
                 new_raw = latest_ocr.raw_text + "\n\n" + raw_text
                 new_proc = latest_ocr.corrected_text + "\n\n" + processed_text
-                
+
                 # Update existing or create new
                 latest_ocr.is_latest = False
-                
+
                 new_ocr = OCRResult(
                     document_id=doc_uuid,
                     is_latest=True,
@@ -620,11 +647,17 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
             cat_name = doc.category.name if doc.category else None
             meta_student_id = doc.metadata_.student_id if doc.metadata_ else None
             meta_student_name = doc.metadata_.student_name if doc.metadata_ else None
-            meta_doc_date = doc.metadata_.document_date.isoformat() if doc.metadata_ and doc.metadata_.document_date else None
+            meta_doc_date = (
+                doc.metadata_.document_date.isoformat() if doc.metadata_ and doc.metadata_.document_date else None
+            )
             meta_doc_no = doc.metadata_.document_number if doc.metadata_ else None
-            meta_subtype = doc.metadata_.extra.get("document_subtype") if doc.metadata_ and doc.metadata_.extra else None
+            meta_subtype = (
+                doc.metadata_.extra.get("document_subtype") if doc.metadata_ and doc.metadata_.extra else None
+            )
 
-            await session.execute(update(Document).where(Document.id == doc_uuid).values(ocr_status="DONE", updated_at=now))
+            await session.execute(
+                update(Document).where(Document.id == doc_uuid).values(ocr_status="DONE", updated_at=now)
+            )
             await session.commit()
 
             # Audit log for full OCR
@@ -672,9 +705,12 @@ async def async_process_ocr_full(document_id: str, task_id: str | None = None) -
 
         except Exception as exc:
             logger.error("OCR FULL task failed for document_id={id}: {err}", id=document_id, err=str(exc))
-            await session.execute(update(Document).where(Document.id == doc_uuid).values(ocr_status="FAILED", updated_at=datetime.now()))
+            await session.execute(
+                update(Document).where(Document.id == doc_uuid).values(ocr_status="FAILED", updated_at=datetime.now())
+            )
             await session.commit()
             raise exc
+
 
 @celery_app.task(bind=True, name="tasks.process_ocr_full", max_retries=3, default_retry_delay=10)
 def process_ocr_full_task(self, document_id: str) -> dict:
@@ -682,4 +718,3 @@ def process_ocr_full_task(self, document_id: str) -> dict:
         return asyncio.run(async_process_ocr_full(document_id, task_id=self.request.id))
     except Exception as exc:
         raise self.retry(exc=exc)
-

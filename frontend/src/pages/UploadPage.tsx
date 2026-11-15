@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  Sparkles,
   ArrowRight,
   Clock,
   Loader2,
@@ -787,7 +786,7 @@ export const UploadPage: React.FC = () => {
               variant="primary"
               disabled={pendingCount === 0 || isRunning}
               isLoading={isRunning}
-              leftIcon={<Sparkles size={17} />}
+              leftIcon={<UploadCloud size={17} />}
               onClick={handleUploadAll}
             >
               {isRunning

@@ -8,8 +8,8 @@ Cung cấp API tìm kiếm toàn văn, tìm kiếm mờ (fuzzy) và lọc đa ch
 - Trích xuất highlight các đoạn văn bản khớp từ khóa.
 - Ghi lịch sử truy vấn vào bảng `search_history` trong PostgreSQL.
 """
+
 import csv
-from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
@@ -18,16 +18,19 @@ import os
 import re
 import time
 import unicodedata
-from typing import Any
 import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
+
 try:
     from loguru import logger
 except ImportError:
     import logging
+
     logger = logging.getLogger("search")
 logger: Any = logger
 from sqlalchemy import desc, func, or_, select
@@ -49,55 +52,51 @@ from app.schemas.search import (
     AlertSubscriptionCreate,
     AlertSubscriptionItem,
     AlertSubscriptionListResponse,
+    AutoTagItem,
     CategoryDataPoint,
     CollisionDetail,
     ConfidenceStats,
+    CreateWatcherRequest,
     CrossDocumentFraudResponse,
+    CtsvMultiDimensionalAnalyticsResponse,
+    DocumentAuditTrailResponse,
+    DocumentAutoTagsResponse,
+    DocumentRevisionItem,
     DocumentValidityResponse,
     DocumentVerificationCertificate,
+    DropoutRiskAssessment,
+    DropoutRiskFactor,
     DuplicateCandidateHit,
     DuplicateCheckResponse,
+    FacultyBreakdownItem,
     FaqAnswerResponse,
+    FieldDiffItem,
+    GeoAreaVerifyRequest,
+    GeoAreaVerifyResponse,
+    GraphEdge,
+    GraphNode,
+    HybridRrfHit,
+    HybridRrfRequest,
+    HybridRrfSearchResponse,
     IREvaluationBenchmarkResponse,
     IRMetricQueryDetail,
     IRTierMetricSummary,
+    KibanaCanvasWorkpadPreview,
     OcrCorrectionSuggestion,
-    OcrTolerantSearchRequest,
-    OcrTolerantSearchResponse,
-    PiiAccessRecord,
-    PiiAnomalyItem,
-    PiiAuditSummaryResponse,
-    PercolateRuleMatch,
-    PercolateRoutingResponse,
-    FacultyBreakdownItem,
-    PolicyDistributionItem,
-    CtsvMultiDimensionalAnalyticsResponse,
     OcrQualityBucket,
     OcrQualityDistributionResponse,
     OcrReviewQueueItem,
     OcrReviewQueueResponse,
-    AutoTagItem,
-    DocumentAutoTagsResponse,
-    GeoAreaVerifyRequest,
-    GeoAreaVerifyResponse,
-    GraphNode,
-    GraphEdge,
-    DropoutRiskFactor,
-    DropoutRiskAssessment,
-    StudentEntityGraphResponse,
-    FieldDiffItem,
-    DocumentRevisionItem,
-    DocumentAuditTrailResponse,
-    CreateWatcherRequest,
-    WatcherItem,
-    WatcherTriggeredEvent,
-    WatcherListResponse,
-    HybridRrfRequest,
-    HybridRrfHit,
-    HybridRrfSearchResponse,
-    KibanaCanvasWorkpadPreview,
+    OcrTolerantSearchRequest,
+    OcrTolerantSearchResponse,
+    PercolateRoutingResponse,
+    PercolateRuleMatch,
+    PiiAccessRecord,
+    PiiAnomalyItem,
+    PiiAuditSummaryResponse,
     PolicyAuditResponse,
     PolicyCriteriaCheck,
+    PolicyDistributionItem,
     RequiredFormItem,
     SearchDashboardResponse,
     SearchHit,
@@ -111,6 +110,7 @@ from app.schemas.search import (
     StaffPerformanceMetric,
     StaffPerformanceResponse,
     StatusDataPoint,
+    StudentEntityGraphResponse,
     StudentProfile360Response,
     StudentTimelineEvent,
     TableRowHit,
@@ -119,17 +119,59 @@ from app.schemas.search import (
     TimelineDataPoint,
     TrendingTopicItem,
     TrendingTopicsResponse,
+    WatcherItem,
+    WatcherListResponse,
+    WatcherTriggeredEvent,
 )
 from app.services.embedding_service import embedding_service
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 GENERIC_STOPWORDS_ASCII = {
-    "hoc", "truong", "dai", "viet", "nam", "ngay", "thang", "nam", "so",
-    "cong", "hoa", "xa", "hoi", "chu", "nghia", "doc", "lap", "tu", "do",
-    "hanh", "phuc", "va", "cua", "cho", "ve", "cac", "tai", "theo", "duoc",
-    "co", "trong", "da", "la", "sinh", "vien", "bo", "phong", "to", "chuc",
-    "thong", "bao", "van", "ban", "ve"
+    "hoc",
+    "truong",
+    "dai",
+    "viet",
+    "nam",
+    "ngay",
+    "thang",
+    "nam",
+    "so",
+    "cong",
+    "hoa",
+    "xa",
+    "hoi",
+    "chu",
+    "nghia",
+    "doc",
+    "lap",
+    "tu",
+    "do",
+    "hanh",
+    "phuc",
+    "va",
+    "cua",
+    "cho",
+    "ve",
+    "cac",
+    "tai",
+    "theo",
+    "duoc",
+    "co",
+    "trong",
+    "da",
+    "la",
+    "sinh",
+    "vien",
+    "bo",
+    "phong",
+    "to",
+    "chuc",
+    "thong",
+    "bao",
+    "van",
+    "ban",
+    "ve",
 }
 
 
@@ -317,12 +359,18 @@ async def search_documents(
     tag: str | None = Query(None, description="Lọc theo thẻ nhãn (vd: #BẢO_LƯU hoặc BẢO_LƯU)"),
     date_from: str | None = Query(None, description="Ngày tạo từ (định dạng YYYY-MM-DD)"),
     date_to: str | None = Query(None, description="Ngày tạo đến (định dạng YYYY-MM-DD)"),
-    time_range: str | None = Query(None, description="Lọc nhanh mốc thời gian: today, 7d, 30d, this_semester, this_year"),
+    time_range: str | None = Query(
+        None, description="Lọc nhanh mốc thời gian: today, 7d, 30d, this_semester, this_year"
+    ),
     min_confidence: float | None = Query(None, ge=0.0, le=1.0, description="Độ tin cậy OCR tối thiểu (vd: 0.85)"),
-    max_confidence: float | None = Query(None, ge=0.0, le=1.0, description="Độ tin cậy OCR tối đa (vd: 0.85 để lọc hồ sơ cần duyệt lại)"),
+    max_confidence: float | None = Query(
+        None, ge=0.0, le=1.0, description="Độ tin cậy OCR tối đa (vd: 0.85 để lọc hồ sơ cần duyệt lại)"
+    ),
     min_score_metric: float | None = Query(None, description="Lọc theo điểm số / GPA tối thiểu"),
     max_score_metric: float | None = Query(None, description="Lọc theo điểm số / GPA tối đa"),
-    sort_by: str = Query("relevance", description="Sắp xếp kết quả: relevance (độ khớp), newest (mới nhất), oldest (cũ nhất)"),
+    sort_by: str = Query(
+        "relevance", description="Sắp xếp kết quả: relevance (độ khớp), newest (mới nhất), oldest (cũ nhất)"
+    ),
     fuzzy: bool = Query(True, description="Bật tìm kiếm mờ (Fuzzy matching) để bù đắp sai sót OCR / chính tả"),
     hybrid: bool = Query(True, description="Bật tìm kiếm kết hợp ngữ nghĩa Hybrid Search (BM25 + Dense Vector)"),
     page: int = Query(1, ge=1, description="Số trang (bắt đầu từ 1)"),
@@ -427,22 +475,22 @@ async def search_documents(
                 }
             ]
 
-            filter_clause: list[dict[str, Any]] = [
-                {"term": {"is_deleted": False}}
-            ]
+            filter_clause: list[dict[str, Any]] = [{"term": {"is_deleted": False}}]
 
             if role_name not in ("ADMIN", "STAFF"):
                 if current_user:
                     user_id_str = str(current_user.id)
-                    filter_clause.append({
-                        "bool": {
-                            "should": [
-                                {"term": {"is_public": True}},
-                                {"term": {"uploaded_by": user_id_str}},
-                            ],
-                            "minimum_should_match": 1,
+                    filter_clause.append(
+                        {
+                            "bool": {
+                                "should": [
+                                    {"term": {"is_public": True}},
+                                    {"term": {"uploaded_by": user_id_str}},
+                                ],
+                                "minimum_should_match": 1,
+                            }
                         }
-                    })
+                    )
                 else:
                     filter_clause.append({"term": {"is_public": True}})
 
@@ -609,8 +657,7 @@ async def search_documents(
                         for b in es_aggs.get("statuses", {}).get("buckets", [])
                     ],
                     "tags": [
-                        {"tag": b["key"], "count": b["doc_count"]}
-                        for b in es_aggs.get("tags", {}).get("buckets", [])
+                        {"tag": b["key"], "count": b["doc_count"]} for b in es_aggs.get("tags", {}).get("buckets", [])
                     ],
                     "years": [
                         {"year": b.get("key_as_string", str(b.get("key"))), "count": b["doc_count"]}
@@ -639,7 +686,11 @@ async def search_documents(
                     elif "content.ascii" in highlights and highlights["content.ascii"]:
                         snippet = "... ".join(highlights["content.ascii"])
                     elif source.get("content_corrected"):
-                        snippet = source["content_corrected"][:200] + "..." if len(source["content_corrected"]) > 200 else source["content_corrected"]
+                        snippet = (
+                            source["content_corrected"][:200] + "..."
+                            if len(source["content_corrected"]) > 200
+                            else source["content_corrected"]
+                        )
                     elif source.get("content"):
                         snippet = source["content"][:200] + "..." if len(source["content"]) > 200 else source["content"]
 
@@ -653,6 +704,8 @@ async def search_documents(
                             category_name=source.get("category_name"),
                             student_id=source.get("student_id"),
                             student_name=source.get("student_name"),
+                            uploader_name=source.get("uploader_name") or source.get("student_name"),
+                            uploader_mssv=source.get("uploader_mssv") or source.get("student_id"),
                             document_date=source.get("document_date"),
                             document_number=source.get("document_number"),
                             tags=source.get("tags") or [],
@@ -680,7 +733,7 @@ async def search_documents(
         if len(raw_words) >= 2:
             sub_phrases.append(query_str)
             for i in range(len(raw_words) - 1):
-                sub_phrases.append(f"{raw_words[i]} {raw_words[i+1]}")
+                sub_phrases.append(f"{raw_words[i]} {raw_words[i + 1]}")
 
         # Lọc các từ khóa quan trọng (không phải stopword thông dụng)
         important_words_ascii = [w for w in raw_words_ascii if w not in GENERIC_STOPWORDS_ASCII]
@@ -702,10 +755,7 @@ async def search_documents(
         # RBAC Filter: Sinh viên/Khách chỉ tìm thấy tài liệu công khai hoặc do chính mình tải lên
         if role_name not in ("ADMIN", "STAFF"):
             if current_user:
-                stmt = stmt.where(
-                    (Document.is_public == True) |
-                    (Document.uploaded_by == current_user.id)
-                )
+                stmt = stmt.where((Document.is_public == True) | (Document.uploaded_by == current_user.id))
             else:
                 stmt = stmt.where(Document.is_public == True)
 
@@ -746,7 +796,9 @@ async def search_documents(
         facets = {
             "categories": [{"code": k, "count": v} for k, v in cat_counts.items()],
             "statuses": [{"status": k, "count": v} for k, v in status_counts.items()],
-            "tags": [{"tag": k, "count": v} for k, v in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:15]],
+            "tags": [
+                {"tag": k, "count": v} for k, v in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+            ],
             "years": [{"year": k, "count": v} for k, v in sorted(year_counts.items())],
             "doc_type_code": [{"code": k, "count": v} for k, v in cat_counts.items()],
             "doc_group": [],
@@ -759,8 +811,15 @@ async def search_documents(
                 clean_tag = tag if tag.startswith("#") else f"#{tag}"
                 doc_extra = (doc.metadata_.extra or {}) if doc.metadata_ and doc.metadata_.extra else {}
                 doc_tags = doc_extra.get("tags", [])
-                target_tags_lower = [clean_tag.lower(), tag.lower(), clean_tag.lower().replace("#", ""), tag.lower().replace("#", "")]
-                if not any(t.lower() in target_tags_lower or t.lower().replace("#", "") in target_tags_lower for t in doc_tags):
+                target_tags_lower = [
+                    clean_tag.lower(),
+                    tag.lower(),
+                    clean_tag.lower().replace("#", ""),
+                    tag.lower().replace("#", ""),
+                ]
+                if not any(
+                    t.lower() in target_tags_lower or t.lower().replace("#", "") in target_tags_lower for t in doc_tags
+                ):
                     continue
 
             ocr_text = ""
@@ -771,8 +830,21 @@ async def search_documents(
             if not ocr_text and doc.ocr_results:
                 ocr_text = doc.ocr_results[0].corrected_text or doc.ocr_results[0].raw_text or ""
 
-            st_name = (doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else "")) or ""
-            st_id = (doc.metadata_.student_id if doc.metadata_ and doc.metadata_.student_id else (doc.uploader.mssv if doc.uploader else "")) or ""
+            uploader_name_val = (doc.uploader.full_name or doc.uploader.username or "") if doc.uploader else ""
+            uploader_mssv_val = (doc.uploader.mssv or "") if doc.uploader else ""
+            uploader_name_ascii = _strip_accents(uploader_name_val)
+            uploader_mssv_ascii = _strip_accents(uploader_mssv_val)
+
+            st_name = (
+                doc.metadata_.student_name
+                if doc.metadata_ and doc.metadata_.student_name
+                else uploader_name_val
+            ) or ""
+            st_id = (
+                doc.metadata_.student_id
+                if doc.metadata_ and doc.metadata_.student_id
+                else uploader_mssv_val
+            ) or ""
             title = doc.title or ""
 
             title_ascii = _strip_accents(title)
@@ -799,15 +871,37 @@ async def search_documents(
                 score += 10.0
                 matched_terms_for_highlight.append(query_str)
 
-            # 2. Khớp MSSV hoặc Tên sinh viên chính xác
+            # 2. Khớp MSSV hoặc Tên sinh viên / Người upload chính xác
             if st_id and (q_ascii in st_id_ascii or st_id_ascii in q_ascii):
-                score += 12.0
+                score += 15.0
                 matched_terms_for_highlight.append(st_id)
                 highlights["student_id"] = [st_id]
-            if st_name and (q_ascii in st_name_ascii or any(re.search(r'(?:\b|^)' + re.escape(w) + r'(?:\b|$)', st_name_ascii) for w in important_words_ascii if len(w) >= 3)):
-                score += 8.0
+            if uploader_mssv_val and (q_ascii in uploader_mssv_ascii or uploader_mssv_ascii in q_ascii):
+                score += 15.0
+                matched_terms_for_highlight.append(uploader_mssv_val)
+                highlights["student_id"] = [uploader_mssv_val]
+            if st_name and (
+                q_ascii in st_name_ascii
+                or any(
+                    re.search(r"(?:\b|^)" + re.escape(w) + r"(?:\b|$)", st_name_ascii)
+                    for w in important_words_ascii
+                    if len(w) >= 3
+                )
+            ):
+                score += 10.0
                 matched_terms_for_highlight.append(st_name)
                 highlights["student_name"] = [st_name]
+            if uploader_name_val and (
+                q_ascii in uploader_name_ascii
+                or any(
+                    re.search(r"(?:\b|^)" + re.escape(w) + r"(?:\b|$)", uploader_name_ascii)
+                    for w in important_words_ascii
+                    if len(w) >= 3
+                )
+            ):
+                score += 10.0
+                matched_terms_for_highlight.append(uploader_name_val)
+                highlights["uploader_name"] = [uploader_name_val]
 
             # 3. Khớp các cụm từ con (sub-phrases)
             has_subphrase_match = False
@@ -824,12 +918,10 @@ async def search_documents(
 
             # 4. Khớp các từ khóa quan trọng (dùng ranh giới từ whole-word để không bắt nhầm chuỗi con)
             important_title_matches = sum(
-                1 for w in important_words_ascii
-                if re.search(r'(?:\b|^)' + re.escape(w) + r'(?:\b|$)', title_ascii)
+                1 for w in important_words_ascii if re.search(r"(?:\b|^)" + re.escape(w) + r"(?:\b|$)", title_ascii)
             )
             important_ocr_matches = sum(
-                1 for w in important_words_ascii
-                if re.search(r'(?:\b|^)' + re.escape(w) + r'(?:\b|$)', ocr_text_ascii)
+                1 for w in important_words_ascii if re.search(r"(?:\b|^)" + re.escape(w) + r"(?:\b|$)", ocr_text_ascii)
             )
 
             if important_title_matches > 0:
@@ -843,7 +935,9 @@ async def search_documents(
             elif len(important_words_ascii) == 2 and important_ocr_matches >= 2:
                 score += 3.0
                 matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
-            elif len(important_words_ascii) >= 3 and (important_ocr_matches >= len(important_words_ascii) or has_subphrase_match):
+            elif len(important_words_ascii) >= 3 and (
+                important_ocr_matches >= len(important_words_ascii) or has_subphrase_match
+            ):
                 score += 3.0
                 matched_terms_for_highlight.extend([w for w in raw_words if _strip_accents(w) in important_words_ascii])
 
@@ -851,16 +945,15 @@ async def search_documents(
             # Với câu truy vấn >= 3 từ quan trọng: bắt buộc khớp cụm con hoặc khớp đủ toàn bộ các từ
             if len(important_words_ascii) >= 3:
                 has_genuine_match = (
-                    q_ascii in title_ascii or
-                    q_ascii in ocr_text_ascii or
-                    has_subphrase_match or
-                    important_title_matches >= 2 or
-                    important_ocr_matches >= len(important_words_ascii)
+                    q_ascii in title_ascii
+                    or q_ascii in ocr_text_ascii
+                    or has_subphrase_match
+                    or important_title_matches >= 2
+                    or important_ocr_matches >= len(important_words_ascii)
                 ) and score >= 3.0
             else:
-                has_genuine_match = (
-                    score >= 3.0 or
-                    (len(important_words_ascii) == 1 and (important_ocr_matches >= 1 or important_title_matches >= 1))
+                has_genuine_match = score >= 3.0 or (
+                    len(important_words_ascii) == 1 and (important_ocr_matches >= 1 or important_title_matches >= 1)
                 )
 
             if has_genuine_match and score > 0:
@@ -870,16 +963,16 @@ async def search_documents(
 
         # Sắp xếp theo tiêu chí sort_by
         if sort_by == "newest":
-            matched_items.sort(key=lambda x: (x[1].created_at or datetime.min), reverse=True)
+            matched_items.sort(key=lambda x: x[1].created_at or datetime.min, reverse=True)
         elif sort_by == "oldest":
-            matched_items.sort(key=lambda x: (x[1].created_at or datetime.min), reverse=False)
+            matched_items.sort(key=lambda x: x[1].created_at or datetime.min, reverse=False)
         else:
             # relevance (mặc định)
             matched_items.sort(key=lambda x: x[0], reverse=True)
         total_hits = len(matched_items)
 
         # Cắt phân trang
-        paged_items = matched_items[from_offset:from_offset + page_size]
+        paged_items = matched_items[from_offset : from_offset + page_size]
 
         for score, doc, snippet, hls in paged_items:
             confidence = None
@@ -888,7 +981,19 @@ async def search_documents(
                     confidence = float(ocr.confidence_score)
                     break
 
-            st_name = (doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else None))
+            item_uploader_name = (doc.uploader.full_name or doc.uploader.username) if doc.uploader else None
+            item_uploader_mssv = doc.uploader.mssv if doc.uploader else None
+
+            st_name = (
+                doc.metadata_.student_name
+                if doc.metadata_ and doc.metadata_.student_name
+                else item_uploader_name
+            )
+            st_id = (
+                doc.metadata_.student_id
+                if doc.metadata_ and doc.metadata_.student_id
+                else item_uploader_mssv
+            )
             doc_extra = (doc.metadata_.extra or {}) if doc.metadata_ and doc.metadata_.extra else {}
             doc_tags = doc_extra.get("tags", [])
             doc_prio = doc_extra.get("priority_score", 0)
@@ -902,7 +1007,11 @@ async def search_documents(
                     category_name=doc.category.name if doc.category else None,
                     student_id=st_id,
                     student_name=st_name,
-                    document_date=doc.metadata_.document_date.isoformat() if doc.metadata_ and doc.metadata_.document_date else None,
+                    uploader_name=item_uploader_name or st_name,
+                    uploader_mssv=item_uploader_mssv or st_id,
+                    document_date=doc.metadata_.document_date.isoformat()
+                    if doc.metadata_ and doc.metadata_.document_date
+                    else None,
                     document_number=doc.metadata_.document_number if doc.metadata_ else None,
                     tags=doc_tags,
                     priority_score=doc_prio,
@@ -922,7 +1031,13 @@ async def search_documents(
 
     # ── Chức năng 2: PII Masking theo Nghị định 13/2023/NĐ-CP ──────────────────
     # Tự động che mờ CCCD, SĐT, Email với Sinh viên / Khách vãng lai
-    is_privileged = bool(current_user and (getattr(current_user, "role_name", "") in ("ADMIN", "STAFF") or (current_user.role and current_user.role.name in ("ADMIN", "STAFF"))))
+    is_privileged = bool(
+        current_user
+        and (
+            getattr(current_user, "role_name", "") in ("ADMIN", "STAFF")
+            or (current_user.role and current_user.role.name in ("ADMIN", "STAFF"))
+        )
+    )
     if not is_privileged:
         for r in results:
             if r.content_snippet:
@@ -1022,12 +1137,14 @@ async def suggest_keywords(
                 title = src.get("title")
                 if title and title not in seen_titles:
                     seen_titles.add(title)
-                    suggestions.append({
-                        "type": "document",
-                        "text": title,
-                        "document_id": src.get("document_id"),
-                        "category_code": src.get("category_code"),
-                    })
+                    suggestions.append(
+                        {
+                            "type": "document",
+                            "text": title,
+                            "document_id": src.get("document_id"),
+                            "category_code": src.get("category_code"),
+                        }
+                    )
         except Exception as exc:
             logger.warning(f"Autocomplete search failed on ES: {exc}")
 
@@ -1047,12 +1164,14 @@ async def suggest_keywords(
                 t_norm = _strip_accents(doc_title).lower()
                 if q_norm in t_norm and doc_title not in seen_titles:
                     seen_titles.add(doc_title)
-                    suggestions.append({
-                        "type": "document",
-                        "text": doc_title,
-                        "document_id": str(doc_id),
-                        "category_code": str(cat_id) if cat_id else None,
-                    })
+                    suggestions.append(
+                        {
+                            "type": "document",
+                            "text": doc_title,
+                            "document_id": str(doc_id),
+                            "category_code": str(cat_id) if cat_id else None,
+                        }
+                    )
                 if len(suggestions) >= limit:
                     break
         except Exception as exc_db:
@@ -1071,6 +1190,7 @@ async def trigger_reindex_documents(
 ):
     """Quản trị viên kích hoạt tiến trình nạp hàng loạt (Bulk Reindex) từ PostgreSQL sang Elasticsearch."""
     from scripts.sync_es_index import sync_all_documents
+
     result = await sync_all_documents(recreate=recreate)
     return result
 
@@ -1215,23 +1335,25 @@ async def export_search_results(
     output.write("\ufeff")
 
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-    writer.writerow([
-        "Mã tài liệu",
-        "Tiêu đề hồ sơ",
-        "Danh mục",
-        "Mã danh mục",
-        "Họ và tên sinh viên",
-        "MSSV",
-        "Số hiệu văn bản",
-        "Ngày ban hành",
-        "Trạng thái OCR",
-        "Độ tin cậy OCR",
-        "Thẻ nhãn (Tags)",
-        "Điểm ưu tiên",
-        "Điểm khớp BM25",
-        "Đoạn trích khớp từ khóa",
-        "Ngày tạo",
-    ])
+    writer.writerow(
+        [
+            "Mã tài liệu",
+            "Tiêu đề hồ sơ",
+            "Danh mục",
+            "Mã danh mục",
+            "Họ và tên sinh viên",
+            "MSSV",
+            "Số hiệu văn bản",
+            "Ngày ban hành",
+            "Trạng thái OCR",
+            "Độ tin cậy OCR",
+            "Thẻ nhãn (Tags)",
+            "Điểm ưu tiên",
+            "Điểm khớp BM25",
+            "Đoạn trích khớp từ khóa",
+            "Ngày tạo",
+        ]
+    )
 
     for hit in search_res.results:
         clean_snippet = re.sub(r"</?em>", "", hit.content_snippet or "")
@@ -1239,23 +1361,25 @@ async def export_search_results(
         date_str = hit.document_date or ""
         created_str = hit.created_at.strftime("%Y-%m-%d %H:%M:%S") if hit.created_at else ""
 
-        writer.writerow([
-            str(hit.document_id),
-            hit.title,
-            hit.category_name or "",
-            hit.category_code or "",
-            hit.student_name or "",
-            hit.student_id or "",
-            hit.document_number or "",
-            date_str,
-            hit.ocr_status,
-            f"{hit.ocr_confidence:.2f}" if hit.ocr_confidence is not None else "",
-            tags_str,
-            hit.priority_score,
-            hit.score,
-            clean_snippet,
-            created_str,
-        ])
+        writer.writerow(
+            [
+                str(hit.document_id),
+                hit.title,
+                hit.category_name or "",
+                hit.category_code or "",
+                hit.student_name or "",
+                hit.student_id or "",
+                hit.document_number or "",
+                date_str,
+                hit.ocr_status,
+                f"{hit.ocr_confidence:.2f}" if hit.ocr_confidence is not None else "",
+                tags_str,
+                hit.priority_score,
+                hit.score,
+                clean_snippet,
+                created_str,
+            ]
+        )
 
     csv_data = output.getvalue().encode("utf-8")
     filename = f"ket_qua_tim_kiem_{int(time.time())}.csv"
@@ -1301,20 +1425,22 @@ async def get_similar_documents(
     if is_es_available():
         try:
             es = get_es_client()
-            filter_clause: list[dict[str, Any]] = [
-                {"term": {"is_deleted": False}}
-            ]
+            filter_clause: list[dict[str, Any]] = [{"term": {"is_deleted": False}}]
             if role_name == "STUDENT":
                 user_id_str = str(current_user.id) if current_user else ""
-                filter_clause.append({
-                    "bool": {
-                        "should": [
-                            {"term": {"uploaded_by": user_id_str}} if user_id_str else {"term": {"ocr_status": "APPROVED"}},
-                            {"term": {"ocr_status": "APPROVED"}},
-                        ],
-                        "minimum_should_match": 1,
+                filter_clause.append(
+                    {
+                        "bool": {
+                            "should": [
+                                {"term": {"uploaded_by": user_id_str}}
+                                if user_id_str
+                                else {"term": {"ocr_status": "APPROVED"}},
+                                {"term": {"ocr_status": "APPROVED"}},
+                            ],
+                            "minimum_should_match": 1,
+                        }
                     }
-                })
+                )
 
             mlt_query = {
                 "bool": {
@@ -1322,9 +1448,7 @@ async def get_similar_documents(
                         {
                             "more_like_this": {
                                 "fields": ["content", "content_corrected", "title"],
-                                "like": [
-                                    {"_index": INDEX_NAME, "_id": doc_id_str}
-                                ],
+                                "like": [{"_index": INDEX_NAME, "_id": doc_id_str}],
                                 "min_term_freq": 1,
                                 "min_doc_freq": min_doc_freq,
                                 "max_query_terms": max_query_terms,
@@ -1332,9 +1456,7 @@ async def get_similar_documents(
                             }
                         }
                     ],
-                    "must_not": [
-                        {"term": {"document_id": doc_id_str}}
-                    ],
+                    "must_not": [{"term": {"document_id": doc_id_str}}],
                     "filter": filter_clause,
                 }
             }
@@ -1387,10 +1509,7 @@ async def get_similar_documents(
 
         if role_name == "STUDENT":
             if current_user:
-                stmt = stmt.where(
-                    (Document.uploaded_by == current_user.id) |
-                    (Document.ocr_status == "APPROVED")
-                )
+                stmt = stmt.where((Document.uploaded_by == current_user.id) | (Document.ocr_status == "APPROVED"))
             else:
                 stmt = stmt.where(Document.ocr_status == "APPROVED")
 
@@ -1466,15 +1585,9 @@ async def get_search_dashboard_analytics(
                             "min_doc_count": 0,
                         }
                     },
-                    "by_category": {
-                        "terms": {"field": "category_code", "size": 20}
-                    },
-                    "by_status": {
-                        "terms": {"field": "ocr_status", "size": 10}
-                    },
-                    "confidence_stats": {
-                        "stats": {"field": "ocr_confidence"}
-                    },
+                    "by_category": {"terms": {"field": "category_code", "size": 20}},
+                    "by_status": {"terms": {"field": "ocr_status", "size": 10}},
+                    "confidence_stats": {"stats": {"field": "ocr_confidence"}},
                 },
             }
 
@@ -1571,11 +1684,13 @@ async def get_search_dashboard_analytics(
 # MỤC 1: PHÁT HIỆN TRÙNG LẶP HỒ SƠ & NGHI VẤN SAO CHÉP (DUPLICATE DETECTION)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _calculate_text_similarity(text1: str, text2: str) -> float:
     """Tính độ tương đồng từ vựng (Jaccard + Bigram overlap) giữa 2 văn bản OCR."""
     if not text1 or not text2:
         return 0.0
     import re
+
     tokens1 = set(re.findall(r"\w+", text1.lower()))
     tokens2 = set(re.findall(r"\w+", text2.lower()))
     if not tokens1 or not tokens2:
@@ -1675,7 +1790,10 @@ async def check_document_duplicates(
                 is_same_st = (
                     source.get("student_id") is not None
                     and src_doc.uploader is not None
-                    and (source.get("student_id") == str(src_doc.uploader.id) or source.get("student_id") == getattr(src_doc.uploader, "mssv", None))
+                    and (
+                        source.get("student_id") == str(src_doc.uploader.id)
+                        or source.get("student_id") == getattr(src_doc.uploader, "mssv", None)
+                    )
                 )
 
                 reasons: list[str] = []
@@ -1739,7 +1857,7 @@ async def check_document_duplicates(
                 o_text = o_doc.ocr_results[0].corrected_text or o_doc.ocr_results[0].raw_text or ""
 
             sim_score = _calculate_text_similarity(src_text, o_text)
-            is_same_st = (src_doc.uploaded_by is not None and src_doc.uploaded_by == o_doc.uploaded_by)
+            is_same_st = src_doc.uploaded_by is not None and src_doc.uploaded_by == o_doc.uploaded_by
 
             reasons: list[str] = []
             if sim_score >= 0.85:
@@ -1781,7 +1899,9 @@ async def check_document_duplicates(
         recommendation = "CẢNH BÁO ĐỎ: Phát hiện hồ sơ trùng lặp nghiêm trọng (>85%). Cán bộ cần kiểm tra đối chiếu trực tiếp trước khi phê duyệt."
     elif max_sim >= 0.65:
         risk_level = "WARNING"
-        recommendation = "CẢNH BÁO VÀNG: Hồ sơ có dấu hiệu sao chép hoặc nộp lại biểu mẫu cũ (>65%). Khuyến nghị xem xét kỹ."
+        recommendation = (
+            "CẢNH BÁO VÀNG: Hồ sơ có dấu hiệu sao chép hoặc nộp lại biểu mẫu cũ (>65%). Khuyến nghị xem xét kỹ."
+        )
     else:
         risk_level = "SAFE"
         recommendation = "AN TOÀN: Hồ sơ độc lập, không phát hiện dấu hiệu sao chép bất thường."
@@ -1801,6 +1921,7 @@ async def check_document_duplicates(
 # ══════════════════════════════════════════════════════════════════════════════
 # MỤC 2: QUẢN LÝ TIẾN ĐỘ & HẠN CHÓT XỬ LÝ HỒ SƠ (SLA TRACKING)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @router.get(
     "/sla/summary",
@@ -2005,6 +2126,7 @@ async def match_new_document_against_alerts(
 # CHỨC NĂNG 1: HỒ SƠ SINH VIÊN 360° & DÒNG THỜI GIAN (STUDENT 360 PROFILE)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @router.get(
     "/student-profile/{student_id}",
     response_model=StudentProfile360Response,
@@ -2061,7 +2183,8 @@ async def get_student_profile_360(
         res_fb = await db.execute(stmt_fallback)
         all_d = res_fb.scalars().all()
         docs = [
-            d for d in all_d
+            d
+            for d in all_d
             if (d.metadata_ and d.metadata_.student_id == student_id)
             or (d.uploader and getattr(d.uploader, "mssv", "") == student_id)
         ]
@@ -2123,6 +2246,7 @@ async def get_student_profile_360(
 # CHỨC NĂNG 3: CẢNH BÁO BIỂU MẪU CŨ & HIỆU LỰC VĂN BẢN (VALIDITY TRACKER)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @router.get(
     "/documents/{document_id}/validity",
     response_model=DocumentValidityResponse,
@@ -2139,7 +2263,9 @@ async def check_document_validity(
 
     # Phân tích hiệu lực dựa trên metadata hoặc tiêu đề / thời gian
     title_lower = doc.title.lower()
-    is_superseded = "mẫu cũ" in title_lower or "het hieu luc" in title_lower or "2023" in title_lower or "2024" in title_lower
+    is_superseded = (
+        "mẫu cũ" in title_lower or "het hieu luc" in title_lower or "2023" in title_lower or "2024" in title_lower
+    )
     is_effective = not is_superseded
 
     warning = None
@@ -2181,6 +2307,7 @@ async def check_document_validity(
 # CHỨC NĂNG 4: ĐIỂM NÓNG DƯ LUẬN & CHỦ ĐỀ ĐỘT BIẾN (SIGNIFICANT TERMS TRENDS)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @router.get(
     "/analytics/trending-topics",
     response_model=TrendingTopicsResponse,
@@ -2193,11 +2320,33 @@ async def get_trending_topics(
 ) -> TrendingTopicsResponse:
     # Mẫu từ khóa đặc thù theo dõi tại ĐH Đà Lạt
     curated_topics = [
-        TrendingTopicItem(term="miễn giảm học phí", frequency=48, growth_rate=240.5, sample_context="Sinh viên nộp đơn theo Nghị định 81 kỳ 1"),
-        TrendingTopicItem(term="ký túc xá", frequency=36, growth_rate=185.0, sample_context="Đơn xin ở nội trú và gia hạn phòng KTX"),
-        TrendingTopicItem(term="học bổng Hessen", frequency=29, growth_rate=320.0, sample_context="Thông báo xét duyệt học bổng CHLB Đức"),
-        TrendingTopicItem(term="tạm hoãn nghĩa vụ quân sự", frequency=25, growth_rate=150.2, sample_context="Giấy xác nhận sinh viên nộp Ban CHQS huyện"),
-        TrendingTopicItem(term="điểm rèn luyện", frequency=19, growth_rate=95.4, sample_context="Khiếu nại và phúc khảo minh chứng rèn luyện"),
+        TrendingTopicItem(
+            term="miễn giảm học phí",
+            frequency=48,
+            growth_rate=240.5,
+            sample_context="Sinh viên nộp đơn theo Nghị định 81 kỳ 1",
+        ),
+        TrendingTopicItem(
+            term="ký túc xá", frequency=36, growth_rate=185.0, sample_context="Đơn xin ở nội trú và gia hạn phòng KTX"
+        ),
+        TrendingTopicItem(
+            term="học bổng Hessen",
+            frequency=29,
+            growth_rate=320.0,
+            sample_context="Thông báo xét duyệt học bổng CHLB Đức",
+        ),
+        TrendingTopicItem(
+            term="tạm hoãn nghĩa vụ quân sự",
+            frequency=25,
+            growth_rate=150.2,
+            sample_context="Giấy xác nhận sinh viên nộp Ban CHQS huyện",
+        ),
+        TrendingTopicItem(
+            term="điểm rèn luyện",
+            frequency=19,
+            growth_rate=95.4,
+            sample_context="Khiếu nại và phúc khảo minh chứng rèn luyện",
+        ),
     ]
 
     return TrendingTopicsResponse(
@@ -2211,6 +2360,7 @@ async def get_trending_topics(
 # CHỨC NĂNG 6: HIỆU SUẤT XỬ LÝ HỒ SƠ CỦA CÁN BỘ (STAFF PERFORMANCE ANALYTICS)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @router.get(
     "/analytics/staff-performance",
     response_model=StaffPerformanceResponse,
@@ -2222,12 +2372,9 @@ async def get_staff_performance_analytics(
     current_user: User = Depends(require_roles("ADMIN", "STAFF")),
 ) -> StaffPerformanceResponse:
     from app.models.roles import Role
+
     # Lấy danh sách cán bộ STAFF / ADMIN
-    stmt = (
-        select(User)
-        .join(User.role)
-        .where(Role.name.in_(["STAFF", "ADMIN"]))
-    )
+    stmt = select(User).join(User.role).where(Role.name.in_(["STAFF", "ADMIN"]))
     res = await db.execute(stmt)
     staff_members = res.scalars().all()
 
@@ -2275,6 +2422,7 @@ async def get_staff_performance_analytics(
 # ĐỀ XUẤT 1: ĐÁNH GIÁ THỰC NGHIỆM CHẤT LƯỢNG TRUY HỒI THÔNG TIN (IR BENCHMARK)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _load_ground_truth_dataset() -> list[dict[str, Any]]:
     """Đọc bộ Ground Truth độc lập từ dataset/ir_ground_truth.json."""
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -2288,19 +2436,110 @@ def _load_ground_truth_dataset() -> list[dict[str, Any]]:
 
     # Fallback tập mẫu nếu file không khả dụng
     return [
-        {"id": "Q01", "type": "EASY", "query": "miễn giảm học phí", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q02", "type": "EASY", "query": "đơn xin nghỉ học tạm thời", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q03", "type": "EASY", "query": "học bổng khuyến khích học tập", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q04", "type": "EASY", "query": "giấy xác nhận sinh viên", "fuzzy": True, "total_relevant_in_index": 1000, "relevant_doc_ids": []},
-        {"id": "Q05", "type": "EASY", "query": "khen thưởng nghiên cứu khoa học", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q11", "type": "HARD", "query": "don xin nghi hoc vi ly do sk", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q12", "type": "HARD", "query": "xet hb kkht ky 1", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q13", "type": "HARD", "query": "vay von ngan hang chinh sach", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q16", "type": "HARD", "query": "tam hoan nghia vu quan su nvqs", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q17", "type": "HARD", "query": "thanh tich nckh cap truong giai nhat", "fuzzy": True, "total_relevant_in_index": 200, "relevant_doc_ids": []},
-        {"id": "Q21", "type": "NEGATIVE", "query": "hóa đơn thanh toán tiền điện nước ký túc xá", "fuzzy": True, "total_relevant_in_index": 0, "relevant_doc_ids": []},
-        {"id": "Q22", "type": "NEGATIVE", "query": "hợp đồng thuê nhà trọ sinh viên ngoài trường", "fuzzy": True, "total_relevant_in_index": 0, "relevant_doc_ids": []},
-        {"id": "Q23", "type": "NEGATIVE", "query": "đơn đăng ký học bằng lái xe ô tô hạng B2", "fuzzy": True, "total_relevant_in_index": 0, "relevant_doc_ids": []},
+        {
+            "id": "Q01",
+            "type": "EASY",
+            "query": "miễn giảm học phí",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q02",
+            "type": "EASY",
+            "query": "đơn xin nghỉ học tạm thời",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q03",
+            "type": "EASY",
+            "query": "học bổng khuyến khích học tập",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q04",
+            "type": "EASY",
+            "query": "giấy xác nhận sinh viên",
+            "fuzzy": True,
+            "total_relevant_in_index": 1000,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q05",
+            "type": "EASY",
+            "query": "khen thưởng nghiên cứu khoa học",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q11",
+            "type": "HARD",
+            "query": "don xin nghi hoc vi ly do sk",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q12",
+            "type": "HARD",
+            "query": "xet hb kkht ky 1",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q13",
+            "type": "HARD",
+            "query": "vay von ngan hang chinh sach",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q16",
+            "type": "HARD",
+            "query": "tam hoan nghia vu quan su nvqs",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q17",
+            "type": "HARD",
+            "query": "thanh tich nckh cap truong giai nhat",
+            "fuzzy": True,
+            "total_relevant_in_index": 200,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q21",
+            "type": "NEGATIVE",
+            "query": "hóa đơn thanh toán tiền điện nước ký túc xá",
+            "fuzzy": True,
+            "total_relevant_in_index": 0,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q22",
+            "type": "NEGATIVE",
+            "query": "hợp đồng thuê nhà trọ sinh viên ngoài trường",
+            "fuzzy": True,
+            "total_relevant_in_index": 0,
+            "relevant_doc_ids": [],
+        },
+        {
+            "id": "Q23",
+            "type": "NEGATIVE",
+            "query": "đơn đăng ký học bằng lái xe ô tô hạng B2",
+            "fuzzy": True,
+            "total_relevant_in_index": 0,
+            "relevant_doc_ids": [],
+        },
     ]
 
 
@@ -2423,7 +2662,9 @@ async def get_or_run_ir_benchmark(
     avg_latency = round(total_latency_ms / n_queries, 2) if n_queries else 0.0
 
     neg_items = tier_groups.get("NEGATIVE", [])
-    neg_rejection = round(sum(1 for d in neg_items if d.retrieved_count == 0) / len(neg_items) * 100, 1) if neg_items else 100.0
+    neg_rejection = (
+        round(sum(1 for d in neg_items if d.retrieved_count == 0) / len(neg_items) * 100, 1) if neg_items else 100.0
+    )
 
     by_tier_summary: dict[str, IRTierMetricSummary] = {}
     for tier_name, items in tier_groups.items():
@@ -2458,6 +2699,7 @@ async def get_or_run_ir_benchmark(
 # ══════════════════════════════════════════════════════════════════════════════
 # ĐỀ XUẤT 2: XÁC THỰC TÍNH TOÀN VẸN SỐ & CHỐNG GIẢ MẠO (QR & SHA-256 INTEGRITY)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @router.get(
     "/verify/{code_or_hash}",
@@ -2585,6 +2827,7 @@ STUDENT_TERM_EXPANSIONS = {
     "dlu": ("đại học đà lạt", "Từ viết tắt Đại học Đà Lạt"),
 }
 
+
 @router.post(
     "/ocr-tolerant",
     response_model=OcrTolerantSearchResponse,
@@ -2658,6 +2901,7 @@ async def search_ocr_error_tolerant(
 # ══════════════════════════════════════════════════════════════════════════════
 # ĐỀ XUẤT 4: TRÍCH XUẤT TỌA ĐỘ BOUNDING BOX TỪ KHÓA (SIDE-BY-SIDE LIVE EDITOR)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @router.get(
     "/documents/{document_id}/spatial-highlights",
@@ -2797,7 +3041,16 @@ async def ask_faq_regulation(
         },
         {
             "id": "faq_mien_giam_hoc_phi",
-            "keywords": ["mien giam", "hoc phi", "ho ngheo", "can ngheo", "mo coi", "khuyet tat", "nghi dinh 81", "dan toc"],
+            "keywords": [
+                "mien giam",
+                "hoc phi",
+                "ho ngheo",
+                "can ngheo",
+                "mo coi",
+                "khuyet tat",
+                "nghi dinh 81",
+                "dan toc",
+            ],
             "matched_article": "Điều 15 & Điều 16, Nghị định số 81/2021/NĐ-CP",
             "regulation_title": "Quy định về cơ chế thu, quản lý học phí và chính sách miễn, giảm học phí của Chính phủ",
             "summary_answer": "Sinh viên thuộc hộ nghèo, cận nghèo, mồ côi cả cha lẫn mẹ hoặc khuyết tật được miễn từ 50% đến 100% học phí theo quy định tại Nghị định 81/2021/NĐ-CP.",
@@ -2853,7 +3106,14 @@ async def ask_faq_regulation(
         },
         {
             "id": "faq_giay_xac_nhan_nvqs",
-            "keywords": ["xac nhan sinh vien", "tam hoan nvqs", "nghia vu quan su", "hoan nghia vu", "phong a11", "giay xac nhan"],
+            "keywords": [
+                "xac nhan sinh vien",
+                "tam hoan nvqs",
+                "nghia vu quan su",
+                "hoan nghia vu",
+                "phong a11",
+                "giay xac nhan",
+            ],
             "matched_article": "Thông tư liên tịch số 13/2013/TTLT-BGDĐT-BQP & Quy trình CTSV một cửa",
             "regulation_title": "Quy trình cấp Giấy xác nhận sinh viên phục vụ tạm hoãn gọi nhập ngũ",
             "summary_answer": "Sinh viên đăng ký xin cấp Giấy xác nhận trực tiếp tại Bộ phận Một cửa - Phòng CTSV (Nhà A11) hoặc trên Cổng Dịch vụ công sinh viên, nhận kết quả trong vòng 01 ngày làm việc.",
@@ -2983,7 +3243,11 @@ async def ask_faq_regulation(
     fallback_doc = doc_res.scalar_one_or_none()
 
     doc_title = fallback_doc.title if fallback_doc else "Quy chế Quản lý Người học & Công tác Sinh viên Đại học Đà Lạt"
-    snippet = es_best_hit["content"] if es_best_hit else "Văn bản quy định các quyền lợi, chế độ chính sách và nghĩa vụ của người học."
+    snippet = (
+        es_best_hit["content"]
+        if es_best_hit
+        else "Văn bản quy định các quyền lợi, chế độ chính sách và nghĩa vụ của người học."
+    )
 
     return FaqAnswerResponse(
         query=query_raw,
@@ -3013,7 +3277,9 @@ async def ask_faq_regulation(
 @router.get("/documents/{document_id}/policy-audit", response_model=PolicyAuditResponse)
 async def audit_document_policy_eligibility(
     document_id: UUID,
-    policy_code: str = Query("NGHI_DINH_81", description="Mã chính sách: NGHI_DINH_81 | HOC_BONG_KKHT | TRO_CAP_XAH_HOI"),
+    policy_code: str = Query(
+        "NGHI_DINH_81", description="Mã chính sách: NGHI_DINH_81 | HOC_BONG_KKHT | TRO_CAP_XAH_HOI"
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ) -> PolicyAuditResponse:
@@ -3096,7 +3362,9 @@ async def audit_document_policy_eligibility(
                 rule_code="KKHT_NO_FAIL",
                 title="Không có học phần bị điểm F trong học kỳ",
                 passed=not has_f,
-                detail="Không phát hiện điểm F học phần nào trong kỳ xét." if not has_f else "Phát hiện học phần bị điểm F trong kỳ xét.",
+                detail="Không phát hiện điểm F học phần nào trong kỳ xét."
+                if not has_f
+                else "Phát hiện học phần bị điểm F trong kỳ xét.",
                 evidence_snippet="Không có môn F" if not has_f else "Học phần Giáo dục thể chất: F",
             )
         )
@@ -3138,18 +3406,24 @@ async def audit_document_policy_eligibility(
                 rule_code="TCXH_CATEGORY",
                 title="Xác định đúng nhóm đối tượng hưởng trợ cấp xã hội",
                 passed=has_orphan_or_disability,
-                detail="Xác nhận thuộc nhóm đối tượng mồ côi, khuyết tật hoặc hộ nghèo DTTS." if has_orphan_or_disability else "Chưa xác định rõ diện chính sách trợ cấp.",
+                detail="Xác nhận thuộc nhóm đối tượng mồ côi, khuyết tật hoặc hộ nghèo DTTS."
+                if has_orphan_or_disability
+                else "Chưa xác định rõ diện chính sách trợ cấp.",
                 evidence_snippet=full_text[:120] if has_orphan_or_disability else None,
             )
         )
 
-        has_local_confirm = "uy ban nhan dan" in full_text_norm or "ubnd" in full_text_norm or "xac nhan" in full_text_norm
+        has_local_confirm = (
+            "uy ban nhan dan" in full_text_norm or "ubnd" in full_text_norm or "xac nhan" in full_text_norm
+        )
         criteria_checks.append(
             PolicyCriteriaCheck(
                 rule_code="TCXH_LOCAL_SEAL",
                 title="Có xác nhận của cơ quan quản lý/UBND cấp có thẩm quyền",
                 passed=has_local_confirm,
-                detail="Giấy tờ có xác nhận của UBND hoặc cơ quan thẩm quyền." if has_local_confirm else "Thiếu xác nhận dấu đỏ của chính quyền địa phương.",
+                detail="Giấy tờ có xác nhận của UBND hoặc cơ quan thẩm quyền."
+                if has_local_confirm
+                else "Thiếu xác nhận dấu đỏ của chính quyền địa phương.",
                 evidence_snippet="UBND cấp Xã xác nhận" if has_local_confirm else None,
             )
         )
@@ -3182,7 +3456,9 @@ async def audit_document_policy_eligibility(
                 rule_code="ND81_POVERTY_CERT",
                 title="Giấy chứng nhận hộ nghèo/cận nghèo hoặc xác nhận diện chính sách",
                 passed=has_poverty_cert,
-                detail="Phát hiện thông tin sổ/giấy chứng nhận hộ nghèo trong văn bản." if has_poverty_cert else "Chưa phát hiện căn cứ chứng minh hộ nghèo trong hồ sơ.",
+                detail="Phát hiện thông tin sổ/giấy chứng nhận hộ nghèo trong văn bản."
+                if has_poverty_cert
+                else "Chưa phát hiện căn cứ chứng minh hộ nghèo trong hồ sơ.",
                 evidence_snippet="Sổ hộ nghèo số: HN-2024" if has_poverty_cert else None,
             )
         )
@@ -3200,7 +3476,9 @@ async def audit_document_policy_eligibility(
                 rule_code="ND81_LOCAL_SEAL",
                 title="Dấu xác nhận và chữ ký hợp lệ của UBND cấp Xã/Phường",
                 passed=has_local_seal,
-                detail="Văn bản có dấu xác nhận tròn đỏ của chính quyền địa phương nơi cư trú." if has_local_seal else "Chưa xác thực được con dấu của UBND xã/phường.",
+                detail="Văn bản có dấu xác nhận tròn đỏ của chính quyền địa phương nơi cư trú."
+                if has_local_seal
+                else "Chưa xác thực được con dấu của UBND xã/phường.",
                 evidence_snippet="UBND xã Tân Hà xác nhận" if has_local_seal else None,
             )
         )
@@ -3219,7 +3497,9 @@ async def audit_document_policy_eligibility(
                 rule_code="ND81_VALID_PERIOD",
                 title="Thời hạn hiệu lực của giấy tờ chứng minh",
                 passed=is_valid_date,
-                detail=f"Giấy tờ còn giá trị hiệu lực (năm {prev_year} - {current_year})." if is_valid_date else "Giấy chứng nhận có thể đã hết thời hạn hiệu lực.",
+                detail=f"Giấy tờ còn giá trị hiệu lực (năm {prev_year} - {current_year})."
+                if is_valid_date
+                else "Giấy chứng nhận có thể đã hết thời hạn hiệu lực.",
                 evidence_snippet=f"Có giá trị trong năm {current_year}" if is_valid_date else None,
             )
         )
@@ -3236,7 +3516,9 @@ async def audit_document_policy_eligibility(
                 rule_code="ND81_STUDENT_ID",
                 title="Khớp nối thông tin định danh sinh viên (MSSV / CCCD)",
                 passed=has_id_match,
-                detail="Thông tin MSSV hoặc CCCD được trích xuất rõ ràng và trùng khớp." if has_id_match else "Thiếu số CCCD hoặc MSSV để đối soát hồ sơ.",
+                detail="Thông tin MSSV hoặc CCCD được trích xuất rõ ràng và trùng khớp."
+                if has_id_match
+                else "Thiếu số CCCD hoặc MSSV để đối soát hồ sơ.",
                 evidence_snippet="CCCD/MSSV khớp với hồ sơ đào tạo" if has_id_match else None,
             )
         )
@@ -3329,7 +3611,9 @@ async def audit_cross_document_fraud(
     # Trích xuất số hiệu, số biên lai, số CCCD từ văn bản mục tiêu
     target_texts = [ocr.raw_text or ocr.corrected_text or "" for ocr in target_doc.ocr_results]
     t_full = " ".join(target_texts) + " " + target_doc.title
-    t_meta = target_doc.metadata_.extra if (target_doc.metadata_ and isinstance(target_doc.metadata_.extra, dict)) else {}
+    t_meta = (
+        target_doc.metadata_.extra if (target_doc.metadata_ and isinstance(target_doc.metadata_.extra, dict)) else {}
+    )
 
     # Trích xuất các mã chứng từ
     serials = set()
@@ -3350,7 +3634,9 @@ async def audit_cross_document_fraud(
 
         o_texts = [ocr.raw_text or ocr.corrected_text or "" for ocr in other_doc.ocr_results]
         o_full = " ".join(o_texts) + " " + other_doc.title
-        o_meta = other_doc.metadata_.extra if (other_doc.metadata_ and isinstance(other_doc.metadata_.extra, dict)) else {}
+        o_meta = (
+            other_doc.metadata_.extra if (other_doc.metadata_ and isinstance(other_doc.metadata_.extra, dict)) else {}
+        )
 
         # 1. Trùng lặp số serial sổ hộ nghèo / công văn
         for s in serials:
@@ -3393,7 +3679,9 @@ async def audit_cross_document_fraud(
     elif detected_collisions:
         risk_level = "WARNING"
         tamper_score = 0.55
-        conclusion = "CẢNH BÁO: Phát hiện trùng lặp mã chứng từ hoặc số biên lai. Cần cán bộ phụ trách kiểm tra lại bản gốc."
+        conclusion = (
+            "CẢNH BÁO: Phát hiện trùng lặp mã chứng từ hoặc số biên lai. Cần cán bộ phụ trách kiểm tra lại bản gốc."
+        )
     else:
         risk_level = "SAFE"
         tamper_score = 0.05
@@ -3499,18 +3787,23 @@ async def search_structured_tables(
                     txt = ocr.raw_text or ocr.corrected_text or ""
                     # Tìm các dòng có định dạng: STT | MSSV | Họ tên | Lớp | GPA | DRL
                     for line in txt.split("\n"):
-                        m = re.search(r"(\d{7})\s+([A-ZÀ-Ỹa-zà-ỹ\s]+?)\s+(CTK\d+|QTK\d+|SPK\d+)?\s+([234]\.\d{1,2})\s+(\d{2,3})", line)
+                        m = re.search(
+                            r"(\d{7})\s+([A-ZÀ-Ỹa-zà-ỹ\s]+?)\s+(CTK\d+|QTK\d+|SPK\d+)?\s+([234]\.\d{1,2})\s+(\d{2,3})",
+                            line,
+                        )
                         if m:
-                            table_data.append({
-                                "mssv": m.group(1).strip(),
-                                "student_name": m.group(2).strip(),
-                                "class_name": m.group(3) or "CTK45",
-                                "gpa": float(m.group(4)),
-                                "drl": int(m.group(5)),
-                                "scholarship_tier": "Xuất sắc" if float(m.group(4)) >= 3.6 else "Giỏi",
-                                "amount": "9.500.000 đ" if float(m.group(4)) >= 3.6 else "7.800.000 đ",
-                                "page": ocr.page_number or 1,
-                            })
+                            table_data.append(
+                                {
+                                    "mssv": m.group(1).strip(),
+                                    "student_name": m.group(2).strip(),
+                                    "class_name": m.group(3) or "CTK45",
+                                    "gpa": float(m.group(4)),
+                                    "drl": int(m.group(5)),
+                                    "scholarship_tier": "Xuất sắc" if float(m.group(4)) >= 3.6 else "Giỏi",
+                                    "amount": "9.500.000 đ" if float(m.group(4)) >= 3.6 else "7.800.000 đ",
+                                    "page": ocr.page_number or 1,
+                                }
+                            )
 
             # Lọc các dòng bảng thỏa mãn điều kiện
             for item in table_data:
@@ -3554,11 +3847,51 @@ async def search_structured_tables(
     if not rows and not request.student_id:
         sample_doc_id = uuid.uuid4()
         sample_rows_data = [
-            {"mssv": "2112345", "name": "Nguyễn Văn An", "class": "CTK45", "gpa": 3.82, "drl": 92, "tier": "Xuất sắc", "amount": "9.500.000 đ"},
-            {"mssv": "2112346", "name": "Trần Thị Mai Hoa", "class": "CTK45", "gpa": 3.65, "drl": 88, "tier": "Xuất sắc", "amount": "9.500.000 đ"},
-            {"mssv": "2112350", "name": "Lê Hoàng Long", "class": "QTK44", "gpa": 3.42, "drl": 84, "tier": "Giỏi", "amount": "7.800.000 đ"},
-            {"mssv": "2112355", "name": "Phạm Thị Bích Ngọc", "class": "SPK46", "gpa": 3.35, "drl": 90, "tier": "Giỏi", "amount": "7.800.000 đ"},
-            {"mssv": "2112360", "name": "Đặng Quốc Hưng", "class": "CTK45", "gpa": 3.10, "drl": 76, "tier": "Khá", "amount": "5.500.000 đ"},
+            {
+                "mssv": "2112345",
+                "name": "Nguyễn Văn An",
+                "class": "CTK45",
+                "gpa": 3.82,
+                "drl": 92,
+                "tier": "Xuất sắc",
+                "amount": "9.500.000 đ",
+            },
+            {
+                "mssv": "2112346",
+                "name": "Trần Thị Mai Hoa",
+                "class": "CTK45",
+                "gpa": 3.65,
+                "drl": 88,
+                "tier": "Xuất sắc",
+                "amount": "9.500.000 đ",
+            },
+            {
+                "mssv": "2112350",
+                "name": "Lê Hoàng Long",
+                "class": "QTK44",
+                "gpa": 3.42,
+                "drl": 84,
+                "tier": "Giỏi",
+                "amount": "7.800.000 đ",
+            },
+            {
+                "mssv": "2112355",
+                "name": "Phạm Thị Bích Ngọc",
+                "class": "SPK46",
+                "gpa": 3.35,
+                "drl": 90,
+                "tier": "Giỏi",
+                "amount": "7.800.000 đ",
+            },
+            {
+                "mssv": "2112360",
+                "name": "Đặng Quốc Hưng",
+                "class": "CTK45",
+                "gpa": 3.10,
+                "drl": 76,
+                "tier": "Khá",
+                "amount": "5.500.000 đ",
+            },
         ]
         for s in sample_rows_data:
             if request.min_gpa and s["gpa"] < request.min_gpa:
@@ -3628,10 +3961,7 @@ async def get_pii_audit_summary(
     # Nếu trong window chưa có log, lấy thêm 20 log gần nhất
     if not logs:
         stmt_recent = (
-            select(AuditLog)
-            .options(selectinload(AuditLog.user))
-            .order_by(AuditLog.created_at.desc())
-            .limit(20)
+            select(AuditLog).options(selectinload(AuditLog.user)).order_by(AuditLog.created_at.desc()).limit(20)
         )
         recent_res = await db.execute(stmt_recent)
         logs = recent_res.scalars().all()
@@ -3777,7 +4107,10 @@ async def evaluate_percolate_document_routing(
     # ── Luật 1: Miễn 100% Học phí theo Nghị định 81 ──
     is_mien_100 = (
         ("mo coi" in unaccent_text or "mồ côi" in full_text_norm)
-        or (("ho ngheo" in unaccent_text or "hộ nghèo" in full_text_norm) and ("dan toc" in unaccent_text or "dân tộc" in full_text_norm))
+        or (
+            ("ho ngheo" in unaccent_text or "hộ nghèo" in full_text_norm)
+            and ("dan toc" in unaccent_text or "dân tộc" in full_text_norm)
+        )
         or ("khuyet tat nang" in unaccent_text or "khuyết tật" in full_text_norm)
     )
     if is_mien_100:
@@ -3974,25 +4307,68 @@ async def get_ctsv_multi_dimensional_breakdown(
 
     # 2. Danh sách phân bổ theo Khoa chuẩn của Trường Đại học Đà Lạt
     faculties_seed = [
-        {"code": "CNTT", "name": "Khoa Công nghệ Thông tin", "apps": 85, "appr": 72, "pend": 10, "rej": 3, "budget": 340000000.0},
+        {
+            "code": "CNTT",
+            "name": "Khoa Công nghệ Thông tin",
+            "apps": 85,
+            "appr": 72,
+            "pend": 10,
+            "rej": 3,
+            "budget": 340000000.0,
+        },
         {"code": "SP", "name": "Khoa Sư phạm", "apps": 64, "appr": 55, "pend": 7, "rej": 2, "budget": 280000000.0},
-        {"code": "KT_QTKD", "name": "Khoa Kinh tế - Quản trị Kinh doanh", "apps": 78, "appr": 63, "pend": 12, "rej": 3, "budget": 315000000.0},
-        {"code": "LUAT", "name": "Khoa Luật & Quản lý Nhà nước", "apps": 42, "appr": 36, "pend": 5, "rej": 1, "budget": 168000000.0},
+        {
+            "code": "KT_QTKD",
+            "name": "Khoa Kinh tế - Quản trị Kinh doanh",
+            "apps": 78,
+            "appr": 63,
+            "pend": 12,
+            "rej": 3,
+            "budget": 315000000.0,
+        },
+        {
+            "code": "LUAT",
+            "name": "Khoa Luật & Quản lý Nhà nước",
+            "apps": 42,
+            "appr": 36,
+            "pend": 5,
+            "rej": 1,
+            "budget": 168000000.0,
+        },
         {"code": "NN", "name": "Khoa Ngoại ngữ", "apps": 50, "appr": 44, "pend": 4, "rej": 2, "budget": 195000000.0},
-        {"code": "NL_SH", "name": "Khoa Nông Lâm & Sinh học", "apps": 35, "appr": 31, "pend": 3, "rej": 1, "budget": 142000000.0},
+        {
+            "code": "NL_SH",
+            "name": "Khoa Nông Lâm & Sinh học",
+            "apps": 35,
+            "appr": 31,
+            "pend": 3,
+            "rej": 1,
+            "budget": 142000000.0,
+        },
         {"code": "DL", "name": "Khoa Du lịch", "apps": 48, "appr": 40, "pend": 6, "rej": 2, "budget": 188000000.0},
-        {"code": "TOAN_TIN", "name": "Khoa Toán - Tin học", "apps": 28, "appr": 25, "pend": 2, "rej": 1, "budget": 112000000.0},
+        {
+            "code": "TOAN_TIN",
+            "name": "Khoa Toán - Tin học",
+            "apps": 28,
+            "appr": 25,
+            "pend": 2,
+            "rej": 1,
+            "budget": 112000000.0,
+        },
     ]
 
-    faculty_items = [FacultyBreakdownItem(
-        faculty_code=f["code"],
-        faculty_name=f["name"],
-        total_applications=f["apps"],
-        approved_count=f["appr"],
-        pending_count=f["pend"],
-        rejected_count=f["rej"],
-        budget_disbursed=f["budget"],
-    ) for f in faculties_seed]
+    faculty_items = [
+        FacultyBreakdownItem(
+            faculty_code=f["code"],
+            faculty_name=f["name"],
+            total_applications=f["apps"],
+            approved_count=f["appr"],
+            pending_count=f["pend"],
+            rejected_count=f["rej"],
+            budget_disbursed=f["budget"],
+        )
+        for f in faculties_seed
+    ]
 
     total_budget = sum(float(f["budget"]) for f in faculties_seed)
 
@@ -4192,7 +4568,7 @@ async def get_ocr_review_queue(
             OcrReviewQueueItem(
                 document_id=doc.id,
                 title=doc.title or fallback_title,
-                document_number=f"2026/ĐN-CTSV/{idx+101}",
+                document_number=f"2026/ĐN-CTSV/{idx + 101}",
                 student_name=st_name,
                 student_id=st_mssv,
                 ocr_confidence=round(conf, 3),
@@ -4210,7 +4586,7 @@ async def get_ocr_review_queue(
                 OcrReviewQueueItem(
                     document_id=uuid.uuid4(),
                     title=s_title,
-                    document_number=f"2026/ĐN-CTSV/{idx+101}",
+                    document_number=f"2026/ĐN-CTSV/{idx + 101}",
                     student_name=s_name,
                     student_id=s_id,
                     ocr_confidence=0.64 + (idx * 0.04),
@@ -4257,7 +4633,9 @@ async def auto_extract_document_tags(
     doc_title = doc.title if doc else "Đơn đề nghị miễn giảm học phí theo Nghị định 81/2021"
     raw_text = ""
     first_ocr = doc.ocr_results[0] if (doc and doc.ocr_results) else None
-    ocr_str = (getattr(first_ocr, "corrected_text", None) or getattr(first_ocr, "raw_text", None)) if first_ocr else None
+    ocr_str = (
+        (getattr(first_ocr, "corrected_text", None) or getattr(first_ocr, "raw_text", None)) if first_ocr else None
+    )
     if ocr_str:
         raw_text = ocr_str
     else:
@@ -4339,7 +4717,9 @@ async def auto_extract_document_tags(
         document_title=doc_title,
         total_tags=len(tags),
         tags=tags,
-        suggested_policy_category="CHÍNH_SÁCH_MIỄN_GIẢM_HỌC_PHÍ_NĐ81" if "mồ côi" in text_lower or "nghèo" in text_lower else "HỌC_BỔNG_VÀ_HỖ_TRỢ_SINH_VIÊN",
+        suggested_policy_category="CHÍNH_SÁCH_MIỄN_GIẢM_HỌC_PHÍ_NĐ81"
+        if "mồ côi" in text_lower or "nghèo" in text_lower
+        else "HỌC_BỔNG_VÀ_HỖ_TRỢ_SINH_VIÊN",
         extracted_entities=entities,
     )
 
@@ -4401,7 +4781,7 @@ async def verify_priority_area_geo(
         )
 
     # Kiểm tra Khu vực II hoặc mặc định ngoài vùng
-    if "lạc dương" in addr_lower or "đam rông" in addr_lower:
+    if any(d in addr_lower or d in district_lower for d in ["lạc dương", "đam rông"]):
         return GeoAreaVerifyResponse(
             is_priority_area=True,
             area_category="KHU_VUC_II",
@@ -4467,7 +4847,13 @@ async def get_student_entity_graph(
 
     # 2. Xây dựng đồ thị Nodes & Edges
     nodes: list[GraphNode] = [
-        GraphNode(id=f"student_{student_id}", label=f"{student_name} ({student_id})", type="STUDENT", group="center", properties={"mssv": student_id, "faculty": faculty}),
+        GraphNode(
+            id=f"student_{student_id}",
+            label=f"{student_name} ({student_id})",
+            type="STUDENT",
+            group="center",
+            properties={"mssv": student_id, "faculty": faculty},
+        ),
         GraphNode(id="faculty_cntt", label=faculty, type="FACULTY", group="academic"),
         GraphNode(id="policy_nd81", label="Chính sách Miễn giảm NĐ 81/2021", type="POLICY", group="finance"),
         GraphNode(id="dorm_k3", label="Ký túc xá Khu B - Phòng 302", type="DORM", group="accommodation"),
@@ -4481,7 +4867,15 @@ async def get_student_entity_graph(
 
     for d in docs:
         node_id = f"doc_{d.id}"
-        nodes.append(GraphNode(id=node_id, label=d.title[:32] + "...", type="DOCUMENT", group="records", properties={"doc_id": str(d.id)}))
+        nodes.append(
+            GraphNode(
+                id=node_id,
+                label=d.title[:32] + "...",
+                type="DOCUMENT",
+                group="records",
+                properties={"doc_id": str(d.id)},
+            )
+        )
         edges.append(GraphEdge(source=f"student_{student_id}", target=node_id, relationship="NỘP_HỒ_SƠ", weight=0.6))
 
     # 3. Phân tích nguy cơ thôi học (Dropout Risk Assessment)
@@ -4493,14 +4887,30 @@ async def get_student_entity_graph(
         risk_score = 78.5
         primary_reason = "Tích tụ 2 cảnh báo học vụ liên tiếp kèm đơn nợ học phí quá hạn"
         action_recommendation = "Cố vấn học tập cần gặp trực tiếp và phối hợp Phòng CTSV hỗ trợ gia hạn học phí."
-        risk_factors.append(DropoutRiskFactor(factor_code="ACADEMIC_WARNING_2", severity="HIGH", description="Cảnh báo học vụ lần 2 trong học kỳ gần nhất."))
-        risk_factors.append(DropoutRiskFactor(factor_code="TUITION_DEBT_OVERDUE", severity="HIGH", description="Còn nợ học phí chưa hoàn thành hạn nộp quá 45 ngày."))
+        risk_factors.append(
+            DropoutRiskFactor(
+                factor_code="ACADEMIC_WARNING_2",
+                severity="HIGH",
+                description="Cảnh báo học vụ lần 2 trong học kỳ gần nhất.",
+            )
+        )
+        risk_factors.append(
+            DropoutRiskFactor(
+                factor_code="TUITION_DEBT_OVERDUE",
+                severity="HIGH",
+                description="Còn nợ học phí chưa hoàn thành hạn nộp quá 45 ngày.",
+            )
+        )
     else:
         risk_level = "SAFE"
         risk_score = 12.0
         primary_reason = "Hồ sơ học vụ và chính sách sinh viên hoàn toàn bình thường, đầy đủ chứng từ."
         action_recommendation = "Duy trì theo dõi định kỳ qua hệ thống CTSV tự động."
-        risk_factors.append(DropoutRiskFactor(factor_code="REGULAR_STATUS", severity="LOW", description="Tiến độ học tập và rèn luyện tốt."))
+        risk_factors.append(
+            DropoutRiskFactor(
+                factor_code="REGULAR_STATUS", severity="LOW", description="Tiến độ học tập và rèn luyện tốt."
+            )
+        )
 
     return StudentEntityGraphResponse(
         student_id=student_id,
@@ -4558,10 +4968,27 @@ async def get_document_audit_trail(
             edited_at=created_time,
             change_summary="Khởi tạo số hóa bản scan tự động từ máy quét",
             diffs=[
-                FieldDiffItem(field_name="student_name", original_ocr_value="Nguyên Van Hung", curated_value="Nguyễn Văn Hùng", is_changed=True),
-                FieldDiffItem(field_name="birth_date", original_ocr_value="12/O8/2003", curated_value="12/08/2003", is_changed=True),
-                FieldDiffItem(field_name="gpa_score", original_ocr_value="3.65", curated_value="3.65", is_changed=False),
-                FieldDiffItem(field_name="policy_support_amount", original_ocr_value="7.2OO.OOO đ", curated_value="7.200.000 đ", is_changed=True),
+                FieldDiffItem(
+                    field_name="student_name",
+                    original_ocr_value="Nguyên Van Hung",
+                    curated_value="Nguyễn Văn Hùng",
+                    is_changed=True,
+                ),
+                FieldDiffItem(
+                    field_name="birth_date",
+                    original_ocr_value="12/O8/2003",
+                    curated_value="12/08/2003",
+                    is_changed=True,
+                ),
+                FieldDiffItem(
+                    field_name="gpa_score", original_ocr_value="3.65", curated_value="3.65", is_changed=False
+                ),
+                FieldDiffItem(
+                    field_name="policy_support_amount",
+                    original_ocr_value="7.2OO.OOO đ",
+                    curated_value="7.200.000 đ",
+                    is_changed=True,
+                ),
             ],
         ),
         DocumentRevisionItem(
@@ -4571,8 +4998,18 @@ async def get_document_audit_trail(
             edited_at=updated_time,
             change_summary="Hiệu đính dấu tiếng Việt họ tên và số tiền hỗ trợ theo biên lai đối chiếu",
             diffs=[
-                FieldDiffItem(field_name="student_name", original_ocr_value="Nguyên Van Hung", curated_value="Nguyễn Văn Hùng", is_changed=True),
-                FieldDiffItem(field_name="policy_support_amount", original_ocr_value="7.2OO.OOO đ", curated_value="7.200.000 đ", is_changed=True),
+                FieldDiffItem(
+                    field_name="student_name",
+                    original_ocr_value="Nguyên Van Hung",
+                    curated_value="Nguyễn Văn Hùng",
+                    is_changed=True,
+                ),
+                FieldDiffItem(
+                    field_name="policy_support_amount",
+                    original_ocr_value="7.2OO.OOO đ",
+                    curated_value="7.200.000 đ",
+                    is_changed=True,
+                ),
             ],
         ),
     ]
@@ -4782,7 +5219,9 @@ async def search_hybrid_rrf(
                     rrf_score = float(h.get("_score") or (1.0 / (k_const + idx)))
                     bm25_r = idx if idx <= 5 else None
                     knn_r = idx if idx % 2 == 1 else idx + 1
-                    match_type = "HYBRID_BOTH" if (bm25_r and knn_r) else ("KEYWORD_ONLY" if bm25_r else "SEMANTIC_ONLY")
+                    match_type = (
+                        "HYBRID_BOTH" if (bm25_r and knn_r) else ("KEYWORD_ONLY" if bm25_r else "SEMANTIC_ONLY")
+                    )
 
                     results.append(
                         HybridRrfHit(
@@ -4868,12 +5307,16 @@ async def search_hybrid_rrf(
     bm25_sorted = sorted(bm25_scored, key=lambda x: x[0], reverse=True)
     knn_sorted = sorted(knn_scored, key=lambda x: x[0], reverse=True)
 
-    bm25_ranks: dict[UUID, tuple[int, float]] = {doc.id: (rank, score) for rank, (score, doc) in enumerate(bm25_sorted, 1)}
-    knn_ranks: dict[UUID, tuple[int, float]] = {doc.id: (rank, score) for rank, (score, doc) in enumerate(knn_sorted, 1)}
+    bm25_ranks: dict[UUID, tuple[int, float]] = {
+        doc.id: (rank, score) for rank, (score, doc) in enumerate(bm25_sorted, 1)
+    }
+    knn_ranks: dict[UUID, tuple[int, float]] = {
+        doc.id: (rank, score) for rank, (score, doc) in enumerate(knn_sorted, 1)
+    }
 
     all_matched_ids = set(bm25_ranks.keys()).union(set(knn_ranks.keys()))
     if not all_matched_ids:
-        fallback_docs = all_docs[:req.limit]
+        fallback_docs = all_docs[: req.limit]
         results = [
             HybridRrfHit(
                 document_id=d.id,
@@ -4914,7 +5357,7 @@ async def search_hybrid_rrf(
             score_rrf += 1.0 / (k_const + r_knn)
         rrf_scored.append((score_rrf, did))
 
-    rrf_sorted = sorted(rrf_scored, key=lambda x: x[0], reverse=True)[:req.limit]
+    rrf_sorted = sorted(rrf_scored, key=lambda x: x[0], reverse=True)[: req.limit]
 
     results = []
     both_cnt = 0
@@ -5013,9 +5456,7 @@ async def export_kibana_dashboard():
     return Response(
         content=content,
         media_type="application/ndjson",
-        headers={
-            "Content-Disposition": "attachment; filename=docuctsv_kibana_dashboard.ndjson"
-        },
+        headers={"Content-Disposition": "attachment; filename=docuctsv_kibana_dashboard.ndjson"},
     )
 
 
@@ -5069,6 +5510,3 @@ async def get_kibana_canvas_preview(
         canvas_elements_count=7,
         download_ndjson_url="/api/v1/search/kibana/export-dashboard",
     )
-
-
-

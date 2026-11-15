@@ -6,29 +6,26 @@ Validates raw document files in dataset/raw/ without modifying or deleting any f
 Handles empty dataset/raw/ gracefully with DATASET_STATUS = NOT_PROVIDED.
 """
 
-import os
-import re
 import hashlib
 import json
+import os
+import re
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List
 
-SUPPORTED_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.tiff'}
+SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff"}
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
 
 # Pattern: DOC_{TYPE}_{YYYYMMDD}_{UUID8}.{ext}
-CONVENTION_PATTERN = re.compile(
-    r'^DOC_[A-Z0-9_]+_\d{8}_[a-fA-F0-9]{8}\.(pdf|jpg|jpeg|png|tiff)$',
-    re.IGNORECASE
-)
+CONVENTION_PATTERN = re.compile(r"^DOC_[A-Z0-9_]+_\d{8}_[a-fA-F0-9]{8}\.(pdf|jpg|jpeg|png|tiff)$", re.IGNORECASE)
 
 # Magic bytes for corruption checks
 MAGIC_BYTES = {
-    '.pdf': b'%PDF',
-    '.png': b'\x89PNG\r\n\x1a\n',
-    '.jpg': b'\xff\xd8',
-    '.jpeg': b'\xff\xd8',
-    '.tiff': (b'II*\x00', b'MM\x00*')
+    ".pdf": b"%PDF",
+    ".png": b"\x89PNG\r\n\x1a\n",
+    ".jpg": b"\xff\xd8",
+    ".jpeg": b"\xff\xd8",
+    ".tiff": (b"II*\x00", b"MM\x00*"),
 }
 
 
@@ -61,10 +58,10 @@ def check_file_corrupted(filepath: str) -> bool:
     ext = Path(filepath).suffix.lower()
     if ext not in MAGIC_BYTES:
         return False  # Cannot check magic bytes, assume not corrupted
-    
+
     expected = MAGIC_BYTES[ext]
     try:
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             header = f.read(16)
             if isinstance(expected, tuple):
                 return not any(header.startswith(sig) for sig in expected)
@@ -77,7 +74,7 @@ def calculate_file_hash(filepath: str) -> str:
     """Calculate SHA256 hash of a file for duplicate detection."""
     sha256 = hashlib.sha256()
     try:
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             while chunk := f.read(8192):
                 sha256.update(chunk)
         return sha256.hexdigest()
@@ -93,7 +90,7 @@ def find_duplicate_files(raw_dir: str) -> Dict[str, List[str]]:
 
     for root, _, files in os.walk(raw_dir):
         for fname in files:
-            if fname.startswith('.'):
+            if fname.startswith("."):
                 continue
             fp = os.path.join(root, fname)
             fhash = calculate_file_hash(fp)
@@ -118,14 +115,14 @@ def validate_raw_dataset(raw_dir: str) -> Dict[str, Any]:
         "duplicates_count": 0,
         "errors": [],
         "warnings": [],
-        "file_details": []
+        "file_details": [],
     }
 
     if not os.path.isdir(raw_dir):
         report["warnings"].append(f"Directory not found: {raw_dir}")
         return report
 
-    files = [f for f in os.listdir(raw_dir) if not f.startswith('.')]
+    files = [f for f in os.listdir(raw_dir) if not f.startswith(".")]
     if not files:
         report["warnings"].append("dataset/raw/ is empty. DATASET_STATUS = NOT_PROVIDED.")
         return report
@@ -143,7 +140,7 @@ def validate_raw_dataset(raw_dir: str) -> Dict[str, Any]:
             "path": fp,
             "extension": Path(fname).suffix.lower(),
             "valid": True,
-            "issues": []
+            "issues": [],
         }
 
         # 1. Extension check
@@ -190,7 +187,8 @@ def validate_raw_dataset(raw_dir: str) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import sys
-    sys.stdout.reconfigure(encoding='utf-8')
+
+    sys.stdout.reconfigure(encoding="utf-8")
     raw_directory = os.path.join(os.path.dirname(__file__), "..", "dataset", "raw")
     result = validate_raw_dataset(raw_directory)
     print(json.dumps(result, indent=2, ensure_ascii=False))

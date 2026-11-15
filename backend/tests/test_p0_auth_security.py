@@ -11,14 +11,16 @@ Verifies:
 7. Rate limiting on /auth/login.
 8. Unhandled exceptions return generic message + request_id (no raw str(exc)).
 """
+
 import uuid
-import pytest
+
 import httpx
-from pydantic import ValidationError
+import pytest
 from app.core.config import Settings
 from app.core.security import create_access_token, decode_access_token
-from app.models.users import User
 from app.models.roles import Role
+from app.models.users import User
+from pydantic import ValidationError
 
 
 @pytest.mark.asyncio
@@ -55,10 +57,13 @@ async def test_p0_2_login_empty_hashed_password_rejected(async_client: httpx.Asy
         await db.commit()
 
     # Attempt to login with arbitrary password
-    res = await async_client.post("/api/v1/auth/login", json={
-        "username": test_uid,
-        "password": "any_password_123",
-    })
+    res = await async_client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": test_uid,
+            "password": "any_password_123",
+        },
+    )
     assert res.status_code == 401, f"Expected 401 but got {res.status_code}: {res.text}"
     assert "supabase" in res.json().get("detail", "").lower()
 
@@ -66,9 +71,12 @@ async def test_p0_2_login_empty_hashed_password_rejected(async_client: httpx.Asy
 @pytest.mark.asyncio
 async def test_p0_3_register_unauthenticated_rejected(async_client: httpx.AsyncClient):
     """3. POST /auth/register bắt buộc xác thực qua Bearer token."""
-    res = await async_client.post("/api/v1/auth/register", json={
-        "full_name": "Hacker",
-    })
+    res = await async_client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Hacker",
+        },
+    )
     assert res.status_code == 401
 
 
@@ -111,9 +119,10 @@ async def test_p0_5_secret_key_length_validation_in_production():
 @pytest.mark.asyncio
 async def test_p0_8_unhandled_exception_returns_generic_message_and_request_id():
     """8. Exception handler chung không để lộ str(exc), trả thông báo chung và request_id."""
+    import json
+
     from app.main import create_app
     from starlette.requests import Request
-    import json
 
     test_app = create_app()
     # Find unhandled exception handler

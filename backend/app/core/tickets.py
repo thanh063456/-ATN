@@ -1,6 +1,7 @@
 """
 backend/app/core/tickets.py — Single-use, short-lived file ticket manager
 """
+
 import secrets
 import time
 from typing import Any
@@ -49,4 +50,3 @@ def validate_and_consume_file_ticket(ticket: str, document_id: str, is_head: boo
 
     data["last_accessed_at"] = now
     return True
-

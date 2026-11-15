@@ -4,6 +4,7 @@ backend/app/core/config.py — Application Settings
 Đọc toàn bộ biến môi trường từ .env bằng pydantic-settings.
 Ref: .env.example, .ai/CODING_RULES.md (không hardcode credentials)
 """
+
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -13,8 +14,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _find_env_file() -> str:
-    """Tìm .env từ thư mục hiện tại hoặc thư mục cha."""
-    for p in [Path(".env"), Path("../.env"), Path("../../.env")]:
+    """Tìm .env từ thư mục hiện tại, thư mục cha hoặc thư mục gốc dự án."""
+    candidates = [
+        Path(".env"),
+        Path("../.env"),
+        Path("../../.env"),
+        Path(__file__).resolve().parents[2] / ".env",  # backend/.env
+        Path(__file__).resolve().parents[3] / ".env",  # ĐATN/.env
+        Path(__file__).resolve().parents[4] / ".env",  # workspace root .env
+    ]
+    for p in candidates:
         if p.exists():
             return str(p)
     return ".env"  # fallback — sẽ dùng env vars từ shell
@@ -62,18 +71,15 @@ class Settings(BaseSettings):
 
     # ── Database ──────────────────────────────────────────────────────
     # asyncpg URL — Supabase / PostgreSQL Connection
-    database_url: str = Field(
-        default="postgresql+asyncpg://postgres:YOUR_PASSWORD@localhost:5432/postgres"
-    )
+    database_url: str = Field(default="postgresql+asyncpg://postgres:YOUR_PASSWORD@localhost:5432/postgres")
     # psycopg2 URL — Alembic migration (Direct connection)
-    alembic_database_url: str = Field(
-        default="postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/postgres"
-    )
+    alembic_database_url: str = Field(default="postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/postgres")
 
     # Connection pool
-    db_pool_size: int = 5
-    db_max_overflow: int = 10
+    db_pool_size: int = 15
+    db_max_overflow: int = 15
     db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
 
     # ── Supabase ──────────────────────────────────────────────────
     supabase_url: str = Field(default="https://YOUR_PROJECT_REF.supabase.co")
@@ -127,30 +133,36 @@ class Settings(BaseSettings):
     trocr_model_name: str = "./models/trocr-vi/final_model"
     trocr_device: str = "cuda"
     trocr_batch_size: int = 16
+    trocr_max_new_tokens: int = 128
+    trocr_repetition_penalty: float = 1.15
+    trocr_no_repeat_ngram_size: int = 0
+    trocr_num_beams: int = 1
+    trocr_max_lines_per_page: int = 300
+    ocr_trocr_pdf_dpi: int = 200
 
     # DPI render PDF scan (200 DPI: cân bằng tối ưu giữa độ nét và tốc độ xử lý)
     ocr_pdf_dpi_default: int = 200
-    ocr_pdf_dpi_table_region: int = 300     # Render cao hơn cho vùng phát hiện bảng
-    ocr_pdf_dpi_fast: int = 150             # DPI nhanh dùng khi ocr_fast_mode=True
+    ocr_pdf_dpi_table_region: int = 300  # Render cao hơn cho vùng phát hiện bảng
+    ocr_pdf_dpi_fast: int = 150  # DPI nhanh dùng khi ocr_fast_mode=True
     ocr_fast_mode: bool = False
 
     # VietOCR Transformer decoder settings
     # Mặc định False (Greedy search) khi chạy CPU để tăng tốc độ gấp 4-6 lần (từ ~70s xuống ~12s/trang)
     ocr_beamsearch_enabled: bool = False
-    ocr_beam_size: int = 4                  # Beam size khi beamsearch=True
-    ocr_beam_width: int = 4                 # Backward compat alias
-    ocr_batch_size: int = 16                # Batch size predict_batch() với Padded Batching
-    ocr_max_lines_per_page: int = 300      # Tăng lên 300: đủ cho mọi trang A4 (40-80 dòng thực tế)
-    ocr_extract_tables: bool = True         # Bóc tách cấu trúc bảng biểu nếu có lưới bảng rõ ràng
+    ocr_beam_size: int = 4  # Beam size khi beamsearch=True
+    ocr_beam_width: int = 4  # Backward compat alias
+    ocr_batch_size: int = 16  # Batch size predict_batch() với Padded Batching
+    ocr_max_lines_per_page: int = 300  # Tăng lên 300: đủ cho mọi trang A4 (40-80 dòng thực tế)
+    ocr_extract_tables: bool = True  # Bóc tách cấu trúc bảng biểu nếu có lưới bảng rõ ràng
 
-    # OCR Scope settings
-    ocr_scope: Literal["first_page", "full"] = "first_page"
+    # OCR Scope settings (mặc định quét toàn văn bản tất cả các trang)
+    ocr_scope: Literal["first_page", "full"] = "full"
     ocr_first_page_count: int = 1
     ocr_rest_mode: Literal["off", "on_demand", "background"] = "on_demand"
 
     # Morphology kernel sizes cho phát hiện đường kẻ bảng
-    ocr_morph_kernel_horiz: int = 25       # Kernel ngang phát hiện đường kẻ ngang
-    ocr_morph_kernel_vert: int = 25        # Kernel dọc phát hiện đường kẻ dọc
+    ocr_morph_kernel_horiz: int = 25  # Kernel ngang phát hiện đường kẻ ngang
+    ocr_morph_kernel_vert: int = 25  # Kernel dọc phát hiện đường kẻ dọc
 
     # OCR Debug — lưu overlay ảnh khi OCR_DEBUG_DUMP=1 (chỉ dùng khi debug)
     # Overlay box (xanh = dòng hợp lệ) lưu vào logs/ocr_debug/<doc_id>/

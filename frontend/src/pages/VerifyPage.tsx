@@ -61,9 +61,7 @@ export const VerifyPage: React.FC = () => {
     <div
       style={{
         minHeight: "100vh",
-        backgroundColor: "#0f172a",
-        backgroundImage:
-          "radial-gradient(at 0% 0%, rgba(99,102,241,0.15) 0, transparent 55%), radial-gradient(at 100% 100%, rgba(6,182,212,0.12) 0, transparent 55%)",
+        backgroundColor: "#0e1e33",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -93,8 +91,8 @@ export const VerifyPage: React.FC = () => {
         <div
           style={{
             backgroundColor: "#ffffff",
-            borderRadius: "20px",
-            boxShadow: "0 25px 50px -12px rgba(0,0,0,0.35)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "0 20px 40px -10px rgba(0,0,0,0.3)",
             overflow: "hidden",
             border: "1px solid rgba(226,232,240,0.8)",
           }}
@@ -102,9 +100,7 @@ export const VerifyPage: React.FC = () => {
           {/* Header Banner */}
           <div
             style={{
-              background: data?.is_valid
-                ? "linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%)"
-                : "linear-gradient(135deg, #991b1b 0%, #b91c1c 100%)",
+              backgroundColor: data?.is_valid ? "#1e3a8a" : "#991b1b",
               color: "#ffffff",
               padding: "2rem 1.75rem",
               textAlign: "center",
@@ -185,7 +181,7 @@ export const VerifyPage: React.FC = () => {
                 <div
                   style={{
                     backgroundColor: "#f8fafc",
-                    borderRadius: "14px",
+                    borderRadius: "var(--radius-md)",
                     border: "1px solid #e2e8f0",
                     padding: "1.25rem",
                     display: "flex",
@@ -244,7 +240,7 @@ export const VerifyPage: React.FC = () => {
                     justifyContent: "center",
                     gap: "1rem",
                     padding: "1rem",
-                    borderRadius: "12px",
+                    borderRadius: "var(--radius-md)",
                     border: "2px dashed #bbf7d0",
                     backgroundColor: "#f0fdf4",
                   }}

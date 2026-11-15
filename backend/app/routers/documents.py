@@ -14,22 +14,28 @@ Bao gồm:
 - GET /documents/export/excel: Xuất danh sách hồ sơ ra file Excel (.xlsx / .csv)
 - GET /documents/{id}/verification: Tra cứu mã QR xác thực điện tử
 """
+
 import asyncio
 import csv
-from datetime import datetime, timezone
 import hashlib
 import io
 import math
 import os
 import re
 import urllib.parse
+from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
+
+from PIL import Image
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from loguru import logger
-from sqlalchemy import cast, func, select, String
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
+
+from app.core.cache import app_cache
 
 from app.core.config import settings
 from app.core.constants import DEFAULT_OCR_ENGINE, OCR_ENGINES
@@ -55,30 +61,37 @@ from app.schemas.documents import (
     AIExtractResponse,
     AIRefineRequest,
     AIRefineResponse,
+    DetectedStampSchema,
     DocumentDetailResponse,
     DocumentListItem,
     DocumentListResponse,
     DocumentMetadataResponse,
     DocumentUploadResponse,
+    ExtractedTableSchema,
     OCRCorrectionRequest,
     OCRResultResponse,
+    SetPublicRequest,
+    StampDetectionResponse,
+    TableCellSchema,
+    TableExtractionResponse,
     TagSummaryItem,
     TagSummaryResponse,
+    TypeOverrideReq,
     UpdateTagsRequest,
     VerificationResponse,
-    TypeOverrideReq,
-    SetPublicRequest,
 )
 from app.services.ai_service import ai_service
 from app.services.document_service import DocumentService
 from app.services.extraction_service import extraction_service
-from app.services.vietocr_service import vietocr_service
 from app.services.search_index_service import search_index_service
+from app.services.stamp_service import stamp_service
 from app.services.storage_service import storage_service
+from app.services.table_service import table_service
 from app.services.tag_service import tag_service
+from app.services.vietocr_service import vietocr_service
 from app.worker.tasks import (
-    async_process_ocr,
     async_process_all_ocr_engines,
+    async_process_ocr,
     process_all_ocr_task,
 )
 
@@ -87,6 +100,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 def _is_redis_available() -> bool:
     import socket
+
     try:
         sock = socket.create_connection((settings.redis_host, settings.redis_port), timeout=0.2)
         sock.close()
@@ -98,7 +112,7 @@ def _is_redis_available() -> bool:
 def _sanitize_filename(name: str) -> str:
     """Loại bỏ ký tự nguy hiểm và path traversal khỏi tên file upload."""
     base = os.path.basename(name.replace("\\", "/"))
-    sanitized = re.sub(r'[^a-zA-Z0-9._\-+ ()\[\]]', '_', base)
+    sanitized = re.sub(r"[^a-zA-Z0-9._\-+ ()\[\]]", "_", base)
     return sanitized.strip() or "uploaded_document"
 
 
@@ -129,7 +143,9 @@ async def list_documents(
     page: int = Query(1, ge=1, description="Trang hiện tại"),
     page_size: int = Query(20, ge=1, le=500, description="Số mục trên mỗi trang"),
     ocr_status: str | None = Query(None, description="Lọc theo trạng thái OCR"),
-    approval_status: str | None = Query(None, description="Lọc theo trạng thái phê duyệt (APPROVED | PENDING | REJECTED)"),
+    approval_status: str | None = Query(
+        None, description="Lọc theo trạng thái phê duyệt (APPROVED | PENDING | REJECTED)"
+    ),
     category_id: UUID | None = Query(None, description="Lọc theo danh mục"),
     doc_type_code: str | None = Query(None, description="Lọc theo mã loại văn bản (vd: THONG_BAO, DON_TU)"),
     doc_group: str | None = Query(None, description="Lọc theo nhóm văn bản (vd: VAN_BAN_HANH_CHINH)"),
@@ -146,9 +162,9 @@ async def list_documents(
         select(Document)
         .where(Document.is_deleted == False)
         .options(
-            selectinload(Document.uploader),
-            selectinload(Document.category),
-            selectinload(Document.ocr_results),
+            joinedload(Document.uploader),
+            joinedload(Document.category),
+            selectinload(Document.ocr_results).defer(OCRResult.raw_text).defer(OCRResult.corrected_text),
             selectinload(Document.metadata_),
             selectinload(Document.processing_jobs),
         )
@@ -158,10 +174,7 @@ async def list_documents(
     if current_user:
         role_name = current_user.role.name if current_user.role else "STUDENT"
         if role_name not in ("ADMIN", "STAFF"):
-            stmt = stmt.where(
-                (Document.is_public == True) |
-                (Document.uploaded_by == current_user.id)
-            )
+            stmt = stmt.where((Document.is_public == True) | (Document.uploaded_by == current_user.id))
     else:
         stmt = stmt.where(Document.is_public == True)
 
@@ -185,6 +198,7 @@ async def list_documents(
         stmt = stmt.join(Document.category).where(DocumentCategory.code == doc_type_code)
     if doc_group:
         from app.core.doc_types_config import DOC_TYPES_CONFIG
+
         group_codes = [t.code for t in DOC_TYPES_CONFIG.types if t.group == doc_group]
         if group_codes:
             stmt = stmt.join(Document.category).where(DocumentCategory.code.in_(group_codes))
@@ -192,15 +206,15 @@ async def list_documents(
         search_pattern = f"%{search.strip()}%"
         stmt = stmt.outerjoin(Document.metadata_).outerjoin(Document.ocr_results).outerjoin(Document.uploader)
         stmt = stmt.where(
-            Document.title.ilike(search_pattern) |
-            Document.original_filename.ilike(search_pattern) |
-            DocumentMetadata.student_id.ilike(search_pattern) |
-            DocumentMetadata.student_name.ilike(search_pattern) |
-            DocumentMetadata.document_number.ilike(search_pattern) |
-            User.mssv.ilike(search_pattern) |
-            User.full_name.ilike(search_pattern) |
-            OCRResult.raw_text.ilike(search_pattern) |
-            OCRResult.corrected_text.ilike(search_pattern)
+            Document.title.ilike(search_pattern)
+            | Document.original_filename.ilike(search_pattern)
+            | DocumentMetadata.student_id.ilike(search_pattern)
+            | DocumentMetadata.student_name.ilike(search_pattern)
+            | DocumentMetadata.document_number.ilike(search_pattern)
+            | User.mssv.ilike(search_pattern)
+            | User.full_name.ilike(search_pattern)
+            | OCRResult.raw_text.ilike(search_pattern)
+            | OCRResult.corrected_text.ilike(search_pattern)
         ).distinct()
 
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -217,13 +231,11 @@ async def list_documents(
 
     for doc in docs:
         confidence = None
-        raw_or_corr_text = ""
         is_corrected = False
         for ocr in doc.ocr_results:
             if ocr.is_latest:
                 if ocr.confidence_score is not None:
                     confidence = float(ocr.confidence_score)
-                raw_or_corr_text = ocr.corrected_text or ocr.raw_text or ""
                 is_corrected = ocr.is_corrected
                 break
 
@@ -243,9 +255,9 @@ async def list_documents(
             saved_tags = extra_dict.get("tags")
             if saved_tags and isinstance(saved_tags, list):
                 doc_tags = tag_service.sort_tags_by_priority(saved_tags)
-            elif raw_or_corr_text:
+            else:
                 doc_tags = tag_service.generate_auto_tags(
-                    text=raw_or_corr_text,
+                    text=doc.title or "",
                     metadata={
                         "student_id": uploader_mssv,
                         "student_name": uploader_name,
@@ -255,19 +267,16 @@ async def list_documents(
                     is_corrected=is_corrected,
                     confidence_score=confidence,
                 )
-        elif raw_or_corr_text:
+        else:
             doc_tags = tag_service.generate_auto_tags(
-                text=raw_or_corr_text,
+                text=doc.title or "",
                 metadata={},
                 ocr_status=doc.ocr_status,
             )
 
         # Lọc theo tag nếu được yêu cầu
         if target_tag:
-            tag_matches = any(
-                target_tag == t.lower() or target_tag == t.lstrip("#").lower()
-                for t in doc_tags
-            )
+            tag_matches = any(target_tag == t.lower() or target_tag == t.lstrip("#").lower() for t in doc_tags)
             if not tag_matches:
                 continue
 
@@ -379,17 +388,19 @@ async def export_documents_excel(
     # Write UTF-8 BOM để Excel hiển thị đúng tiếng Việt không bị lỗi font
     output.write("\ufeff")
     writer = csv.writer(output)
-    writer.writerow([
-        "Mã hồ sơ",
-        "Tiêu đề hồ sơ",
-        "Tên file gốc",
-        "MSSV",
-        "Họ và tên sinh viên",
-        "Danh mục",
-        "Trạng thái OCR",
-        "Độ tin cậy OCR (%)",
-        "Thời gian tải lên",
-    ])
+    writer.writerow(
+        [
+            "Mã hồ sơ",
+            "Tiêu đề hồ sơ",
+            "Tên file gốc",
+            "MSSV",
+            "Họ và tên sinh viên",
+            "Danh mục",
+            "Trạng thái OCR",
+            "Độ tin cậy OCR (%)",
+            "Thời gian tải lên",
+        ]
+    )
 
     for d in docs:
         conf = ""
@@ -398,21 +409,31 @@ async def export_documents_excel(
                 conf = f"{float(o.confidence_score) * 100:.1f}%"
                 break
 
-        mssv = (d.metadata_.student_id if d.metadata_ and d.metadata_.student_id else (d.uploader.mssv if d.uploader else "")) or ""
-        name = (d.metadata_.student_name if d.metadata_ and d.metadata_.student_name else (d.uploader.full_name if d.uploader else "")) or ""
+        mssv = (
+            d.metadata_.student_id
+            if d.metadata_ and d.metadata_.student_id
+            else (d.uploader.mssv if d.uploader else "")
+        ) or ""
+        name = (
+            d.metadata_.student_name
+            if d.metadata_ and d.metadata_.student_name
+            else (d.uploader.full_name if d.uploader else "")
+        ) or ""
         cat = d.category.name if d.category else "Chưa phân loại"
 
-        writer.writerow([
-            str(d.id),
-            d.title,
-            d.original_filename,
-            mssv,
-            name,
-            cat,
-            d.ocr_status,
-            conf,
-            d.created_at.strftime("%d/%m/%Y %H:%M:%S") if d.created_at else "",
-        ])
+        writer.writerow(
+            [
+                str(d.id),
+                d.title,
+                d.original_filename,
+                mssv,
+                name,
+                cat,
+                d.ocr_status,
+                conf,
+                d.created_at.strftime("%d/%m/%Y %H:%M:%S") if d.created_at else "",
+            ]
+        )
 
     csv_data = output.getvalue().encode("utf-8-sig")
     filename = f"Danh_sach_ho_so_CTSV_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
@@ -455,19 +476,17 @@ async def upload_document(
         )
 
     image_exts = {"jpg", "jpeg", "png", "tiff", "tif", "bmp", "webp"}
-    is_all_images = all(
-        (f.filename or "").rsplit(".", 1)[-1].lower() in image_exts
-        for f in upload_list
-    )
+    is_all_images = all((f.filename or "").rsplit(".", 1)[-1].lower() in image_exts for f in upload_list)
 
     if len(upload_list) > 1 and is_all_images:
         import io
         import re
+
         from PIL import Image as PILImage
 
         def natural_sort_key(f: UploadFile):
             name = f.filename or ""
-            return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', name)]
+            return [int(text) if text.isdigit() else text.lower() for text in re.split(r"(\d+)", name)]
 
         sorted_files = sorted(upload_list, key=natural_sort_key)
         pil_images = []
@@ -487,7 +506,9 @@ async def upload_document(
                 logger.warning(f"Failed to open image {f_item.filename} for PDF merge: {e}")
 
         if not pil_images:
-            raise AppException("Không thể đọc định dạng các file ảnh đã tải lên", status_code=status.HTTP_400_BAD_REQUEST)
+            raise AppException(
+                "Không thể đọc định dạng các file ảnh đã tải lên", status_code=status.HTTP_400_BAD_REQUEST
+            )
 
         out_pdf_buf = io.BytesIO()
         pil_images[0].save(out_pdf_buf, format="PDF", save_all=True, append_images=pil_images[1:])
@@ -497,11 +518,11 @@ async def upload_document(
 
         # Lấy tên file gốc hợp nhất sạch đẹp
         first_stem = Path(sorted_files[0].filename or "document").stem
-        clean_stem = re.sub(r'[-_]?(?:images?|page|p|scan)[-_]?\d+$', '', first_stem, flags=re.IGNORECASE).strip('-_ ')
+        clean_stem = re.sub(r"[-_]?(?:images?|page|p|scan)[-_]?\d+$", "", first_stem, flags=re.IGNORECASE).strip("-_ ")
         if not clean_stem:
             clean_stem = first_stem
         filename = f"{_sanitize_filename(clean_stem)}.pdf"
-        doc_title = title.strip() if title and title.strip() else clean_stem.replace('_', ' ')
+        doc_title = title.strip() if title and title.strip() else clean_stem.replace("_", " ")
         content_type = "application/pdf"
     else:
         single_file = upload_list[0]
@@ -565,6 +586,9 @@ async def upload_document(
     else:
         asyncio.create_task(async_process_all_ocr_engines(str(document.id), task_id="async_worker"))
 
+    app_cache.invalidate("dashboard_stats")
+    app_cache.invalidate("tags_summary")
+
     return DocumentUploadResponse(
         id=document.id,
         title=document.title,
@@ -596,7 +620,9 @@ async def get_document(
     doc_service = DocumentService(db)
     detail = await doc_service.get_document_by_id(document_id)
 
-    role_name = (current_user.role.name if current_user and current_user.role else "STUDENT") if current_user else "GUEST"
+    role_name = (
+        (current_user.role.name if current_user and current_user.role else "STUDENT") if current_user else "GUEST"
+    )
     if role_name not in ("ADMIN", "STAFF"):
         is_owner = bool(current_user and detail.uploaded_by is not None and detail.uploaded_by == current_user.id)
         is_doc_public = getattr(detail, "is_public", False)
@@ -612,7 +638,9 @@ async def get_document(
             if signed:
                 detail.file_url = signed
             else:
-                ticket = create_file_ticket(str(detail.id), str(current_user.id) if current_user else None, ttl_seconds=300)
+                ticket = create_file_ticket(
+                    str(detail.id), str(current_user.id) if current_user else None, ttl_seconds=300
+                )
                 detail.file_url = f"/api/v1/documents/{detail.id}/file?ticket={ticket}"
         except Exception as exc:
             logger.debug("Could not generate pre-signed file URL: {err}", err=str(exc))
@@ -679,6 +707,7 @@ async def view_document_file(
     # Nếu truy cập qua thẻ <img> hoặc <iframe> không gửi được Authorization header, giải mã token từ Query
     if not current_user and token:
         from app.core.dependencies import _resolve_user_from_token
+
         current_user = await _resolve_user_from_token(token, db)
 
     doc = await db.get(Document, document_id)
@@ -694,7 +723,7 @@ async def view_document_file(
     # 1. Vé hợp lệ (ticket) trong thời hạn TTL
     # 2. Hoặc tài liệu APPROVED (Đã phê duyệt điện tử CTSV)
     # 3. Hoặc người dùng đăng nhập là ADMIN/STAFF hoặc chính người upload
-    is_head = (request.method == "HEAD")
+    is_head = request.method == "HEAD"
     is_allowed = False
     if ticket and validate_and_consume_file_ticket(ticket, str(document_id), is_head=is_head):
         is_allowed = True
@@ -753,13 +782,10 @@ async def _get_target_ocr_result(
     """
     target_engine_str = engine if isinstance(engine, str) and engine.strip() else None
     if target_engine_str:
-        stmt = (
-            select(OCRResult)
-            .where(
-                OCRResult.document_id == document_id,
-                OCRResult.ocr_engine == target_engine_str,
-                OCRResult.is_latest == True,
-            )
+        stmt = select(OCRResult).where(
+            OCRResult.document_id == document_id,
+            OCRResult.ocr_engine == target_engine_str,
+            OCRResult.is_latest == True,
         )
         res = await db.execute(stmt)
         record = res.scalars().first()
@@ -782,13 +808,10 @@ async def _get_target_ocr_result(
         return corr_record
 
     # Ưu tiên VietOCR (engine chuẩn)
-    stmt_viet = (
-        select(OCRResult)
-        .where(
-            OCRResult.document_id == document_id,
-            OCRResult.is_latest == True,
-            OCRResult.ocr_engine == "vietocr",
-        )
+    stmt_viet = select(OCRResult).where(
+        OCRResult.document_id == document_id,
+        OCRResult.is_latest == True,
+        OCRResult.ocr_engine == "vietocr",
     )
     res_viet = await db.execute(stmt_viet)
     viet_record = res_viet.scalars().first()
@@ -835,13 +858,10 @@ async def correct_ocr_text(
         )
 
     # Tìm OCRResult mới nhất của engine này
-    stmt = (
-        select(OCRResult)
-        .where(
-            OCRResult.document_id == document_id,
-            OCRResult.ocr_engine == target_engine,
-            OCRResult.is_latest == True,
-        )
+    stmt = select(OCRResult).where(
+        OCRResult.document_id == document_id,
+        OCRResult.ocr_engine == target_engine,
+        OCRResult.is_latest == True,
     )
     res = await db.execute(stmt)
     ocr_result = res.scalars().first()
@@ -955,8 +975,12 @@ async def correct_ocr_text(
     except Exception as exc:
         logger.warning("Failed to update corrected text and tags in ES: {err}", err=str(exc))
 
-    logger.info("Updated corrected OCR text for doc {id} (engine={eng}) by user {user}",
-                id=document_id, eng=target_engine, user=current_user.id)
+    logger.info(
+        "Updated corrected OCR text for doc {id} (engine={eng}) by user {user}",
+        id=document_id,
+        eng=target_engine,
+        user=current_user.id,
+    )
     doc_service = DocumentService(db)
     return await doc_service.get_document_by_id(document_id)
 
@@ -1030,16 +1054,17 @@ async def process_document_ocr_full(
     db.add(audit_entry)
     await db.commit()
 
-    from app.worker.tasks import process_ocr_full_task, async_process_ocr_full
+    from app.worker.tasks import async_process_ocr_full, process_ocr_full_task
+
     if _is_redis_available():
         process_ocr_full_task.delay(str(document_id))
     else:
         asyncio.create_task(async_process_ocr_full(str(document_id)))
-    
+
     return {
         "message": "Đang chạy OCR cho các trang còn lại của tài liệu",
         "document_id": document_id,
-        "status": "PROCESSING"
+        "status": "PROCESSING",
     }
 
 
@@ -1057,7 +1082,7 @@ async def get_document_ocr_full_status(
         raise DocumentNotFoundException(str(document_id))
 
     extra = (doc.metadata_.extra or {}) if doc.metadata_ else {}
-    ocr_scope = extra.get("ocr_scope", "first_page")
+    ocr_scope = extra.get("ocr_scope", "full")
     pages_ocr = extra.get("pages_ocr", 1)
     page_count = doc.page_count or 1
 
@@ -1083,7 +1108,9 @@ async def override_document_type(
     db: AsyncSession = Depends(get_db),
 ):
     """Ghi đè thủ công phân loại tài liệu (Sửa loại văn bản)."""
-    doc = await db.get(Document, document_id, options=[selectinload(Document.category), selectinload(Document.metadata_)])
+    doc = await db.get(
+        Document, document_id, options=[selectinload(Document.category), selectinload(Document.metadata_)]
+    )
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
@@ -1096,6 +1123,7 @@ async def override_document_type(
     doc.category_id = category.id
     if doc.metadata_:
         from sqlalchemy.orm.attributes import flag_modified
+
         current_extra = dict(doc.metadata_.extra or {})
         current_extra["document_type"] = category.name
         current_extra["doc_type_code"] = category.code
@@ -1104,7 +1132,7 @@ async def override_document_type(
         doc.metadata_.extra = current_extra
         doc.metadata_.updated_at = datetime.now()
         flag_modified(doc.metadata_, "extra")
-        
+
     doc.updated_at = datetime.now()
 
     # Ghi nhận AuditLog hành động sửa loại văn bản
@@ -1123,8 +1151,9 @@ async def override_document_type(
     await db.commit()
 
     # Re-index in ES
-    from app.services.search_index_service import search_index_service
     from app.core.elasticsearch import get_es_client, is_es_available
+    from app.services.search_index_service import search_index_service
+
     if is_es_available():
         es = get_es_client()
         try:
@@ -1140,16 +1169,13 @@ async def override_document_type(
                     "document_type": category.code,
                     "updated_at": datetime.now().isoformat(),
                 },
-                refresh="wait_for"
+                refresh="wait_for",
             )
         except Exception as exc:
             logger.warning("ES update type failed: {}", str(exc))
 
-    return {
-        "message": "Sửa loại văn bản thành công",
-        "category_code": category.code,
-        "category_name": category.name
-    }
+    return {"message": "Sửa loại văn bản thành công", "category_code": category.code, "category_name": category.name}
+
 
 @router.get(
     "/{document_id}/ocr-results/{engine}",
@@ -1173,13 +1199,10 @@ async def get_document_ocr_result_by_engine(
     if not doc or doc.is_deleted:
         raise DocumentNotFoundException(str(document_id))
 
-    stmt = (
-        select(OCRResult)
-        .where(
-            OCRResult.document_id == document_id,
-            OCRResult.ocr_engine == engine,
-            OCRResult.is_latest == True,
-        )
+    stmt = select(OCRResult).where(
+        OCRResult.document_id == document_id,
+        OCRResult.ocr_engine == engine,
+        OCRResult.is_latest == True,
     )
     res = await db.execute(stmt)
     ocr = res.scalars().first()
@@ -1233,49 +1256,35 @@ async def get_tags_summary(
     Thống kê tần suất xuất hiện của tất cả các nhãn trong hệ thống,
     kèm phân cấp mức độ ưu tiên và màu sắc trực quan (Red, Amber, Blue, Purple, Gray).
     """
+    cached = app_cache.get("tags_summary")
+    if cached is not None:
+        return cached
+
+    # Truy vấn siêu tốc chỉ đọc trường extra từ DocumentMetadata của các tài liệu chưa bị xóa
     stmt = (
-        select(Document)
+        select(DocumentMetadata.extra)
+        .join(Document, Document.id == DocumentMetadata.document_id)
         .where(Document.is_deleted == False)
-        .options(
-            selectinload(Document.metadata_),
-            selectinload(Document.ocr_results),
-        )
     )
     res = await db.execute(stmt)
-    docs = res.scalars().all()
+    extras = res.scalars().all()
 
     tag_counts: dict[str, int] = {}
-    for doc in docs:
-        doc_tags: list[str] = []
-        raw_text = ""
-        for ocr in doc.ocr_results:
-            if ocr.is_latest:
-                raw_text = ocr.corrected_text or ocr.raw_text or ""
-                break
-
-        if doc.metadata_ and doc.metadata_.extra and "tags" in doc.metadata_.extra:
-            saved = doc.metadata_.extra.get("tags")
+    for extra in extras:
+        if extra and isinstance(extra, dict) and "tags" in extra:
+            saved = extra.get("tags")
             if isinstance(saved, list):
-                doc_tags = saved
-        elif raw_text:
-            doc_tags = tag_service.generate_auto_tags(
-                text=raw_text,
-                metadata={
-                    "student_id": doc.metadata_.student_id if doc.metadata_ else None,
-                    "student_name": doc.metadata_.student_name if doc.metadata_ else None,
-                },
-                ocr_status=doc.ocr_status,
-            )
-
-        for t in set(doc_tags):
-            if t:
-                tag_counts[t] = tag_counts.get(t, 0) + 1
+                for t in set(saved):
+                    if t:
+                        tag_counts[t] = tag_counts.get(t, 0) + 1
 
     items: list[TagSummaryItem] = []
     for tag, count in tag_counts.items():
         prio = tag_service.get_tag_priority(tag)
         color = tag_service.get_tag_color(tag)
-        category = "Ưu tiên" if prio >= 90 else ("Chính sách" if prio >= 70 else ("Định danh" if prio >= 30 else "Thủ tục"))
+        category = (
+            "Ưu tiên" if prio >= 90 else ("Chính sách" if prio >= 70 else ("Định danh" if prio >= 30 else "Thủ tục"))
+        )
         items.append(
             TagSummaryItem(
                 tag=tag,
@@ -1289,10 +1298,12 @@ async def get_tags_summary(
     # Sắp xếp theo thứ tự ưu tiên từ cao đến thấp, sau đó theo số lượng
     items.sort(key=lambda x: (x.priority, x.count), reverse=True)
 
-    return TagSummaryResponse(
+    resp = TagSummaryResponse(
         items=items,
         total_tags=len(items),
     )
+    app_cache.set("tags_summary", resp, ttl=60)
+    return resp
 
 
 @router.put(
@@ -1341,6 +1352,8 @@ async def update_document_tags(
     )
     db.add(audit)
     await db.commit()
+
+    app_cache.invalidate("tags_summary")
 
     logger.info("Updated tags for doc {id}: {tags}", id=document_id, tags=sorted_tags)
     doc_service = DocumentService(db)
@@ -1423,8 +1436,12 @@ async def auto_tag_document(
     except Exception as exc:
         logger.warning("Failed to sync auto-tags to ES: {err}", err=str(exc))
 
-    logger.info("Auto-tagged doc {id} with {count} tags (engine={eng})",
-                id=document_id, count=len(auto_tags), eng=ocr.ocr_engine if ocr else "none")
+    logger.info(
+        "Auto-tagged doc {id} with {count} tags (engine={eng})",
+        id=document_id,
+        count=len(auto_tags),
+        eng=ocr.ocr_engine if ocr else "none",
+    )
     doc_service = DocumentService(db)
     return await doc_service.get_document_by_id(document_id)
 
@@ -1487,10 +1504,14 @@ async def trigger_extract_fields(
         )
         db.add(meta_obj)
     else:
-        if extracted.get("student_id"): meta_obj.student_id = extracted["student_id"]
-        if extracted.get("student_name"): meta_obj.student_name = extracted["student_name"]
-        if extracted.get("document_date"): meta_obj.document_date = extracted["document_date"]
-        if extracted.get("document_number"): meta_obj.document_number = extracted["document_number"]
+        if extracted.get("student_id"):
+            meta_obj.student_id = extracted["student_id"]
+        if extracted.get("student_name"):
+            meta_obj.student_name = extracted["student_name"]
+        if extracted.get("document_date"):
+            meta_obj.document_date = extracted["document_date"]
+        if extracted.get("document_number"):
+            meta_obj.document_number = extracted["document_number"]
         current_extra = dict(meta_obj.extra or {})
         current_extra.update(extra_payload)
         meta_obj.extra = current_extra
@@ -1681,8 +1702,16 @@ async def get_document_verification(
         raise DocumentNotFoundException(str(document_id))
 
     is_approved = doc.ocr_status == "APPROVED"
-    raw_name = doc.metadata_.student_name if doc.metadata_ and doc.metadata_.student_name else (doc.uploader.full_name if doc.uploader else "Sinh viên")
-    raw_mssv = doc.metadata_.student_id if doc.metadata_ and doc.metadata_.student_id else (doc.uploader.mssv if doc.uploader else None)
+    raw_name = (
+        doc.metadata_.student_name
+        if doc.metadata_ and doc.metadata_.student_name
+        else (doc.uploader.full_name if doc.uploader else "Sinh viên")
+    )
+    raw_mssv = (
+        doc.metadata_.student_id
+        if doc.metadata_ and doc.metadata_.student_id
+        else (doc.uploader.mssv if doc.uploader else None)
+    )
 
     # Bảo vệ quyền riêng tư nếu người tra cứu không phải chủ tài liệu hoặc cán bộ
     is_privileged = False
@@ -1765,6 +1794,7 @@ async def approve_document(
         logger.warning("Failed to update status in ES: {err}", err=str(exc))
 
     logger.info("Approved document {id} by user {user}", id=document_id, user=current_user.id)
+    app_cache.invalidate("dashboard_stats")
     doc_service = DocumentService(db)
     return await doc_service.get_document_by_id(document_id)
 
@@ -1811,6 +1841,7 @@ async def reject_document(
         logger.warning("Failed to update status in ES: {err}", err=str(exc))
 
     logger.info("Rejected document {id} by user {user}", id=document_id, user=current_user.id)
+    app_cache.invalidate("dashboard_stats")
     doc_service = DocumentService(db)
     return await doc_service.get_document_by_id(document_id)
 
@@ -1856,6 +1887,152 @@ async def set_document_public_status(
     except Exception as exc:
         logger.warning("Failed to update is_public in ES: {err}", err=str(exc))
 
-    logger.info("Set public status for doc {id} to {pub} by user {user}", id=document_id, pub=req.is_public, user=current_user.id)
+    logger.info(
+        "Set public status for doc {id} to {pub} by user {user}",
+        id=document_id,
+        pub=req.is_public,
+        user=current_user.id,
+    )
     doc_service = DocumentService(db)
     return await doc_service.get_document_by_id(document_id)
+
+
+# ── Table & Red Stamp Extraction Endpoints ────────────────────────────────────
+async def _load_document_image(doc: Document, page_idx: int = 0) -> Image.Image:
+    """Tải tệp từ MinIO/Supabase Storage và chuyển đổi thành PIL Image (hỗ trợ cả PDF lẫn ảnh)."""
+    file_bytes = await asyncio.to_thread(storage_service.get_file, doc.minio_object_key)
+    if not file_bytes:
+        raise AppException(message="Không tìm thấy file trên hệ thống lưu trữ", status_code=404)
+
+    ft = (doc.file_type or "").lower().strip()
+    if ft == "pdf" or file_bytes.startswith(b"%PDF"):
+        try:
+            import fitz
+
+            pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+            if len(pdf_doc) == 0:
+                raise AppException(message="Tệp PDF không có trang nào", status_code=400)
+            page = pdf_doc.load_page(min(page_idx, len(pdf_doc) - 1))
+            pix = page.get_pixmap(dpi=150)
+            return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
+        except Exception as pdf_err:
+            logger.warning(f"Lỗi render PDF sang ảnh qua PyMuPDF: {pdf_err}")
+            raise AppException(message=f"Không thể đọc trang PDF: {pdf_err}", status_code=500)
+    else:
+        return Image.open(io.BytesIO(file_bytes)).convert("RGB")
+
+
+@router.post(
+    "/{document_id}/detect-stamp",
+    response_model=StampDetectionResponse,
+    summary="Phát hiện và bóc tách con dấu đỏ bằng không gian màu HSV & Phép toán hình thái học",
+)
+async def detect_document_stamp(
+    document_id: UUID,
+    page: int = Query(0, ge=0, description="Chỉ số trang cần quét dấu đỏ (bắt đầu từ 0)"),
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+) -> StampDetectionResponse:
+    """
+    Sử dụng kỹ thuật phân tích dải màu HSV (H: 0-12 & 165-180) kết hợp phép toán hình thái học
+    để phát hiện con dấu đỏ, trích xuất ảnh dấu mộc và khôi phục nét chữ đen bị con dấu đè lên.
+    """
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    image = await _load_document_image(doc, page_idx=page)
+    res = await asyncio.to_thread(stamp_service.detect_and_extract_stamps, image)
+
+    return StampDetectionResponse(
+        document_id=doc.id,
+        has_stamp=res.has_stamp,
+        stamps=[
+            DetectedStampSchema(
+                bbox=s.bbox,
+                confidence=s.confidence,
+                area=s.area,
+                aspect_ratio=s.aspect_ratio,
+                image_base64=s.image_base64,
+                is_circular=s.is_circular,
+            )
+            for s in res.stamps
+        ],
+        cleaned_image_base64=res.cleaned_image_base64,
+        red_pixel_ratio=res.red_pixel_ratio,
+    )
+
+
+@router.post(
+    "/{document_id}/extract-tables",
+    response_model=TableExtractionResponse,
+    summary="Bóc tách cấu trúc bảng biểu bằng OpenCV Morphology và VietOCR",
+)
+async def extract_document_tables(
+    document_id: UUID,
+    page: int | None = Query(None, description="Chỉ số trang cần bóc tách (0-based). Nếu bỏ trống hoặc -1, bóc tách toàn bộ tài liệu."),
+    ocr_cells: bool = Query(True, description="Chạy VietOCR nhận diện chữ trong từng ô"),
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
+    db: AsyncSession = Depends(get_db),
+) -> TableExtractionResponse:
+    """
+    Sử dụng toán tử hình thái học quét các đường kẻ ngang và dọc để tìm khung lưới bảng biểu,
+    phân đoạn từng ô (Cell Segmentation) và nhận dạng chữ bằng VietOCR, trả về Markdown Table và JSON.
+    Hỗ trợ bóc tách tự động toàn bộ các trang trong tài liệu.
+    """
+    doc = await db.get(Document, document_id)
+    if not doc or doc.is_deleted:
+        raise DocumentNotFoundException(str(document_id))
+
+    all_table_schemas: list[ExtractedTableSchema] = []
+    total_cells = 0
+
+    if page is not None and page >= 0:
+        pages_to_scan = [page]
+    else:
+        pages_to_scan = list(range(doc.page_count or 1))
+
+    for p in pages_to_scan:
+        try:
+            image = await _load_document_image(doc, page_idx=p)
+            res = await asyncio.to_thread(table_service.extract_tables, image, ocr_cells=ocr_cells)
+            for t in res.tables:
+                all_table_schemas.append(
+                    ExtractedTableSchema(
+                        table_idx=len(all_table_schemas) + 1,
+                        page_num=p + 1,
+                        bbox=t.bbox,
+                        headers=t.headers,
+                        rows=t.rows,
+                        cells=[
+                            TableCellSchema(
+                                row_idx=c.row_idx,
+                                col_idx=c.col_idx,
+                                bbox=c.bbox,
+                                text=c.text,
+                            )
+                            for c in t.cells
+                        ],
+                        row_count=t.row_count,
+                        col_count=t.col_count,
+                        markdown=t.markdown,
+                        html=t.html,
+                    )
+                )
+                total_cells += len(t.cells)
+        except Exception as e:
+            logger.warning(
+                "Lỗi bóc tách bảng biểu trang {p} tài liệu {doc_id}: {err}",
+                p=p + 1,
+                doc_id=doc.id,
+                err=str(e),
+            )
+
+    return TableExtractionResponse(
+        document_id=doc.id,
+        has_table=len(all_table_schemas) > 0,
+        tables=all_table_schemas,
+        total_tables=len(all_table_schemas),
+        total_cells=total_cells,
+    )
+

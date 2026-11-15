@@ -8,11 +8,11 @@ Tự động hóa kết nối với Kibana API để nhập file cấu hình `do
 - Nạp Dashboard điều hành CTSV
 - Nạp Canvas Workpad trình chiếu điều hành cho Ban Giám hiệu
 """
+
 import os
 import sys
-from typing import Any
-import urllib.request
 import urllib.error
+import urllib.request
 
 # Thiết lập encoding UTF-8 cho Windows console
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
@@ -38,10 +38,14 @@ def import_kibana_saved_objects(kibana_base_url: str = KIBANA_URL) -> bool:
         # Multipart form-data payload cho Kibana
         boundary = "----DocuCtsvKibanaBoundaryX77"
         body = (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="file"; filename="docuctsv_kibana_dashboard.ndjson"\r\n'
-            f"Content-Type: application/ndjson\r\n\r\n"
-        ).encode("utf-8") + file_data + f"\r\n--{boundary}--\r\n".encode("utf-8")
+            (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="file"; filename="docuctsv_kibana_dashboard.ndjson"\r\n'
+                f"Content-Type: application/ndjson\r\n\r\n"
+            ).encode("utf-8")
+            + file_data
+            + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        )
 
         req = urllib.request.Request(
             import_url,

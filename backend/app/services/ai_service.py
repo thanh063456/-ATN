@@ -10,6 +10,7 @@ Hỗ trợ xử lý thông minh kết hợp:
    - Ollama (Local offline models: qwen2.5, llama3.2, phocto)
    - Fallback Rule-based / Regex khi offline hoặc không cấu hình API Key.
 """
+
 import json
 import re
 from datetime import datetime
@@ -49,19 +50,32 @@ class AIService:
         # Tách Header 2 cột hành chính (nếu có) để AI không làm xáo trộn bố cục 2 cột Nghị định 30
         header_prefix = ""
         body_to_refine = chunk
-        
+
         # Nhận diện nếu chunk chứa tiêu đề chính: KẾ HOẠCH, QUYẾT ĐỊNH, THÔNG BÁO, TỜ TRÌNH, ĐƠN XIN...
-        title_m = re.search(r'(?m)^\s*(KẾ\s+HOẠCH|QUYẾT\s+ĐỊNH|THÔNG\s+BÁO|TỜ\s+TRÌNH|CÔNG\s+VĂN|HƯỚNG\s+DẪN|BIÊN\s+BẢN|BÁO\s+CÁO|ĐƠN\s+XIN)\b', chunk, re.IGNORECASE)
+        title_m = re.search(
+            r"(?m)^\s*(KẾ\s+HOẠCH|QUYẾT\s+ĐỊNH|THÔNG\s+BÁO|TỜ\s+TRÌNH|CÔNG\s+VĂN|HƯỚNG\s+DẪN|BIÊN\s+BẢN|BÁO\s+CÁO|ĐƠN\s+XIN)\b",
+            chunk,
+            re.IGNORECASE,
+        )
         if title_m and title_m.start() > 0:
-            header_prefix = chunk[:title_m.start()]
-            body_to_refine = chunk[title_m.start():]
-        elif any(kw in chunk.upper() for kw in ["CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "BỘ GIÁO DỤC VÀ ĐÀO TẠO", "TRƯỜNG ĐẠI HỌC ĐÀ LẠT"]):
+            header_prefix = chunk[: title_m.start()]
+            body_to_refine = chunk[title_m.start() :]
+        elif any(
+            kw in chunk.upper()
+            for kw in ["CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "BỘ GIÁO DỤC VÀ ĐÀO TẠO", "TRƯỜNG ĐẠI HỌC ĐÀ LẠT"]
+        ):
             lines = chunk.splitlines(keepends=True)
             h_lines = []
             b_lines = []
             in_header = True
             for l in lines:
-                if in_header and (any(kw in l.upper() for kw in ["CỘNG HÒA", "ĐỘC LẬP", "BỘ GIÁO DỤC", "ĐẠI HỌC ĐÀ LẠT", "SỐ:", "NGÀY"]) or not l.strip()):
+                if in_header and (
+                    any(
+                        kw in l.upper()
+                        for kw in ["CỘNG HÒA", "ĐỘC LẬP", "BỘ GIÁO DỤC", "ĐẠI HỌC ĐÀ LẠT", "SỐ:", "NGÀY"]
+                    )
+                    or not l.strip()
+                ):
                     h_lines.append(l)
                 else:
                     in_header = False
@@ -116,12 +130,12 @@ class AIService:
         used_model = getattr(settings, f"{provider}_model", provider)
 
         # Xử lý theo từng trang nếu có đánh dấu "--- Trang X ---"
-        page_splits = re.split(r'(\n*---\s*Trang\s+\d+[^-\n]*---\n*)', raw_text)
+        page_splits = re.split(r"(\n*---\s*Trang\s+\d+[^-\n]*---\n*)", raw_text)
         if len(page_splits) > 2:
             refined_parts = []
             any_llm_success = False
             for part in page_splits:
-                if re.match(r'^\n*---\s*Trang\s+\d+[^-\n]*---\n*$', part):
+                if re.match(r"^\n*---\s*Trang\s+\d+[^-\n]*---\n*$", part):
                     refined_parts.append(part)
                 elif part.strip():
                     try:
@@ -159,7 +173,9 @@ class AIService:
                 }
         except Exception as exc:
             err_detail = f"{type(exc).__name__}: {str(exc) or repr(exc)}"
-            logger.warning(f"AI text refinement with provider '{provider}' unavailable ({err_detail}). Using Admin Dictionary fallback.")
+            logger.warning(
+                f"AI text refinement with provider '{provider}' unavailable ({err_detail}). Using Admin Dictionary fallback."
+            )
 
         # Fallback khi không gọi được LLM: Sử dụng pipeline hậu xử lý tiếng Việt & từ điển hành chính
         fallback_refined = post_process_vietnamese(raw_text)
@@ -253,6 +269,7 @@ class AIService:
             ai_res["document_number"] = regex_meta.get("document_number")
 
             from app.services.tag_service import tag_service
+
             auto_tags = tag_service.generate_auto_tags(
                 text=text,
                 metadata=ai_res,
@@ -269,7 +286,7 @@ class AIService:
         logger.info("Using regex fallback for smart fields extraction")
         fallback_data = extraction_service.extract_metadata(text)
         extra = fallback_data.get("extra", {}) or {}
-        
+
         doc_date_val = fallback_data.get("document_date")
         if isinstance(doc_date_val, datetime):
             doc_date_str = doc_date_val.strftime("%Y-%m-%d")
@@ -277,6 +294,7 @@ class AIService:
             doc_date_str = None
 
         from app.services.tag_service import tag_service
+
         auto_tags = tag_service.generate_auto_tags(
             text=text,
             metadata=fallback_data,
@@ -306,15 +324,11 @@ class AIService:
         """Gọi Google Gemini REST API v1beta."""
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_model}:generateContent?key={settings.gemini_api_key}"
         payload = {
-            "contents": [
-                {
-                    "parts": [{"text": prompt}]
-                }
-            ],
+            "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,
                 "maxOutputTokens": 2048,
-            }
+            },
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(url, json=payload)
@@ -337,8 +351,11 @@ class AIService:
         payload = {
             "model": settings.openai_model,
             "messages": [
-                {"role": "system", "content": "You are a professional assistant for university student affairs document OCR processing."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are a professional assistant for university student affairs document OCR processing.",
+                },
+                {"role": "user", "content": prompt},
             ],
             "temperature": 0.1,
             "max_tokens": 2048,
@@ -390,7 +407,7 @@ class AIService:
                 "repeat_penalty": 1.2,
                 "num_ctx": 2048,
                 "num_predict": num_predict,
-            }
+            },
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(url, json=payload)

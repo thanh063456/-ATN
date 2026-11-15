@@ -37,16 +37,14 @@ Cách dùng
 
 import argparse
 import random
-import sys
-from pathlib import Path
-from typing import List, Tuple, NamedTuple
-
-
-from collections import defaultdict
 import re
-
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import List, NamedTuple, Tuple
 
 # ── Data types ────────────────────────────────────────────────────────────────
+
 
 class AnnotationEntry(NamedTuple):
     image_path: str
@@ -58,13 +56,14 @@ class AnnotationEntry(NamedTuple):
 
 class SplitResult(NamedTuple):
     train: List[AnnotationEntry]
-    val:   List[AnnotationEntry]
-    test:  List[AnnotationEntry]
+    val: List[AnnotationEntry]
+    test: List[AnnotationEntry]
     skipped_count: int
     total_input: int
 
 
 # ── Core ───────────────────────────────────────────────────────────────────────
+
 
 def parse_annotation_file(input_path: Path) -> Tuple[List[AnnotationEntry], int]:
     """
@@ -93,7 +92,7 @@ def parse_annotation_file(input_path: Path) -> Tuple[List[AnnotationEntry], int]
 
             img_path, _, label = line.partition("\t")
             img_path = img_path.strip()
-            label    = label.strip()
+            label = label.strip()
 
             if not img_path:
                 skipped += 1
@@ -152,8 +151,8 @@ def split_entries_grouped(
     n_val = max(1 if val_ratio > 0 and n_groups > 2 else 0, int(n_groups * val_ratio))
 
     train_keys = set(group_keys[:n_train])
-    val_keys = set(group_keys[n_train:n_train + n_val])
-    test_keys = set(group_keys[n_train + n_val:])
+    val_keys = set(group_keys[n_train : n_train + n_val])
+    test_keys = set(group_keys[n_train + n_val :])
 
     train_entries: List[AnnotationEntry] = []
     val_entries: List[AnnotationEntry] = []
@@ -210,17 +209,19 @@ def print_summary(
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
+
 def build_parser() -> argparse.ArgumentParser:
-    script_dir   = Path(__file__).resolve().parent
+    script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    anno_dir     = project_root / "dataset" / "annotations"
+    anno_dir = project_root / "dataset" / "annotations"
 
     parser = argparse.ArgumentParser(
         description="Chia file annotation VietOCR thành Train/Val/Test theo Group Document.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         type=Path,
         required=True,
         help="File annotation nguồn đã gán nhãn đầy đủ (format: path<TAB>label)",
@@ -267,7 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = build_parser()
-    args   = parser.parse_args()
+    args = parser.parse_args()
 
     input_path = args.input.resolve()
     if not input_path.exists():
@@ -277,7 +278,7 @@ def main() -> None:
     print(f"[split_dataset] Đọc: {input_path}")
 
     entries, skipped = parse_annotation_file(input_path)
-    total_input      = len(entries) + skipped
+    total_input = len(entries) + skipped
 
     if not entries:
         print("[ERROR] Không có entry hợp lệ nào. Kiểm tra định dạng file annotation.")
@@ -288,7 +289,7 @@ def main() -> None:
     )
 
     write_split(args.train_output, train_entries)
-    write_split(args.val_output,   val_entries)
+    write_split(args.val_output, val_entries)
     if args.test_output:
         write_split(args.test_output, test_entries)
 

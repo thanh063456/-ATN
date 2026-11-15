@@ -8,15 +8,15 @@ Chịu trách nhiệm:
 
 Mọi ngưỡng số đọc từ app.core.config.settings.
 """
+
 from __future__ import annotations
 
-import difflib
 import os
 import re
 
 import cv2
-from loguru import logger
 import numpy as np
+from loguru import logger
 from PIL import Image
 
 from app.core.exceptions import EngineUnavailableError
@@ -38,6 +38,7 @@ class TrOCREngine:
         if self._settings is None:
             try:
                 from app.core.config import settings
+
                 self._settings = settings
             except Exception:
                 pass
@@ -50,9 +51,12 @@ class TrOCREngine:
             return self._image_processor, self._tokenizer, self._model
 
         import torch
+
         _s = self._get_settings()
-        model_name = getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
-        req_device = getattr(_s, "trocr_device", "cuda")                                if _s else "cuda"
+        model_name = (
+            getattr(_s, "trocr_model_name", "microsoft/trocr-base-printed") if _s else "microsoft/trocr-base-printed"
+        )
+        req_device = getattr(_s, "trocr_device", "cuda") if _s else "cuda"
 
         device = "cpu"
         if req_device in ("cuda", "auto"):
@@ -62,7 +66,7 @@ class TrOCREngine:
                 logger.warning("CUDA không khả dụng trên hệ thống, tự động fallback sang CPU cho TrOCR")
 
         try:
-            from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer, RobertaTokenizer
+            from transformers import AutoTokenizer, RobertaTokenizer, VisionEncoderDecoderModel, ViTImageProcessor
 
             self._device = device
 
@@ -72,10 +76,9 @@ class TrOCREngine:
                 if os.path.exists(cand):
                     model_name = cand
 
-            logger.info("Initializing Microsoft TrOCR ({model}) on {device}...",
-                        model=model_name, device=device)
+            logger.info("Initializing Microsoft TrOCR ({model}) on {device}...", model=model_name, device=device)
             self._image_processor = ViTImageProcessor.from_pretrained(model_name)
-            
+
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(model_name)
             except Exception:
@@ -83,20 +86,18 @@ class TrOCREngine:
 
             if device == "cuda":
                 torch.backends.cudnn.benchmark = True
-                self._model = (
-                    VisionEncoderDecoderModel.from_pretrained(model_name).half().to(device)
-                )
+                self._model = VisionEncoderDecoderModel.from_pretrained(model_name).half().to(device)
             else:
-                self._model = (
-                    VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
-                )
+                self._model = VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
 
             if hasattr(self._model, "generation_config") and self._model.generation_config is not None:
                 self._model.generation_config.max_length = None
             self._model.eval()
             self._init_error = None
-            logger.info("Initialized Microsoft TrOCR Vision Transformer successfully ({dtype})",
-                        dtype="float16" if device == "cuda" else "float32")
+            logger.info(
+                "Initialized Microsoft TrOCR Vision Transformer successfully ({dtype})",
+                dtype="float16" if device == "cuda" else "float32",
+            )
         except Exception as exc:
             self._init_error = str(exc)
             logger.warning("TrOCR model initialization failed: {err}", err=str(exc))
@@ -104,10 +105,7 @@ class TrOCREngine:
             self._tokenizer = None
             self._model = None
             self._device = None
-            raise EngineUnavailableError(
-                "trocr",
-                f"Không thể khởi tạo mô hình Microsoft TrOCR: {exc}"
-            ) from exc
+            raise EngineUnavailableError("trocr", f"Không thể khởi tạo mô hình Microsoft TrOCR: {exc}") from exc
 
         return self._image_processor, self._tokenizer, self._model
 
@@ -152,11 +150,13 @@ class TrOCREngine:
 
             if runs:
                 center_idx = (end_x - start_x) / 2.0
+
                 def run_score(r):
                     r_start, r_end, r_len = r
                     r_mid = (r_start + r_end) / 2.0
                     dist_to_center = abs(r_mid - center_idx)
                     return r_len * 10.0 - dist_to_center
+
                 best_run = max(runs, key=run_score)
                 cut_in_sub = (best_run[0] + best_run[1]) // 2
                 return start_x + cut_in_sub
@@ -184,11 +184,15 @@ class TrOCREngine:
 
         try:
             import torch
+
             device = self._device or ("cuda" if torch.cuda.is_available() else "cpu")
 
             _s = self._get_settings()
             batch_size = getattr(_s, "trocr_batch_size", 16) if _s else 16
-            num_beams = getattr(_s, "trocr_num_beams", 1)    if _s else 1
+            num_beams = getattr(_s, "trocr_num_beams", 1) if _s else 1
+            max_new_tokens = getattr(_s, "trocr_max_new_tokens", 128) if _s else 128
+            repetition_penalty = getattr(_s, "trocr_repetition_penalty", 1.15) if _s else 1.15
+            no_repeat_ngram_size = getattr(_s, "trocr_no_repeat_ngram_size", 0) if _s else 0
 
             # 1. Tách các dòng siêu dài tại khe khoảng trắng tự nhiên giữa các từ
             expanded_images = []
@@ -229,14 +233,14 @@ class TrOCREngine:
 
                 with torch.inference_mode():
                     generated_ids = model.generate(
-                        pixel_values, 
-                        max_new_tokens=64,
+                        pixel_values,
+                        max_new_tokens=max_new_tokens,
                         num_beams=num_beams,
                         early_stopping=True if num_beams > 1 else False,
                         do_sample=False,
                         use_cache=True,
-                        repetition_penalty=1.2,
-                        no_repeat_ngram_size=3,
+                        repetition_penalty=repetition_penalty,
+                        no_repeat_ngram_size=no_repeat_ngram_size,
                         pad_token_id=tokenizer.pad_token_id,
                         eos_token_id=tokenizer.eos_token_id,
                     )
@@ -245,29 +249,33 @@ class TrOCREngine:
                 for t in generated_texts:
                     s = str(t).strip()
                     # Khử chuỗi số ảo giác lặp dài do decoder sinh ra khi gặp icon/nhiễu
-                    s = re.sub(r'\b\d{0,4}/?0{5,}\d*\b', '', s)
-                    s = re.sub(r'\b0{5,}\d*\b', '', s)
+                    s = re.sub(r"\b\d{0,4}/?0{5,}\d*\b", "", s)
+                    s = re.sub(r"\b0{5,}\d*\b", "", s)
 
                     # Sửa lỗi giải mã đa byte BPE (\ufffd) và các ký tự ghép dấu tiếng Việt
-                    s = re.sub(r'(?i)\bh\ufffd\b', 'hệ', s)
-                    s = re.sub(r'(?i)\bc\ufffda\b', 'của', s)
-                    s = re.sub(r'(?i)\bs\ufffd\b', 'số', s)
-                    s = re.sub(r'(?i)\bL\ufffd\b', 'Lễ', s)
-                    s = re.sub(r'(?i)TH\ufffdC\b', 'THỨC', s)
-                    s = re.sub(r'(?i)\bt\ufffdp\b', 'tập', s)
-                    s = re.sub(r'(?i)\bs\ufffdng\b', 'sáng', s)
-                    s = re.sub(r'(?i)\bnh\ufffdp\b', 'nhập', s)
-                    s = re.sub(r'(?i)\bngàay\b', 'ngày', s)
-                    s = re.sub(r'(?i)\bhắt\b', 'hết', s)
-                    s = s.replace('\ufffd', '')
+                    s = re.sub(r"(?i)\bh\ufffd\b", "hệ", s)
+                    s = re.sub(r"(?i)\bc\ufffda\b", "của", s)
+                    s = re.sub(r"(?i)\bs\ufffd\b", "số", s)
+                    s = re.sub(r"(?i)\bL\ufffd\b", "Lễ", s)
+                    s = re.sub(r"(?i)TH\ufffdC\b", "THỨC", s)
+                    s = re.sub(r"(?i)\bt\ufffdp\b", "tập", s)
+                    s = re.sub(r"(?i)\bs\ufffdng\b", "sáng", s)
+                    s = re.sub(r"(?i)\bnh\ufffdp\b", "nhập", s)
+                    s = re.sub(r"(?i)\bngàay\b", "ngày", s)
+                    s = re.sub(r"(?i)\bhắt\b", "hết", s)
+                    s = s.replace("\ufffd", "")
 
                     # Sửa lỗi TrOCR nhầm dấu hỏi '?' thành số 2, 7 hoặc gi"
-                    s = re.sub(r'\bgi["\'”]+(?:\s+gi["\'”]+)*', 'gì?', s, flags=re.IGNORECASE)
-                    s = re.sub(r'(?i)\b(là\s+gì|như\s+thế\s+nào|chuẩn\s+bị\s+gì|chưa|dự\s+án\s+này|quy\s+trình\s+đó|xử\s+lý\s+lỗi\s+đó|tương\s+lai|thế\s+nào)\s*([27]|gi["\'”]|g[iì]ợ|\?2)\b', r'\1?', s)
-                    s = re.sub(r'(?i)\b(theo\s+dõi)\s+lỗp\b', r'\1 lỗi?', s)
-                    s = re.sub(r'(?i)\b(usability\s+testing|kiểm\s+thử)\s+là\s+giữ\b', r'\1 là gì?', s)
+                    s = re.sub(r'\bgi["\'”]+(?:\s+gi["\'”]+)*', "gì?", s, flags=re.IGNORECASE)
+                    s = re.sub(
+                        r'(?i)\b(là\s+gì|như\s+thế\s+nào|chuẩn\s+bị\s+gì|chưa|dự\s+án\s+này|quy\s+trình\s+đó|xử\s+lý\s+lỗi\s+đó|tương\s+lai|thế\s+nào)\s*([27]|gi["\'”]|g[iì]ợ|\?2)\b',
+                        r"\1?",
+                        s,
+                    )
+                    s = re.sub(r"(?i)\b(theo\s+dõi)\s+lỗp\b", r"\1 lỗi?", s)
+                    s = re.sub(r"(?i)\b(usability\s+testing|kiểm\s+thử)\s+là\s+giữ\b", r"\1 là gì?", s)
 
-                    s = re.sub(r'\s+', ' ', s).strip()
+                    s = re.sub(r"\s+", " ", s).strip()
                     all_raw_texts.append(s)
 
             # 3. Ghép các lát cắt về đúng vị trí dòng gốc (không bị lặp từ)
@@ -279,7 +287,7 @@ class TrOCREngine:
                     t1 = all_raw_texts[exp_indices[0]]
                     t2 = all_raw_texts[exp_indices[1]]
                     merged = f"{t1} {t2}".strip()
-                    clean_res = re.sub(r'\b([a-zA-ZÀ-ỹ0-9_]{3,})\s+\1\b', r'\1', merged).strip()
+                    clean_res = re.sub(r"\b([a-zA-ZÀ-ỹ0-9_]{3,})\s+\1\b", r"\1", merged).strip()
                     final_predictions[orig_idx] = clean_res
 
             return final_predictions
@@ -303,23 +311,29 @@ class TrOCREngine:
             return []
 
         _s = self._get_settings()
-        _max_lines  = getattr(_s, "trocr_max_lines_per_page", 60) if _s else 60
-        _batch_size = getattr(_s, "trocr_batch_size", 16)        if _s else 16
+        _max_lines = getattr(_s, "trocr_max_lines_per_page", 300) if _s else 300
+        _batch_size = getattr(_s, "trocr_batch_size", 16) if _s else 16
 
         imgs = line_images[:_max_lines] if _max_lines > 0 else line_images
         cleaned = [preprocess_fn(li) if preprocess_fn else li for li in imgs]
         total_lines = len(cleaned)
         line_results: list[tuple[str, float]] = []
 
-        logger.info("[TrOCR] Bắt đầu nhận diện {total} dòng văn bản (batch_size={bs})...",
-                    total=total_lines, bs=_batch_size)
+        logger.info(
+            "[TrOCR] Bắt đầu nhận diện {total} dòng văn bản (batch_size={bs})...", total=total_lines, bs=_batch_size
+        )
 
         preds = self.predict_batch(cleaned)
         for txt in preds:
             txt = txt.strip()
             if txt:
-                bad = len(re.findall(r'[%~^|<>{}\[\]\\]', txt))
-                conf = max(0.60, 0.95 - (bad / max(len(txt), 1)) * 3)
+                bad = len(re.findall(r"[%~^|<>{}\[\]\\]", txt))
+                has_accent = (
+                    1
+                    if re.search(r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđĐ]", txt)
+                    else 0
+                )
+                conf = min(0.98, max(0.60, 0.94 + 0.02 * has_accent - (bad / max(len(txt), 1)) * 3))
                 line_results.append((txt, round(conf, 2)))
             else:
                 line_results.append(("", 0.50))
