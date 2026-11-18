@@ -594,6 +594,17 @@ class VietOCRService:
 
         x, y, w, h = box
 
+        # Bảo vệ tuyệt đối: Không bao giờ lọc bỏ các dòng chứa từ khóa hành chính / trích yếu / văn bản
+        t_lower = t.lower()
+        admin_safe_kws = (
+            "v/v", "viv", "về việc", "thông báo", "quyết định", "kế hoạch", "tờ trình",
+            "kính gửi", "học bổng", "sinh viên", "công ty", "trường đại học", "đại học đà lạt",
+            "cộng hòa", "độc lập", "bộ giáo dục", "tiêu chuẩn", "thời gian", "địa điểm",
+            "căn cứ", "điều ", "chương ", "nơi nhận", "lưu ý", "phòng công tác", "ctsv"
+        )
+        if any(kw in t_lower for kw in admin_safe_kws):
+            return False
+
         # Hallucination guard: crop rất rộng nhưng model trả về chuỗi siêu ngắn
         if w > 3 * h_med and len(t) < 3 and not re.search(r"\d", t):
             return True
@@ -675,7 +686,7 @@ class VietOCRService:
             return True
 
         if re.search(
-            r"\b(?:Contracts?|Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\b",
+            r"\b(?:Contracts?|Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable)\b",
             t,
             re.IGNORECASE,
         ):
@@ -701,7 +712,7 @@ class VietOCRService:
             or "yhng" in t
             or "nghvay" in t
             or "vụvv" in t
-            or "viv" in t
+            or bool(re.fullmatch(r"[\s\?]*viv[\s\?]*", t, re.IGNORECASE))
         ):
             return True
 

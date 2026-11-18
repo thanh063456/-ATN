@@ -112,6 +112,12 @@ def _normalize_doc_number(header_text: str) -> tuple[str, str | None]:
         code = m.group(2).strip().upper()
         normalized_code = normalize_document_code(code)
 
+        # Xử lý trường hợp chữ số viết tay '4' bị OCR nhầm thành dấu '/' (vd: '18/8' -> '1848')
+        if "/" in raw_num and "4" not in raw_num:
+            raw_num_fixed = re.sub(r"(\d)\s*/\s*(\d)", r"\g<1>4\g<2>", raw_num)
+            if re.search(r"^\d+$", re.sub(r"[\s\.\u2026\-_]+", "", raw_num_fixed)):
+                raw_num = raw_num_fixed
+
         # Kiểm tra xem có phải bản nháp / để trống dấu chấm không
         is_blank_placeholder = bool(re.fullmatch(r"[\s\.\u2026\-_~]*", raw_num))
         num = re.sub(r"[\s\.\u2026\-_/]+", "", raw_num)

@@ -84,27 +84,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleDemoLogin = (role: "ADMIN" | "STAFF" = "STAFF") => {
-    const isStaff = role === "STAFF";
-    const demoUser = {
-      id: isStaff ? "demo-ctsv-01" : "demo-admin-01",
-      username: isStaff ? "canbo_ctsv" : "admin_ctsv",
-      fullName: isStaff ? "Cán bộ CTSV (Đại học Đà Lạt)" : "Quản trị viên Hệ thống CTSV",
-      email: isStaff ? "canbo.ctsv@dlu.edu.vn" : "admin.ctsv@dlu.edu.vn",
-      role: role,
-    };
-    login(demoUser, `demo_token_${role.toLowerCase()}_dlu`, {
-      access_token: `demo_token_${role.toLowerCase()}_dlu`,
-      user: { id: demoUser.id, email: demoUser.email } as any,
-    } as any);
-    addToast({
-      type: "success",
-      title: "Chế độ xem thử nghiệm",
-      message: `Đã đăng nhập với vai trò ${isStaff ? "Cán bộ CTSV (STAFF)" : "Quản trị viên (ADMIN)"}`,
-    });
-    navigate("/");
-  };
-
   return (
     <div style={pageStyle}>
       <div style={cardStyle} className="animate-fade-in">
@@ -208,56 +187,6 @@ export const LoginPage: React.FC = () => {
               </>
             )}
           </button>
-
-          {/* Quick Demo Access for Testing */}
-          <div style={{ marginTop: "0.25rem", borderTop: "1px dashed var(--border-color)", paddingTop: "0.85rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <button
-              id="demo-login-staff-btn"
-              type="button"
-              onClick={() => handleDemoLogin("STAFF")}
-              style={{
-                width: "100%",
-                padding: "0.55rem",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid #bfdbfe",
-                backgroundColor: "#eff6ff",
-                color: "#1e40af",
-                fontWeight: 600,
-                fontSize: "0.8125rem",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                cursor: "pointer",
-              }}
-            >
-              <ShieldCheck size={15} color="#d97706" />
-              Đăng nhập thử nghiệm: Cán bộ CTSV (STAFF)
-            </button>
-            <button
-              id="demo-login-admin-btn"
-              type="button"
-              onClick={() => handleDemoLogin("ADMIN")}
-              style={{
-                width: "100%",
-                padding: "0.45rem",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid #fed7aa",
-                backgroundColor: "#fff7ed",
-                color: "#c2410c",
-                fontWeight: 600,
-                fontSize: "0.775rem",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.4rem",
-                cursor: "pointer",
-              }}
-            >
-              <ShieldCheck size={14} color="#ea580c" />
-              Đăng nhập thử nghiệm: Quản trị viên (ADMIN)
-            </button>
-          </div>
         </form>
 
         {/* Footer info */}

@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   /* ── Hệ màu Thể chế Giáo dục & Hồ sơ Hành chính ĐH Đà Lạt ───────────────── */
@@ -9,13 +13,10 @@
   --primary-400: #60a5fa;
   --primary-500: #2563eb;
   --primary-600: #1d4ed8;
-  --primary-700: #1e40af; /* Main Academic Blue */
-  --primary-800: #1e3a8a; /* Deep Navy */
-  --primary-900: #172554;
-
-  --accent-50: #f0fdfa;
-  --accent-500: #0d9488;
-  --accent-600: #0f766e;
+  --primary-700: #1e4a84; /* Main Academic Blue */
+  --primary-800: #163a66;
+  --primary-900: #0f294a; /* Deep DLU Navy */
+  --primary-950: #0a192f;
 
   /* Màu kiểm định & Trạng thái văn thư */
   --success-50: #f0fdf4;
@@ -44,26 +45,20 @@
   --gray-900: #0f172a;
 
   /* ── Background & Surfaces (Trang giấy & Bàn làm việc) ──── */
-  --bg-app: #f4f6f9;
+  --bg-app: #f4f6f8;
   --bg-surface: #ffffff;
-  --bg-sidebar: #0e1e33; /* Deep Slate Navy vững chãi, không tím */
-  --border-color: #e2e8f0;
-  --border-light: #f1f5f9;
+  --bg-sidebar: #0a192f; /* Deep Institutional Navy */
+  --border-color: #d9e2ec;
+  --border-light: #eef2f6;
 
-  /* ── Typography & Shadows (Thước đo kỷ luật, không bo tròn phồng rỗng) ─ */
+  /* ── Typography & Radius ────────────────────────────── */
   --font-sans: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.07), 0 2px 4px -2px rgb(15 23 42 / 0.05);
-  --shadow-lg: 0 10px 15px -3px rgb(15 23 42 / 0.08), 0 4px 6px -4px rgb(15 23 42 / 0.04);
-  --shadow-xl: 0 20px 25px -5px rgb(15 23 42 / 0.1), 0 8px 10px -6px rgb(15 23 42 / 0.04);
 
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
-  --radius-full: 9999px;
 
   --sidebar-width: 256px;
   --sidebar-collapsed-width: 72px;
@@ -71,12 +66,6 @@
 }
 
 /* ── Reset & Base Styles ────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-app);
@@ -85,48 +74,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
-input, button, textarea, select {
-  font-family: inherit;
-  font-size: inherit;
-}
-
-button {
-  cursor: pointer;
-  border: none;
-  background: none;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-/* ── Utility Classes ────────────────────────────────────── */
-.flex { display: flex; }
-.flex-col { display: flex; flex-direction: column; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.justify-center { justify-content: center; }
-.gap-1 { gap: 0.25rem; }
-.gap-2 { gap: 0.5rem; }
-.gap-3 { gap: 0.75rem; }
-.gap-4 { gap: 1rem; }
-.gap-6 { gap: 1.5rem; }
-.flex-1 { flex: 1 1 0%; }
-.w-full { width: 100%; }
-
-.text-sm { font-size: 0.875rem; }
-.text-xs { font-size: 0.75rem; }
-.text-lg { font-size: 1.125rem; }
-.text-xl { font-size: 1.25rem; }
-.text-2xl { font-size: 1.5rem; }
-.font-medium { font-weight: 500; }
-.font-semibold { font-weight: 600; }
-.font-bold { font-weight: 700; }
-
-.text-muted { color: var(--gray-500); }
-.text-primary { color: var(--primary-700); }
 
 /* ── Highlighted Search Text ────────────────────────────── */
 em {
@@ -147,17 +94,17 @@ em {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--gray-300);
+  background: #cbd5e1;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-400);
+  background: #94a3b8;
 }
 
 /* ── Subtle Action Motion ───────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes spin {

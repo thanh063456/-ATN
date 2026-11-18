@@ -66,3 +66,24 @@ class UserResponse(BaseModel):
     role_name: str
     is_active: bool
     created_at: datetime
+
+
+class CreateUserByAdminRequest(BaseModel):
+    username: str
+    email: str
+    full_name: str
+    password: str = "Dlu@123456"
+    role: str = "STAFF"
+    mssv: str | None = None
+
+
+class UserAdminItemResponse(BaseModel):
+    id: str
+    username: str
+    fullName: str
+    email: str
+    mssv: str | None = None
+    role: str
+    isActive: bool
+    lastLogin: str
+    createdAt: str

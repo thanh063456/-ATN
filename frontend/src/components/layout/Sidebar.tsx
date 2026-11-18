@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       highlight: true,
     },
     {
-      label: role === "STUDENT" ? "Kho hồ sơ công khai" : "Quản lý Văn bản & Hồ sơ",
+      label: role === "STUDENT" ? "Lịch sử upload" : "Quản lý Văn bản & Hồ sơ",
       path: "/documents",
       icon: FileCheck2,
       roles: ["ADMIN", "STAFF", "STUDENT"],
@@ -74,53 +74,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
 
   return (
     <aside
-      style={{
-        width: collapsed ? "var(--sidebar-collapsed-width)" : "var(--sidebar-width)",
-        backgroundColor: "var(--bg-sidebar)",
-        color: "#ffffff",
-        height: "100vh",
-        position: "sticky",
-        top: 0,
-        display: "flex",
-        flexDirection: "column",
-        transition: "width 0.25s ease",
-        zIndex: 50,
-        flexShrink: 0,
-        borderRight: "1px solid rgba(255, 255, 255, 0.08)",
-      }}
+      className={`h-screen sticky top-0 flex flex-col shrink-0 z-40 bg-[#0a192f] text-slate-200 border-r border-slate-800/80 transition-all duration-200 select-none ${
+        collapsed ? "w-[72px]" : "w-64"
+      }`}
     >
-      {/* Brand Logo */}
-      <div
-        style={{
-          height: "var(--header-height)",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          padding: "0 1.25rem",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-        }}
-      >
-        <div
-          style={{
-            width: "34px",
-            height: "34px",
-            borderRadius: "var(--radius-sm)",
-            backgroundColor: "#1e3a8a",
-            border: "1px solid rgba(255, 255, 255, 0.2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <FileText size={18} color="#93c5fd" />
+      {/* Brand Header */}
+      <div className="h-[60px] flex items-center gap-3 px-4 border-b border-slate-800/80 shrink-0">
+        <div className="w-8 h-8 rounded-md bg-dlu-navy-800 border border-sky-400/30 flex items-center justify-center shrink-0 shadow-sm text-sky-300">
+          <FileText size={17} />
         </div>
         {!collapsed && (
-          <div style={{ overflow: "hidden", whiteSpace: "nowrap" }}>
-            <div style={{ fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.02em", color: "#f8fafc" }}>
-              ĐẠI HỌC ĐÀ LẠT
+          <div className="overflow-hidden leading-tight">
+            <div className="font-bold text-xs tracking-wider text-white uppercase font-sans">
+              Đại học Đà Lạt
             </div>
-            <div style={{ fontSize: "0.6875rem", color: "#94a3b8" }}>
+            <div className="text-[11px] text-slate-400 font-medium truncate">
               Phòng Công tác Sinh viên
             </div>
           </div>
@@ -128,12 +96,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       </div>
 
       {/* Nav List */}
-      <div style={{ flex: 1, padding: "0.85rem 0.5rem", display: "flex", flexDirection: "column", gap: "0.25rem", overflowY: "auto" }}>
-        <div style={{ fontSize: "0.6875rem", fontWeight: 600, color: "#64748b", padding: "0.4rem 0.75rem", letterSpacing: "0.04em" }}>
+      <nav className="flex-1 px-2.5 py-4 flex flex-col gap-1 overflow-y-auto">
+        <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-1">
           {!collapsed ? "Hồ sơ & Nghiệp vụ" : "•••"}
         </div>
+
         {allowedNav.map((item) => {
-          const isActive = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
+          const isActive =
+            location.pathname === item.path ||
+            (item.path !== "/" && location.pathname.startsWith(item.path));
           const Icon = item.icon;
 
           return (
@@ -141,52 +112,42 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
               key={item.path}
               to={item.path}
               title={collapsed ? item.label : undefined}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                padding: "0.6rem 0.75rem",
-                borderRadius: "var(--radius-md)",
-                fontSize: "0.8125rem",
-                fontWeight: isActive ? 600 : 500,
-                color: isActive ? "#ffffff" : "#94a3b8",
-                backgroundColor: isActive ? "rgba(37, 99, 235, 0.2)" : "transparent",
-                borderLeft: isActive ? "3px solid #60a5fa" : "3px solid transparent",
-                transition: "all 0.15s ease",
-              }}
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors relative group ${
+                isActive
+                  ? "bg-white/10 text-white font-semibold border-l-2 border-sky-400 shadow-sm"
+                  : "text-slate-400 hover:text-slate-100 hover:bg-white/5 border-l-2 border-transparent"
+              }`}
             >
-              <Icon size={18} color={isActive ? "#60a5fa" : "currentColor"} />
+              <Icon
+                size={17}
+                className={`shrink-0 transition-colors ${
+                  isActive ? "text-sky-400" : "text-slate-400 group-hover:text-slate-200"
+                }`}
+              />
+
               {!collapsed && (
-                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span className="flex-1 truncate tracking-normal">
                   {item.label}
                 </span>
               )}
+
               {!collapsed && item.badge && (
-                <span
-                  style={{
-                    fontSize: "0.625rem",
-                    padding: "0.1rem 0.4rem",
-                    borderRadius: "2px",
-                    backgroundColor: "rgba(255, 255, 255, 0.1)",
-                    color: "#bfdbfe",
-                    fontWeight: 600,
-                  }}
-                >
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60 leading-none">
                   {item.badge}
                 </span>
               )}
             </Link>
           );
         })}
-      </div>
+      </nav>
 
-      {/* Footer Info Box */}
+      {/* Footer System Info */}
       {!collapsed && (
-        <div style={{ padding: "0.75rem 1rem", margin: "0.65rem", backgroundColor: "rgba(255, 255, 255, 0.03)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
-          <div style={{ fontSize: "0.6875rem", fontWeight: 600, color: "#cbd5e1" }}>
+        <div className="p-3 m-2.5 rounded-md bg-white/[0.03] border border-white/5 text-slate-400">
+          <div className="text-[11px] font-semibold text-slate-300">
             Kho lưu trữ số CTSV
           </div>
-          <div style={{ fontSize: "0.625rem", color: "#64748b", marginTop: "0.2rem" }}>
+          <div className="text-[10px] text-slate-500 mt-0.5">
             Trường Đại học Đà Lạt
           </div>
         </div>

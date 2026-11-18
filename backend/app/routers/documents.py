@@ -56,16 +56,22 @@ from app.models.document_categories import DocumentCategory
 from app.models.document_metadata import DocumentMetadata
 from app.models.documents import Document
 from app.models.ocr_results import OCRResult
+from app.models.roles import Role
 from app.models.users import User
 from app.schemas.documents import (
     AIExtractResponse,
     AIRefineRequest,
     AIRefineResponse,
+    ApprovalInfo,
+    CategoryItemResponse,
+    CreateCategoryRequest,
     DetectedStampSchema,
     DocumentDetailResponse,
     DocumentListItem,
     DocumentListResponse,
     DocumentMetadataResponse,
+    DocumentNotificationItem,
+    DocumentNotificationsResponse,
     DocumentUploadResponse,
     ExtractedTableSchema,
     OCRCorrectionRequest,
@@ -93,6 +99,7 @@ from app.worker.tasks import (
     async_process_all_ocr_engines,
     async_process_ocr,
     process_all_ocr_task,
+    process_ocr_task,
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -151,6 +158,7 @@ async def list_documents(
     doc_group: str | None = Query(None, description="Lọc theo nhóm văn bản (vd: VAN_BAN_HANH_CHINH)"),
     tag: str | None = Query(None, description="Lọc theo thẻ nhãn phân loại (vd: #K44, #MienGiamHocPhi, #HoNgheo)"),
     search: str | None = Query(None, description="Tìm kiếm theo tiêu đề, tên file, MSSV, số hiệu"),
+    only_my_uploads: bool = Query(False, description="Chỉ lấy hồ sơ do chính tài khoản này tải lên"),
     token: str | None = Query(None, description="JWT Access Token"),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
@@ -170,11 +178,16 @@ async def list_documents(
         )
     )
 
-    # RBAC Filtering: Sinh viên/Khách chỉ xem được tài liệu công khai (hoặc do chính sinh viên tải lên)
+    # RBAC Filtering: Sinh viên xem tài liệu do mình tải lên hoặc tài liệu công khai (nếu only_my_uploads=True thì chỉ lấy hồ sơ của chính mình); Khách xem tài liệu công khai; Cán bộ/Admin xem toàn bộ
     if current_user:
         role_name = current_user.role.name if current_user.role else "STUDENT"
         if role_name not in ("ADMIN", "STAFF"):
-            stmt = stmt.where((Document.is_public == True) | (Document.uploaded_by == current_user.id))
+            if only_my_uploads:
+                stmt = stmt.where(Document.uploaded_by == current_user.id)
+            else:
+                stmt = stmt.where((Document.uploaded_by == current_user.id) | (Document.is_public == True))
+        elif only_my_uploads:
+            stmt = stmt.where(Document.uploaded_by == current_user.id)
     else:
         stmt = stmt.where(Document.is_public == True)
 
@@ -300,6 +313,21 @@ async def list_documents(
 
         priority_score = tag_service.calculate_priority_score(doc_tags)
 
+        # Trích xuất thông tin phê duyệt nếu có
+        approval_info = None
+        if doc.metadata_ and doc.metadata_.extra and "approval" in doc.metadata_.extra:
+            appr = doc.metadata_.extra["approval"]
+            approval_info = ApprovalInfo(
+                status=appr.get("status", effective_ocr_status),
+                action=appr.get("action", "APPROVE_DOCUMENT"),
+                approver_id=appr.get("approver_id"),
+                approver_name=appr.get("approver_name"),
+                approver_role=appr.get("approver_role"),
+                approver_role_label=appr.get("approver_role_label"),
+                timestamp=appr.get("timestamp") or appr.get("approved_at"),
+                note=appr.get("note"),
+            )
+
         items.append(
             DocumentListItem(
                 id=doc.id,
@@ -326,6 +354,7 @@ async def list_documents(
                 tags=doc_tags,
                 priority_score=priority_score,
                 ocr_progress=ocr_progress,
+                approval_info=approval_info,
                 created_at=doc.created_at,
                 updated_at=doc.updated_at,
             )
@@ -343,15 +372,246 @@ async def list_documents(
 
 @router.get(
     "/categories",
-    summary="Lấy danh sách các danh mục tài liệu hành chính CTSV",
+    response_model=list[CategoryItemResponse],
+    summary="Lấy danh sách các danh mục tài liệu hành chính CTSV kèm số lượng hồ sơ",
 )
 async def list_categories(
     db: AsyncSession = Depends(get_db),
-):
-    stmt = select(DocumentCategory).order_by(DocumentCategory.sort_order.asc())
+) -> list[CategoryItemResponse]:
+    stmt = (
+        select(
+            DocumentCategory,
+            func.count(Document.id).label("doc_count"),
+        )
+        .outerjoin(
+            Document,
+            (Document.category_id == DocumentCategory.id) & (Document.is_deleted == False),
+        )
+        .group_by(DocumentCategory.id)
+        .order_by(DocumentCategory.name.asc())
+    )
     res = await db.execute(stmt)
-    cats = res.scalars().all()
-    return [{"id": c.id, "name": c.name, "code": c.code, "description": c.description} for c in cats]
+    rows = res.all()
+    return [
+        CategoryItemResponse(
+            id=str(c.id),
+            name=c.name,
+            code=c.code,
+            description=c.description or "",
+            is_active=c.is_active,
+            doc_count=doc_count,
+        )
+        for c, doc_count in rows
+    ]
+
+
+@router.post(
+    "/categories",
+    response_model=CategoryItemResponse,
+    summary="Tạo danh mục biểu mẫu mới (Chỉ dành cho ADMIN / STAFF)",
+)
+async def create_category(
+    payload: CreateCategoryRequest,
+    current_user: User = Depends(require_roles("ADMIN", "STAFF")),
+    db: AsyncSession = Depends(get_db),
+) -> CategoryItemResponse:
+    code = payload.code.strip().upper().replace(" ", "_")
+    name = payload.name.strip()
+
+    check_stmt = select(DocumentCategory).where(
+        (DocumentCategory.code == code) | (DocumentCategory.name == name)
+    )
+    existing = (await db.execute(check_stmt)).scalars().first()
+    if existing:
+        raise AppException(
+            status_code=409,
+            message="Tên danh mục hoặc mã code đã tồn tại",
+            error_code="CATEGORY_EXISTS",
+        )
+
+    new_cat = DocumentCategory(
+        name=name,
+        code=code,
+        description=payload.description.strip() if payload.description else None,
+        is_active=True,
+    )
+    db.add(new_cat)
+    await db.commit()
+    await db.refresh(new_cat)
+    return CategoryItemResponse(
+        id=str(new_cat.id),
+        name=new_cat.name,
+        code=new_cat.code,
+        description=new_cat.description or "",
+        is_active=new_cat.is_active,
+        doc_count=0,
+    )
+
+
+@router.patch(
+    "/categories/{category_id}/status",
+    summary="Kích hoạt hoặc vô hiệu hóa danh mục biểu mẫu",
+)
+async def toggle_category_status(
+    category_id: UUID,
+    current_user: User = Depends(require_roles("ADMIN")),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(DocumentCategory).where(DocumentCategory.id == category_id)
+    cat = (await db.execute(stmt)).scalars().first()
+    if not cat:
+        raise AppException(status_code=404, message="Không tìm thấy danh mục", error_code="CATEGORY_NOT_FOUND")
+
+    cat.is_active = not cat.is_active
+    await db.commit()
+    return {"id": str(cat.id), "is_active": cat.is_active}
+
+
+@router.get(
+    "/notifications",
+    response_model=DocumentNotificationsResponse,
+    summary="Lấy danh sách thông báo xét duyệt hồ sơ cho người dùng hiện tại",
+)
+async def get_document_notifications(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentNotificationsResponse:
+    """Lấy danh sách thông báo phê duyệt/từ chối tài liệu theo vai trò (Sinh viên, CTSV, Quản trị viên)."""
+    user_role_name = current_user.role.name if current_user.role else "STUDENT"
+    items: list[DocumentNotificationItem] = []
+
+    if user_role_name == "STUDENT":
+        # Sinh viên: Lấy thông báo phê duyệt hoặc từ chối đối với hồ sơ do chính mình tải lên
+        stmt = (
+            select(AuditLog, Document, User, Role)
+            .join(Document, AuditLog.resource_id == Document.id)
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .outerjoin(Role, User.role_id == Role.id)
+            .where(
+                Document.uploaded_by == current_user.id,
+                AuditLog.action.in_(["APPROVE_DOCUMENT", "REJECT_DOCUMENT"]),
+            )
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        res = await db.execute(stmt)
+        for audit, doc, actor, role in res.all():
+            actor_role_code = role.name if role else "STAFF"
+            actor_role_label = (
+                "Quản trị viên (ADMIN)" if actor_role_code == "ADMIN" else "Cán bộ Công tác Sinh viên (CTSV)"
+            )
+            actor_name = actor.full_name if actor else (actor.username if actor else "Cán bộ xét duyệt")
+
+            if audit.action == "APPROVE_DOCUMENT":
+                status = "APPROVED"
+                msg = f"Hồ sơ '{doc.title}' đã được {actor_role_label} ({actor_name}) phê duyệt thành công."
+            else:
+                status = "REJECTED"
+                msg = f"Hồ sơ '{doc.title}' đã bị {actor_role_label} ({actor_name}) từ chối xét duyệt."
+
+            items.append(
+                DocumentNotificationItem(
+                    id=str(audit.id),
+                    document_id=doc.id,
+                    document_title=doc.title,
+                    action=audit.action,
+                    status=status,
+                    actor_id=str(actor.id) if actor else None,
+                    actor_name=actor_name,
+                    actor_role=actor_role_code,
+                    actor_role_label=actor_role_label,
+                    message=msg,
+                    created_at=audit.created_at,
+                    is_read=False,
+                )
+            )
+    else:
+        # Cán bộ CTSV / Quản trị viên: Lấy lịch sử phê duyệt và hồ sơ sinh viên mới nộp cần thẩm định
+        stmt_approvals = (
+            select(AuditLog, Document, User, Role)
+            .join(Document, AuditLog.resource_id == Document.id)
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .outerjoin(Role, User.role_id == Role.id)
+            .where(
+                AuditLog.action.in_(["APPROVE_DOCUMENT", "REJECT_DOCUMENT"]),
+            )
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        res_approvals = await db.execute(stmt_approvals)
+        for audit, doc, actor, role in res_approvals.all():
+            actor_role_code = role.name if role else "STAFF"
+            actor_role_label = (
+                "Quản trị viên (ADMIN)" if actor_role_code == "ADMIN" else "Cán bộ Công tác Sinh viên (CTSV)"
+            )
+            actor_name = actor.full_name if actor else (actor.username if actor else "Cán bộ xét duyệt")
+
+            if audit.action == "APPROVE_DOCUMENT":
+                status = "APPROVED"
+                msg = f"{actor_role_label} {actor_name} đã phê duyệt hồ sơ '{doc.title}'."
+            else:
+                status = "REJECTED"
+                msg = f"{actor_role_label} {actor_name} đã từ chối hồ sơ '{doc.title}'."
+
+            items.append(
+                DocumentNotificationItem(
+                    id=str(audit.id),
+                    document_id=doc.id,
+                    document_title=doc.title,
+                    action=audit.action,
+                    status=status,
+                    actor_id=str(actor.id) if actor else None,
+                    actor_name=actor_name,
+                    actor_role=actor_role_code,
+                    actor_role_label=actor_role_label,
+                    message=msg,
+                    created_at=audit.created_at,
+                    is_read=False,
+                )
+            )
+
+        if len(items) < limit:
+            remaining = limit - len(items)
+            stmt_uploads = (
+                select(Document)
+                .options(selectinload(Document.uploader))
+                .where(
+                    Document.is_deleted == False,
+                    Document.ocr_status.in_(["DONE", "PENDING", "PROCESSING"]),
+                )
+                .order_by(Document.created_at.desc())
+                .limit(remaining)
+            )
+            res_uploads = await db.execute(stmt_uploads)
+            for doc in res_uploads.scalars().all():
+                uploader = doc.uploader
+                u_name = uploader.full_name if uploader else "Sinh viên"
+                mssv_str = f" (MSSV: {uploader.mssv})" if (uploader and uploader.mssv) else ""
+                items.append(
+                    DocumentNotificationItem(
+                        id=f"upload_{doc.id}",
+                        document_id=doc.id,
+                        document_title=doc.title,
+                        action="UPLOAD",
+                        status=doc.ocr_status,
+                        actor_id=str(doc.uploaded_by) if doc.uploaded_by else None,
+                        actor_name=u_name,
+                        actor_role="STUDENT",
+                        actor_role_label="Sinh viên",
+                        message=f"Hồ sơ mới từ {u_name}{mssv_str}: '{doc.title}' đang chờ kiểm duyệt.",
+                        created_at=doc.created_at,
+                        is_read=False,
+                    )
+                )
+
+        items.sort(key=lambda x: x.created_at, reverse=True)
+
+    return DocumentNotificationsResponse(
+        items=items[:limit],
+        total=len(items[:limit]),
+        unread_count=len(items[:limit]),
+    )
 
 
 @router.get(
@@ -579,12 +839,13 @@ async def upload_document(
     )
 
     celery_task_id = None
-    # Khởi chạy tác vụ OCR nền tự động cho toàn bộ các engine (VietOCR, TrOCR, Tesseract)
+    # Khởi chạy tác vụ OCR nền: Ưu tiên VietOCR theo yêu cầu
+    primary_engine = getattr(settings, "ocr_engine", "vietocr") or "vietocr"
     if _is_redis_available():
-        task = process_all_ocr_task.delay(str(document.id))
+        task = process_ocr_task.delay(str(document.id))
         celery_task_id = task.id
     else:
-        asyncio.create_task(async_process_all_ocr_engines(str(document.id), task_id="async_worker"))
+        asyncio.create_task(async_process_ocr(str(document.id), task_id="async_worker", engine=primary_engine))
 
     app_cache.invalidate("dashboard_stats")
     app_cache.invalidate("tags_summary")
@@ -1738,6 +1999,16 @@ async def get_document_verification(
 
     qr_payload = f"https://dlu.edu.vn/verify/{doc.id}?code={verification_code}"
 
+    approved_by_name = "Phòng Công tác Sinh viên (DLU)"
+    approved_by_role = None
+    approved_by_role_label = None
+
+    if is_approved and doc.metadata_ and doc.metadata_.extra and "approval" in doc.metadata_.extra:
+        appr = doc.metadata_.extra["approval"]
+        approved_by_name = appr.get("approver_name") or approved_by_name
+        approved_by_role = appr.get("approver_role")
+        approved_by_role_label = appr.get("approver_role_label")
+
     return VerificationResponse(
         is_valid=is_approved,
         document_id=doc.id,
@@ -1747,7 +2018,9 @@ async def get_document_verification(
         student_name=student_name,
         student_id=student_id,
         approved_at=doc.updated_at if is_approved else None,
-        approved_by_name="Phòng Công tác Sinh viên (DLU)",
+        approved_by_name=approved_by_name,
+        approved_by_role=approved_by_role,
+        approved_by_role_label=approved_by_role_label,
         verification_code=verification_code,
         qr_payload=qr_payload,
     )
@@ -1770,14 +2043,54 @@ async def approve_document(
     old_status = doc.ocr_status
     now = datetime.now()
     doc.ocr_status = "APPROVED"
+    doc.is_verified = True
     doc.updated_at = now
+
+    user_role_name = current_user.role.name if current_user.role else "STAFF"
+    user_role_label = (
+        "Quản trị viên (ADMIN)" if user_role_name == "ADMIN" else "Cán bộ Công tác Sinh viên (CTSV)"
+    )
+    approver_name = current_user.full_name or current_user.username
+
+    approval_payload = {
+        "status": "APPROVED",
+        "action": "APPROVE_DOCUMENT",
+        "approver_id": str(current_user.id),
+        "approver_name": approver_name,
+        "approver_role": user_role_name,
+        "approver_role_label": user_role_label,
+        "timestamp": now.isoformat(),
+    }
+
+    meta_stmt = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
+    meta_res = await db.execute(meta_stmt)
+    meta_obj = meta_res.scalar_one_or_none()
+    if not meta_obj:
+        meta_obj = DocumentMetadata(
+            document_id=document_id,
+            extra={"approval": approval_payload},
+        )
+        db.add(meta_obj)
+    else:
+        existing_extra = dict(meta_obj.extra or {})
+        existing_extra["approval"] = approval_payload
+        meta_obj.extra = existing_extra
 
     audit = AuditLog(
         user_id=current_user.id,
         action="APPROVE_DOCUMENT",
         resource_type="document",
         resource_id=document_id,
-        detail={"old_status": old_status, "new_status": "APPROVED", "title": doc.title},
+        detail={
+            "old_status": old_status,
+            "new_status": "APPROVED",
+            "title": doc.title,
+            "approver_id": str(current_user.id),
+            "approver_name": approver_name,
+            "approver_role": user_role_name,
+            "approver_role_label": user_role_label,
+            "approved_at": now.isoformat(),
+        },
         created_at=now,
     )
     db.add(audit)
@@ -1793,7 +2106,12 @@ async def approve_document(
     except Exception as exc:
         logger.warning("Failed to update status in ES: {err}", err=str(exc))
 
-    logger.info("Approved document {id} by user {user}", id=document_id, user=current_user.id)
+    logger.info(
+        "Approved document {id} by user {user} ({role})",
+        id=document_id,
+        user=current_user.id,
+        role=user_role_label,
+    )
     app_cache.invalidate("dashboard_stats")
     doc_service = DocumentService(db)
     return await doc_service.get_document_by_id(document_id)
@@ -1816,14 +2134,54 @@ async def reject_document(
     old_status = doc.ocr_status
     now = datetime.now()
     doc.ocr_status = "REJECTED"
+    doc.is_verified = False
     doc.updated_at = now
+
+    user_role_name = current_user.role.name if current_user.role else "STAFF"
+    user_role_label = (
+        "Quản trị viên (ADMIN)" if user_role_name == "ADMIN" else "Cán bộ Công tác Sinh viên (CTSV)"
+    )
+    rejector_name = current_user.full_name or current_user.username
+
+    rejection_payload = {
+        "status": "REJECTED",
+        "action": "REJECT_DOCUMENT",
+        "approver_id": str(current_user.id),
+        "approver_name": rejector_name,
+        "approver_role": user_role_name,
+        "approver_role_label": user_role_label,
+        "timestamp": now.isoformat(),
+    }
+
+    meta_stmt = select(DocumentMetadata).where(DocumentMetadata.document_id == document_id)
+    meta_res = await db.execute(meta_stmt)
+    meta_obj = meta_res.scalar_one_or_none()
+    if not meta_obj:
+        meta_obj = DocumentMetadata(
+            document_id=document_id,
+            extra={"approval": rejection_payload},
+        )
+        db.add(meta_obj)
+    else:
+        existing_extra = dict(meta_obj.extra or {})
+        existing_extra["approval"] = rejection_payload
+        meta_obj.extra = existing_extra
 
     audit = AuditLog(
         user_id=current_user.id,
         action="REJECT_DOCUMENT",
         resource_type="document",
         resource_id=document_id,
-        detail={"old_status": old_status, "new_status": "REJECTED", "title": doc.title},
+        detail={
+            "old_status": old_status,
+            "new_status": "REJECTED",
+            "title": doc.title,
+            "approver_id": str(current_user.id),
+            "approver_name": rejector_name,
+            "approver_role": user_role_name,
+            "approver_role_label": user_role_label,
+            "rejected_at": now.isoformat(),
+        },
         created_at=now,
     )
 

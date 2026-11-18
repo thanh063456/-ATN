@@ -166,9 +166,49 @@ class VerificationResponse(BaseModel):
     student_id: str | None = None
     approved_at: datetime | None = None
     approved_by_name: str | None = None
+    approved_by_role: str | None = None
+    approved_by_role_label: str | None = None
     verification_code: str
     qr_payload: str
     issued_by: str = "Trường Đại học Đà Lạt - Phòng Công tác Sinh viên (DocuCTSV)"
+
+
+class ApprovalInfo(BaseModel):
+    """Thông tin phê duyệt hoặc từ chối hồ sơ bởi Cán bộ CTSV / Quản trị viên."""
+
+    status: str
+    action: str = "APPROVE_DOCUMENT"
+    approver_id: str | None = None
+    approver_name: str | None = None
+    approver_role: str | None = None  # "ADMIN" | "STAFF"
+    approver_role_label: str | None = None  # "Quản trị viên (ADMIN)" | "Cán bộ Công tác Sinh viên (CTSV)"
+    timestamp: datetime | None = None
+    note: str | None = None
+
+
+class DocumentNotificationItem(BaseModel):
+    """Thông báo về trạng thái xét duyệt và nộp hồ sơ."""
+
+    id: str
+    document_id: UUID
+    document_title: str
+    action: str  # "APPROVE_DOCUMENT" | "REJECT_DOCUMENT" | "UPLOAD"
+    status: str  # "APPROVED" | "REJECTED" | "PENDING" | "PROCESSING" | "DONE"
+    actor_id: str | None = None
+    actor_name: str
+    actor_role: str
+    actor_role_label: str
+    message: str
+    created_at: datetime
+    is_read: bool = False
+
+
+class DocumentNotificationsResponse(BaseModel):
+    """Danh sách thông báo kèm số lượng chưa đọc."""
+
+    items: list[DocumentNotificationItem] = Field(default_factory=list)
+    total: int = 0
+    unread_count: int = 0
 
 
 # ── Main Document Schemas ────────────────────────────────────────────────────
@@ -226,6 +266,7 @@ class DocumentListItem(DocumentResponse):
     tags: list[str] = Field(default_factory=list)
     priority_score: int = 0
     ocr_progress: int = 0  # 0-100% tiến độ OCR thực tế
+    approval_info: ApprovalInfo | None = None
 
 
 class DocumentListResponse(BaseModel):
@@ -248,6 +289,7 @@ class DocumentDetailResponse(DocumentResponse):
     tags: list[str] = Field(default_factory=list)
     priority_score: int = 0
     file_url: str | None = None
+    approval_info: ApprovalInfo | None = None
 
 
 class TypeOverrideReq(BaseModel):
@@ -298,4 +340,19 @@ class TableExtractionResponse(BaseModel):
     tables: list[ExtractedTableSchema] = Field(default_factory=list)
     total_tables: int = 0
     total_cells: int = 0
+
+
+class CategoryItemResponse(BaseModel):
+    id: str
+    name: str
+    code: str
+    description: str | None = None
+    is_active: bool = True
+    doc_count: int = 0
+
+
+class CreateCategoryRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    code: str = Field(..., min_length=2, max_length=50)
+    description: str | None = None
 

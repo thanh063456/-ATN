@@ -6,7 +6,6 @@ import {
   GraduationCap,
   ShieldCheck,
   FileText,
-  Calendar,
   Clock,
   Search,
   CheckCircle2,
@@ -38,7 +37,6 @@ export const ProfilePage: React.FC = () => {
   const [searchDocTerm, setSearchDocTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"DOCS" | "INFO">("DOCS");
 
-  // Đồng bộ lại state khi user store cập nhật
   useEffect(() => {
     if (user) {
       setFullName(user.fullName || "");
@@ -46,14 +44,12 @@ export const ProfilePage: React.FC = () => {
     }
   }, [user]);
 
-  // Tải danh sách hồ sơ do người dùng tải lên hoặc gắn với MSSV này
   const fetchMyDocuments = async () => {
     setIsLoadingDocs(true);
     try {
       const res = await documentsApi.list({
         pageSize: 100,
       });
-      // Lọc các hồ sơ do user này tải lên hoặc khớp MSSV
       const myItems = (res.items || []).filter((d) => {
         if (user?.id && d.uploaded_by === user.id) return true;
         if (user?.mssv && (d.student_id === user.mssv || d.uploader_mssv === user.mssv)) return true;
@@ -72,7 +68,6 @@ export const ProfilePage: React.FC = () => {
     fetchMyDocuments();
   }, [user?.id, user?.mssv]);
 
-  // Lưu thông tin cá nhân
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) {
@@ -108,7 +103,6 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  // Lọc và sắp xếp hồ sơ cá nhân theo thời gian thực upload (mới nhất lên đầu)
   const filteredDocs = useMemo(() => {
     return userDocs
       .filter((d) => {
@@ -128,7 +122,6 @@ export const ProfilePage: React.FC = () => {
       });
   }, [userDocs, searchDocTerm]);
 
-  // Thống kê nhanh
   const approvedDocsCount = userDocs.filter((d) => d.ocr_status === "APPROVED").length;
   const doneDocsCount = userDocs.filter((d) => d.ocr_status === "DONE" || d.ocr_status === "APPROVED").length;
 
@@ -155,175 +148,127 @@ export const ProfilePage: React.FC = () => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+    <div className="space-y-6 animate-fade-in">
       {/* 1. Header Profile Banner */}
-      <Card
-        padding="lg"
-        style={{
-          background: "linear-gradient(135deg, #1e3a8a 0%, #172554 100%)",
-          color: "#ffffff",
-          borderRadius: "var(--radius-lg)",
-          boxShadow: "0 10px 25px -5px rgba(30, 58, 138, 0.3)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-            <div
-              style={{
-                width: "72px",
-                height: "72px",
-                borderRadius: "50%",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
-                backdropFilter: "blur(8px)",
-                color: "#93c5fd",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "1.875rem",
-                fontWeight: 700,
-                border: "2px solid rgba(255, 255, 255, 0.3)",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-              }}
-            >
+      <div className="bg-[#0a192f] text-white p-5 sm:p-7 rounded-lg border border-slate-800 shadow-paper">
+        <div className="flex items-center justify-between flex-wrap gap-5">
+          <div className="flex items-center gap-4 sm:gap-5">
+            <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-dlu-navy-800 text-sky-300 border-2 border-sky-400/30 flex items-center justify-center text-2xl font-bold shadow-sm shrink-0">
               {user?.fullName?.charAt(0) || "U"}
             </div>
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-                <h1 style={{ fontSize: "1.5rem", fontWeight: 700, margin: 0, color: "#f8fafc" }}>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                   {user?.fullName || "Chưa đặt tên"}
                 </h1>
                 <Badge variant={getRoleBadgeVariant()}>{user?.role || "STUDENT"}</Badge>
               </div>
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.875rem", color: "#bfdbfe", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <Building2 size={15} />
+              <p className="text-slate-300 text-xs sm:text-sm mt-1 flex items-center gap-1.5">
+                <Building2 size={14} className="text-sky-400" />
                 <span>Trường Đại học Đà Lạt • Phòng Công tác Sinh viên (CTSV)</span>
               </p>
-              <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem", flexWrap: "wrap", fontSize: "0.8125rem", color: "#e2e8f0" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <Mail size={14} color="#93c5fd" /> {user?.email}
+              <div className="flex gap-3 sm:gap-5 mt-2 flex-wrap text-xs text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <Mail size={13} className="text-sky-300" /> {user?.email}
                 </span>
                 {user?.mssv && (
-                  <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                    <GraduationCap size={14} color="#93c5fd" /> MSSV: <strong>{user.mssv}</strong>
+                  <span className="flex items-center gap-1.5">
+                    <GraduationCap size={13} className="text-sky-300" /> MSSV: <strong className="font-mono">{user.mssv}</strong>
                   </span>
                 )}
-                <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <ShieldCheck size={14} color="#4ade80" /> Trạng thái: Đã xác thực
+                <span className="flex items-center gap-1.5 text-emerald-300">
+                  <ShieldCheck size={13} /> Trạng thái: Đã xác thực
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Quick link button to search by this MSSV/Name */}
-          <div style={{ display: "flex", gap: "0.6rem" }}>
-            <Link
-              to={`/search?q=${encodeURIComponent(user?.mssv || user?.fullName || "")}`}
-              style={{ textDecoration: "none" }}
-            >
+          <div className="flex gap-2">
+            <Link to={`/search?q=${encodeURIComponent(user?.mssv || user?.fullName || "")}`}>
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<FileSearch size={15} />}
-                style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.1)",
-                  borderColor: "rgba(255, 255, 255, 0.3)",
-                  color: "#ffffff",
-                }}
+                leftIcon={<FileSearch size={14} />}
+                className="border-slate-600 text-slate-200 hover:bg-white/10 hover:text-white"
               >
                 Tra cứu hồ sơ liên quan
               </Button>
             </Link>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* 2. Quick Stat Counters */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
-        <Card padding="md">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-lg border border-slate-200/90 shadow-paper border-l-4 border-l-dlu-navy-900">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               Hồ sơ đã tải lên
             </span>
-            <div style={{ padding: "0.35rem", borderRadius: "0.375rem", backgroundColor: "#eff6ff", color: "#2563eb" }}>
-              <Layers size={18} />
+            <div className="p-1.5 rounded-md bg-dlu-navy-50 text-dlu-navy-800">
+              <Layers size={16} />
             </div>
           </div>
-          <div style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--gray-900)", marginTop: "0.4rem" }}>
+          <div className="text-2xl font-bold font-mono text-slate-900 mt-1">
             {userDocs.length}
           </div>
-          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Tổng tài liệu đã nạp vào kho</span>
-        </Card>
+          <span className="text-[11px] text-slate-500 mt-0.5 block">Tổng tài liệu đã nạp vào kho</span>
+        </div>
 
-        <Card padding="md">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>
+        <div className="bg-white p-4 rounded-lg border border-slate-200/90 shadow-paper border-l-4 border-l-emerald-600">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               Đã nhận diện OCR
             </span>
-            <div style={{ padding: "0.35rem", borderRadius: "0.375rem", backgroundColor: "#f0fdf4", color: "#16a34a" }}>
-              <CheckCircle2 size={18} />
+            <div className="p-1.5 rounded-md bg-emerald-50 text-emerald-700">
+              <CheckCircle2 size={16} />
             </div>
           </div>
-          <div style={{ fontSize: "1.75rem", fontWeight: 700, color: "#16a34a", marginTop: "0.4rem" }}>
+          <div className="text-2xl font-bold font-mono text-emerald-700 mt-1">
             {doneDocsCount}
           </div>
-          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Hoàn tất trích xuất toàn văn</span>
-        </Card>
+          <span className="text-[11px] text-slate-500 mt-0.5 block">Hoàn tất trích xuất toàn văn</span>
+        </div>
 
-        <Card padding="md">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>
+        <div className="bg-white p-4 rounded-lg border border-slate-200/90 shadow-paper border-l-4 border-l-amber-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
               Đã phê duyệt điện tử
             </span>
-            <div style={{ padding: "0.35rem", borderRadius: "0.375rem", backgroundColor: "#fef3c7", color: "#d97706" }}>
-              <Award size={18} />
+            <div className="p-1.5 rounded-md bg-amber-50 text-amber-700">
+              <Award size={16} />
             </div>
           </div>
-          <div style={{ fontSize: "1.75rem", fontWeight: 700, color: "#d97706", marginTop: "0.4rem" }}>
+          <div className="text-2xl font-bold font-mono text-amber-600 mt-1">
             {approvedDocsCount}
           </div>
-          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Đã ký số và cấp mã QR</span>
-        </Card>
+          <span className="text-[11px] text-slate-500 mt-0.5 block">Đã ký số và cấp mã QR</span>
+        </div>
       </div>
 
       {/* 3. Navigation Tabs */}
-      <div style={{ borderBottom: "1px solid var(--border-color)", display: "flex", gap: "1rem" }}>
+      <div className="border-b border-slate-200 flex gap-4 text-xs sm:text-sm">
         <button
           onClick={() => setActiveTab("DOCS")}
-          style={{
-            padding: "0.65rem 1rem",
-            background: "none",
-            border: "none",
-            borderBottom: activeTab === "DOCS" ? "3px solid #1e3a8a" : "3px solid transparent",
-            color: activeTab === "DOCS" ? "#1e3a8a" : "var(--gray-500)",
-            fontWeight: activeTab === "DOCS" ? 700 : 500,
-            fontSize: "0.875rem",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.4rem",
-          }}
+          className={`pb-2.5 font-semibold flex items-center gap-1.5 transition-colors border-b-2 ${
+            activeTab === "DOCS"
+              ? "border-dlu-navy-900 text-dlu-navy-900"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
         >
-          <FileText size={16} />
+          <FileText size={15} />
           <span>Hồ sơ đã tải lên ({userDocs.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab("INFO")}
-          style={{
-            padding: "0.65rem 1rem",
-            background: "none",
-            border: "none",
-            borderBottom: activeTab === "INFO" ? "3px solid #1e3a8a" : "3px solid transparent",
-            color: activeTab === "INFO" ? "#1e3a8a" : "var(--gray-500)",
-            fontWeight: activeTab === "INFO" ? 700 : 500,
-            fontSize: "0.875rem",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.4rem",
-          }}
+          className={`pb-2.5 font-semibold flex items-center gap-1.5 transition-colors border-b-2 ${
+            activeTab === "INFO"
+              ? "border-dlu-navy-900 text-dlu-navy-900"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
         >
-          <User size={16} />
+          <User size={15} />
           <span>Thông tin tài khoản & Chỉnh sửa</span>
         </button>
       </div>
@@ -331,136 +276,94 @@ export const ProfilePage: React.FC = () => {
       {/* 4. Tab 1: Documents list */}
       {activeTab === "DOCS" && (
         <Card padding="none">
-          <div
-            style={{
-              padding: "1rem 1.25rem",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              borderBottom: "1px solid var(--border-color)",
-              flexWrap: "wrap",
-              gap: "0.75rem",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, maxWidth: "420px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  backgroundColor: "var(--gray-50)",
-                  border: "1px solid var(--border-color)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "0.4rem 0.75rem",
-                  width: "100%",
-                }}
-              >
-                <Search size={15} color="var(--gray-400)" />
-                <input
-                  type="text"
-                  placeholder="Lọc hồ sơ theo tiêu đề, số hiệu, MSSV..."
-                  value={searchDocTerm}
-                  onChange={(e) => setSearchDocTerm(e.target.value)}
-                  style={{
-                    border: "none",
-                    outline: "none",
-                    backgroundColor: "transparent",
-                    fontSize: "0.8125rem",
-                    width: "100%",
-                  }}
-                />
-              </div>
+          <div className="p-4 flex items-center justify-between border-b border-slate-200/80 flex-wrap gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Lọc hồ sơ theo tiêu đề, số hiệu, MSSV..."
+                value={searchDocTerm}
+                onChange={(e) => setSearchDocTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-md border border-slate-200 bg-slate-50/70 text-xs text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:ring-1 focus:ring-dlu-navy-500"
+              />
             </div>
 
             <Button
               variant="outline"
               size="sm"
-              leftIcon={<RefreshCw size={14} className={isLoadingDocs ? "animate-spin" : ""} />}
+              leftIcon={<RefreshCw size={13} className={isLoadingDocs ? "animate-spin" : ""} />}
               onClick={fetchMyDocuments}
             >
               Làm mới
             </Button>
           </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.8125rem" }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
               <thead>
-                <tr style={{ backgroundColor: "var(--gray-50)", borderBottom: "1px solid var(--border-color)", color: "var(--gray-600)", fontWeight: 700 }}>
-                  <th style={{ padding: "0.75rem 1.25rem", width: "40%" }}>TIÊU ĐỀ & THÔNG TIN HỒ SƠ</th>
-                  <th style={{ padding: "0.75rem 1rem", width: "15%" }}>DANH MỤC</th>
-                  <th style={{ padding: "0.75rem 1rem", width: "15%" }}>TRẠNG THÁI OCR</th>
-                  <th style={{ padding: "0.75rem 1rem", width: "20%" }}>THỜI GIAN THỰC UPLOAD</th>
-                  <th style={{ padding: "0.75rem 1rem", width: "10%", textAlign: "right" }}>THAO TÁC</th>
+                <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                  <th className="px-5 py-3">Tiêu đề & Thông tin hồ sơ</th>
+                  <th className="px-4 py-3">Danh mục</th>
+                  <th className="px-4 py-3">Trạng thái OCR</th>
+                  <th className="px-4 py-3">Thời gian upload</th>
+                  <th className="px-5 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {filteredDocs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ padding: "3rem 1rem", textAlign: "center", color: "var(--gray-400)" }}>
-                      <FileText size={36} style={{ margin: "0 auto 0.5rem", opacity: 0.4 }} />
-                      <p style={{ fontWeight: 500 }}>Chưa có hồ sơ nào phù hợp.</p>
-                      <span style={{ fontSize: "0.75rem" }}>Các tài liệu do bạn tải lên sẽ hiển thị tại đây theo thời gian thực.</span>
+                    <td colSpan={5} className="py-12 px-4 text-center text-slate-400">
+                      <FileText size={32} className="mx-auto mb-2 opacity-40" />
+                      <p className="font-semibold text-slate-700">Chưa có hồ sơ nào phù hợp.</p>
+                      <span className="text-[11px] text-slate-400">Các tài liệu do bạn tải lên sẽ hiển thị tại đây theo thời gian thực.</span>
                     </td>
                   </tr>
                 ) : (
                   filteredDocs.map((doc) => (
-                    <tr
-                      key={doc.id}
-                      style={{ borderBottom: "1px solid var(--border-light)", transition: "background-color 0.15s ease" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(243, 244, 246, 0.5)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                    >
-                      <td style={{ padding: "0.85rem 1.25rem" }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem" }}>
+                    <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-start gap-2.5">
                           <span
-                            style={{
-                              padding: "0.25rem 0.45rem",
-                              borderRadius: "0.25rem",
-                              backgroundColor: doc.file_type?.toLowerCase() === "pdf" ? "#fee2e2" : "#e0e7ff",
-                              color: doc.file_type?.toLowerCase() === "pdf" ? "#dc2626" : "#4338ca",
-                              fontWeight: 700,
-                              fontSize: "0.6875rem",
-                            }}
+                            className={`p-1.5 rounded text-[10px] font-bold leading-none shrink-0 mt-0.5 ${
+                              doc.file_type?.toLowerCase() === "pdf"
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                            }`}
                           >
                             {doc.file_type || "PDF"}
                           </span>
                           <div>
                             <Link
                               to={`/documents/${doc.id}`}
-                              style={{
-                                color: "#1e3a8a",
-                                fontWeight: 600,
-                                textDecoration: "none",
-                              }}
+                              className="text-dlu-navy-900 font-semibold text-xs sm:text-sm hover:underline line-clamp-1"
                             >
                               {doc.title}
                             </Link>
-                            <div style={{ display: "flex", gap: "0.5rem", fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.2rem" }}>
-                              {doc.document_number && <span>Số: <strong>{doc.document_number}</strong></span>}
-                              {doc.student_id && <span>MSSV: <strong>{doc.student_id}</strong></span>}
-                              <span>{(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                              {doc.document_number && <span>Số: <strong className="text-slate-600">{doc.document_number}</strong></span>}
+                              {doc.student_id && <span>MSSV: <strong className="font-mono text-slate-600">{doc.student_id}</strong></span>}
+                              <span className="font-mono">{(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: "0.85rem 1rem", color: "var(--gray-700)" }}>
+                      <td className="px-4 py-3.5 text-slate-600">
                         {doc.category_name || "Chưa phân loại"}
                       </td>
-                      <td style={{ padding: "0.85rem 1rem" }}>
+                      <td className="px-4 py-3.5">
                         <OCRStatusBadge status={doc.ocr_status as any} />
                       </td>
-                      <td style={{ padding: "0.85rem 1rem", color: "#1e3a8a", fontWeight: 600 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                          <Clock size={13} color="var(--gray-400)" />
+                      <td className="px-4 py-3.5 text-slate-500 font-mono text-[11px]">
+                        <div className="flex items-center gap-1.5">
+                          <Clock size={12} className="text-slate-400" />
                           <span>
-                            {new Date(doc.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}{" "}
-                            • {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                            {new Date(doc.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} • {new Date(doc.created_at).toLocaleDateString("vi-VN")}
                           </span>
                         </div>
                       </td>
-                      <td style={{ padding: "0.85rem 1rem", textAlign: "right" }}>
-                        <Link to={`/documents/${doc.id}`} style={{ textDecoration: "none" }}>
-                          <Button variant="outline" size="sm" rightIcon={<ExternalLink size={13} />}>
+                      <td className="px-5 py-3.5 text-right">
+                        <Link to={`/documents/${doc.id}`}>
+                          <Button variant="outline" size="sm" rightIcon={<ExternalLink size={12} />}>
                             Xem
                           </Button>
                         </Link>
@@ -476,13 +379,13 @@ export const ProfilePage: React.FC = () => {
 
       {/* 5. Tab 2: Personal Information & Settings */}
       {activeTab === "INFO" && (
-        <Card padding="lg" style={{ maxWidth: "680px" }}>
-          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, margin: "0 0 1.25rem", color: "var(--gray-900)" }}>
+        <Card padding="md" className="max-w-xl">
+          <h2 className="text-sm font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
             Thông tin Hồ sơ Cá nhân
           </h2>
-          <form onSubmit={handleSaveProfile} style={{ display: "flex", flexDirection: "column", gap: "1.2rem" }}>
+          <form onSubmit={handleSaveProfile} className="space-y-4">
             <div>
-              <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-700)", marginBottom: "0.35rem" }}>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Họ và tên
               </label>
               <input
@@ -490,19 +393,12 @@ export const ProfilePage: React.FC = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
-                style={{
-                  width: "100%",
-                  padding: "0.6rem 0.85rem",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-color)",
-                  fontSize: "0.875rem",
-                  outline: "none",
-                }}
+                className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs sm:text-sm bg-white text-slate-900 outline-none focus:ring-2 focus:ring-dlu-navy-500/20 focus:border-dlu-navy-600"
               />
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-700)", marginBottom: "0.35rem" }}>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Mã số sinh viên (MSSV) / Mã cán bộ
               </label>
               <input
@@ -510,56 +406,40 @@ export const ProfilePage: React.FC = () => {
                 value={mssv}
                 onChange={(e) => setMssv(e.target.value)}
                 placeholder="Ví dụ: 2212461 hoặc để trống nếu là cán bộ chung"
-                style={{
-                  width: "100%",
-                  padding: "0.6rem 0.85rem",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-color)",
-                  fontSize: "0.875rem",
-                  outline: "none",
-                }}
+                className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs sm:text-sm bg-white text-slate-900 font-mono outline-none focus:ring-2 focus:ring-dlu-navy-500/20 focus:border-dlu-navy-600"
               />
-              <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.25rem", display: "block" }}>
+              <span className="text-[11px] text-slate-400 mt-1 block">
                 MSSV giúp hệ thống tự động liên kết các đơn từ, quyết định và hồ sơ khen thưởng / miễn giảm học phí của bạn.
               </span>
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-700)", marginBottom: "0.35rem" }}>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Địa chỉ Email nhà trường
               </label>
               <input
                 type="email"
                 value={user?.email || ""}
                 disabled
-                style={{
-                  width: "100%",
-                  padding: "0.6rem 0.85rem",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-color)",
-                  backgroundColor: "var(--gray-100)",
-                  color: "var(--gray-500)",
-                  fontSize: "0.875rem",
-                  cursor: "not-allowed",
-                }}
+                className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs sm:text-sm bg-slate-100 text-slate-500 font-mono cursor-not-allowed"
               />
-              <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.25rem", display: "block" }}>
+              <span className="text-[11px] text-slate-400 mt-1 block">
                 Email định danh @dlu.edu.vn được xác thực cố định qua tài khoản nhà trường.
               </span>
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-700)", marginBottom: "0.35rem" }}>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Vai trò hệ thống
               </label>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <div className="flex items-center gap-2">
                 <Badge variant={getRoleBadgeVariant()}>{user?.role || "STUDENT"}</Badge>
-                <span style={{ fontSize: "0.8125rem", color: "var(--gray-600)" }}>{getRoleLabel()}</span>
+                <span className="text-xs text-slate-600">{getRoleLabel()}</span>
               </div>
             </div>
 
-            <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--border-color)", display: "flex", justifyContent: "flex-end" }}>
-              <Button variant="primary" size="md" type="submit" isLoading={isSaving} leftIcon={<Save size={16} />}>
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <Button variant="primary" size="md" type="submit" isLoading={isSaving} leftIcon={<Save size={15} />}>
                 Lưu cập nhật
               </Button>
             </div>
@@ -569,4 +449,3 @@ export const ProfilePage: React.FC = () => {
     </div>
   );
 };
-

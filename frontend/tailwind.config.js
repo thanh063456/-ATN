@@ -1,0 +1,121 @@
+import daisyui from "daisyui";
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        dlu: {
+          navy: {
+            50: "#f0f4f9",
+            100: "#dbeafe",
+            200: "#bfdbfe",
+            300: "#93c5fd",
+            400: "#60a5fa",
+            500: "#2563eb",
+            600: "#1d4ed8",
+            700: "#1e4a84",
+            800: "#163a66",
+            900: "#0f294a",
+            950: "#0a192f",
+          },
+          crimson: {
+            50: "#fef2f2",
+            100: "#fee2e2",
+            200: "#fecaca",
+            500: "#ef4444",
+            600: "#dc2626",
+            700: "#b91c1c",
+            800: "#991b1b",
+            900: "#7f1d1d",
+          },
+          emerald: {
+            50: "#f0fdf4",
+            100: "#dcfce7",
+            200: "#bbf7d0",
+            600: "#16a34a",
+            700: "#15803d",
+            800: "#166534",
+          },
+          amber: {
+            50: "#fffbeb",
+            100: "#fef3c7",
+            200: "#fde68a",
+            500: "#f59e0b",
+            600: "#d97706",
+            700: "#b45309",
+          },
+          desk: "#f4f6f8",
+          paper: "#ffffff",
+          border: "#d9e2ec",
+          "border-subtle": "#eef2f6",
+        },
+      },
+      fontFamily: {
+        sans: [
+          '"Be Vietnam Pro"',
+          "-apple-system",
+          "BlinkMacSystemFont",
+          '"Segoe UI"',
+          "Roboto",
+          "sans-serif",
+        ],
+        mono: [
+          '"JetBrains Mono"',
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "Monaco",
+          "Consolas",
+          "monospace",
+        ],
+      },
+      boxShadow: {
+        paper: "0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04)",
+        "paper-hover": "0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.05)",
+        "paper-lg": "0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04)",
+        modal: "0 20px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.05)",
+      },
+      borderRadius: {
+        doc: "6px",
+      },
+    },
+  },
+  plugins: [daisyui],
+  daisyui: {
+    themes: [
+      {
+        dlu: {
+          primary: "#0f294a",
+          "primary-content": "#ffffff",
+          secondary: "#1e4a84",
+          "secondary-content": "#ffffff",
+          accent: "#b91c1c",
+          "accent-content": "#ffffff",
+          neutral: "#1e293b",
+          "neutral-content": "#f8fafc",
+          "base-100": "#ffffff",
+          "base-200": "#f4f6f8",
+          "base-300": "#e2e8f0",
+          "base-content": "#0f172a",
+          info: "#0284c7",
+          "info-content": "#ffffff",
+          success: "#15803d",
+          "success-content": "#ffffff",
+          warning: "#d97706",
+          "warning-content": "#ffffff",
+          error: "#b91c1c",
+          "error-content": "#ffffff",
+        },
+      },
+    ],
+    darkTheme: false,
+    base: true,
+    styled: true,
+    utils: true,
+  },
+};

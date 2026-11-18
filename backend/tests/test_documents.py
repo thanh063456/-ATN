@@ -64,4 +64,22 @@ async def test_approve_document(async_client: httpx.AsyncClient, staff_token: st
 
     # ── Assert ────────────────────────────────────────────────────────────
     assert app_res.status_code == 200
-    assert app_res.json()["ocr_status"] == "APPROVED"
+    res_json = app_res.json()
+    assert res_json["ocr_status"] == "APPROVED"
+    assert "approval_info" in res_json
+    if res_json["approval_info"]:
+        assert res_json["approval_info"]["status"] == "APPROVED"
+        assert res_json["approval_info"]["approver_role"] in ("ADMIN", "STAFF")
+
+
+@pytest.mark.asyncio
+async def test_get_document_notifications(async_client: httpx.AsyncClient, staff_token: str):
+    """Kiểm tra API lấy danh sách thông báo xét duyệt hồ sơ."""
+    headers = {"Authorization": f"Bearer {staff_token}"}
+    response = await async_client.get("/api/v1/documents/notifications?limit=10", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert "unread_count" in data
+    assert isinstance(data["items"], list)

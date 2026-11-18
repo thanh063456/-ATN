@@ -163,4 +163,76 @@ export const authApi = {
   signOut: async () => {
     await supabase.auth.signOut();
   },
+
+  /**
+   * Lấy danh sách toàn bộ người dùng từ Backend / Supabase
+   */
+  getAllUsers: async (): Promise<UserAdminItem[]> => {
+    try {
+      const res = await apiClient.get<UserAdminItem[]>("/auth/users");
+      return res.data;
+    } catch (err) {
+      // Fallback sang Supabase trực tiếp
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, username, full_name, email, mssv, is_active, last_login_at, created_at, roles(id, name)")
+          .order("created_at", { ascending: false });
+
+        if (error || !data || data.length === 0) {
+          throw err;
+        }
+        return data.map((u: any) => ({
+          id: u.id,
+          username: u.username,
+          fullName: u.full_name,
+          email: u.email,
+          mssv: u.mssv,
+          role: (u.roles?.name || "STUDENT") as "ADMIN" | "STAFF" | "STUDENT",
+          isActive: u.is_active,
+          lastLogin: u.last_login_at ? new Date(u.last_login_at).toLocaleString("vi-VN") : "Chưa đăng nhập",
+          createdAt: u.created_at ? new Date(u.created_at).toLocaleString("vi-VN") : "",
+        }));
+      } catch {
+        throw err;
+      }
+    }
+  },
+
+  /**
+   * Khóa / Mở khóa tài khoản người dùng
+   */
+  toggleUserStatus: async (userId: string): Promise<{ id: string; isActive: boolean }> => {
+    const res = await apiClient.patch<{ id: string; isActive: boolean }>(`/auth/users/${userId}/status`);
+    return res.data;
+  },
+
+  /**
+   * Admin tạo tài khoản người dùng mới
+   */
+  createUserByAdmin: async (payload: CreateUserPayload): Promise<UserAdminItem> => {
+    const res = await apiClient.post<UserAdminItem>("/auth/users", payload);
+    return res.data;
+  },
 };
+
+export interface UserAdminItem {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string;
+  mssv?: string;
+  role: "ADMIN" | "STAFF" | "STUDENT";
+  isActive: boolean;
+  lastLogin: string;
+  createdAt: string;
+}
+
+export interface CreateUserPayload {
+  username: string;
+  email: string;
+  full_name: string;
+  password?: string;
+  role: "ADMIN" | "STAFF" | "STUDENT";
+  mssv?: string;
+}

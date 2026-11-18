@@ -25,7 +25,6 @@ import {
   Layers,
   GitBranch,
   Scan,
-  BarChart3,
   CopyCheck,
   Building2,
   TrendingUp,
@@ -120,11 +119,10 @@ export const SearchPage: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [currentPage, setCurrentPage] = useState(initialPage);
 
-  // ── Navigation View Tabs (Rút gọn còn 3 tab chính tinh gọn) ──────────────
+  // ── Navigation View Tabs ──────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<
     | "fulltext"
     | "faq"
-    | "ctsv_analytics"
   >("fulltext");
 
   // ── Tìm kiếm Lai RRF (BM25 + kNN Reciprocal Rank Fusion) tích hợp ─────────
@@ -159,10 +157,6 @@ export const SearchPage: React.FC = () => {
   const [spatialKeyword, setSpatialKeyword] = useState<string>("");
   const [spatialData, setSpatialData] = useState<SpatialHighlightResponse | null>(null);
   const [isSpatialLoading, setIsSpatialLoading] = useState(false);
-
-  // ── Đề tài CTSV - Feature 3: Multi-Faceted CTSV Analytics Tab ─────────────
-  const [ctsvBreakdown, setCtsvBreakdown] = useState<CtsvMultiDimensionalAnalyticsResponse | null>(null);
-  const [isBreakdownLoading, setIsBreakdownLoading] = useState(false);
 
   // ── Đề tài CTSV - Feature 5: Cross-Document MLT Duplicate Modal ────────────
   const [duplicateModalDoc, setDuplicateModalDoc] = useState<SearchHit | null>(null);
@@ -282,22 +276,6 @@ export const SearchPage: React.FC = () => {
       });
     } finally {
       setIsDuplicateLoading(false);
-    }
-  };
-
-  const handleLoadCtsvBreakdown = async () => {
-    setIsBreakdownLoading(true);
-    try {
-      const data = await searchApi.getCtsvBreakdown();
-      setCtsvBreakdown(data);
-    } catch (err: any) {
-      addToast({
-        type: "error",
-        title: "Lỗi thống kê",
-        message: "Không thể tải báo cáo đa chiều CTSV",
-      });
-    } finally {
-      setIsBreakdownLoading(false);
     }
   };
 
@@ -611,47 +589,6 @@ export const SearchPage: React.FC = () => {
             }}
           >
             Trợ lý AI
-          </span>
-        </button>
-
-        {/* Tab 3: Thống kê CTSV */}
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("ctsv_analytics");
-            if (!ctsvBreakdown) handleLoadCtsvBreakdown();
-          }}
-          style={{
-            flex: 1,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "0.5rem",
-            padding: "0.65rem 1rem",
-            borderRadius: "0.6rem",
-            border: activeTab === "ctsv_analytics" ? "1px solid #2563eb" : "1px solid transparent",
-            backgroundColor: activeTab === "ctsv_analytics" ? "var(--primary-600)" : "transparent",
-            color: activeTab === "ctsv_analytics" ? "#ffffff" : "var(--gray-700)",
-            fontWeight: activeTab === "ctsv_analytics" ? 700 : 600,
-            fontSize: "0.875rem",
-            cursor: "pointer",
-            transition: "all 0.15s ease",
-            boxShadow: activeTab === "ctsv_analytics" ? "0 2px 4px rgba(37,99,235,0.25)" : "none",
-          }}
-        >
-          <BarChart3 size={16} />
-          <span>Thống kê CTSV theo Khoa</span>
-          <span
-            style={{
-              fontSize: "0.6875rem",
-              backgroundColor: activeTab === "ctsv_analytics" ? "rgba(255,255,255,0.25)" : "#ecfdf5",
-              color: activeTab === "ctsv_analytics" ? "#fff" : "#047857",
-              padding: "0.15rem 0.5rem",
-              borderRadius: "9999px",
-              fontWeight: 700,
-            }}
-          >
-            Aggregations
           </span>
         </button>
       </div>
@@ -2070,203 +2007,6 @@ export const SearchPage: React.FC = () => {
           )}
         </div>
       )}
-
-      {/* ==================================================================== */}
-      {/* TAB 5: BÁO CÁO ĐA CHIỀU CTSV (MULTI-LEVEL AGGREGATIONS)              */}
-      {/* ==================================================================== */}
-      {activeTab === "ctsv_analytics" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* Header & Refresh */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
-            <div>
-              <h3 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--gray-900)" }}>
-                Thống kê Đa chiều CTSV Toàn trường (Multi-level Aggregations)
-              </h3>
-              <p style={{ fontSize: "0.8125rem", color: "var(--gray-500)", marginTop: "0.2rem" }}>
-                Khai phá dữ liệu tổng hợp đa tầng của Elasticsearch 8: Phân tích cơ cấu chính sách, phân bổ hồ sơ theo từng Khoa, tiến độ phê duyệt hồ sơ và cam kết chất lượng SLA.
-              </p>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                leftIcon={<RotateCcw size={14} className={isBreakdownLoading ? "animate-spin" : ""} />}
-                onClick={() => handleLoadCtsvBreakdown()}
-                disabled={isBreakdownLoading}
-              >
-                Làm mới dữ liệu Aggs
-              </Button>
-            </div>
-          </div>
-
-          {isBreakdownLoading && !ctsvBreakdown ? (
-            <Card padding="lg">
-              <div style={{ padding: "3rem", textAlign: "center", color: "var(--gray-500)" }}>
-                <Clock className="animate-spin" size={32} style={{ margin: "0 auto 0.75rem", color: "var(--primary-600)" }} />
-                <span>Đang thực thi các câu truy vấn Aggregations đa tầng trên Elasticsearch 8...</span>
-              </div>
-            </Card>
-          ) : ctsvBreakdown ? (
-            <>
-              {/* 4 KPI Summary Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
-                <Card padding="md" style={{ borderLeft: "4px solid var(--primary-600)", backgroundColor: "#f8fafc" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Tổng Hồ sơ Chính sách</span>
-                  <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--primary-700)", marginTop: "0.25rem" }}>
-                    {ctsvBreakdown.total_student_documents.toLocaleString()}
-                  </div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--gray-600)" }}>Toàn bộ đơn từ scan đã lập chỉ mục</span>
-                </Card>
-
-                <Card padding="md" style={{ borderLeft: "4px solid #16a34a", backgroundColor: "#f8fafc" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Sinh viên Thụ hưởng</span>
-                  <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#16a34a", marginTop: "0.25rem" }}>
-                    {ctsvBreakdown.total_active_students.toLocaleString()}
-                  </div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--gray-600)" }}>Sinh viên diện chính sách / học bổng</span>
-                </Card>
-
-                <Card padding="md" style={{ borderLeft: "4px solid #d97706", backgroundColor: "#f8fafc" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Tỷ lệ Đã Phê duyệt</span>
-                  <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#b45309", marginTop: "0.25rem" }}>
-                    {ctsvBreakdown.total_student_documents > 0
-                      ? `${Math.round((ctsvBreakdown.faculty_breakdown.reduce((acc, f) => acc + f.approved_count, 0) / Math.max(ctsvBreakdown.total_student_documents, 1)) * 100)}%`
-                      : "100%"}
-                  </div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--gray-600)" }}>Tiến độ thẩm định chính sách toàn trường</span>
-                </Card>
-
-                <Card padding="md" style={{ borderLeft: "4px solid #0284c7", backgroundColor: "#f8fafc" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase" }}>Thời gian Xử lý Trung bình</span>
-                  <div style={{ fontSize: "1.75rem", fontWeight: 800, color: "#0284c7", marginTop: "0.25rem" }}>
-                    {ctsvBreakdown.avg_processing_sla_days} ngày
-                  </div>
-                  <span style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 600 }}>Đạt chuẩn SLA (&lt; 3.0 ngày)</span>
-                </Card>
-              </div>
-
-              {/* Main Grid: Faculty Breakdown & Policy Distribution */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1rem" }}>
-                {/* Faculty Breakdown Table */}
-                <Card padding="md" style={{ gridColumn: "span 1" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                    <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <Building2 size={16} color="var(--primary-600)" />
-                      Phân bổ Hồ sơ theo Khoa Chuyên môn
-                    </h4>
-                    <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
-                      {ctsvBreakdown.faculty_breakdown.length} Khoa
-                    </span>
-                  </div>
-
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
-                      <thead>
-                        <tr style={{ backgroundColor: "var(--gray-50)", borderBottom: "1px solid var(--border-color)", textAlign: "left" }}>
-                          <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)" }}>Khoa</th>
-                          <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "center" }}>Tổng đơn</th>
-                          <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "center" }}>Đã duyệt</th>
-                          <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "center" }}>Chờ duyệt</th>
-                          <th style={{ padding: "0.5rem 0.6rem", color: "var(--gray-700)", textAlign: "right" }}>Tỷ lệ duyệt</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ctsvBreakdown.faculty_breakdown.map((f, idx) => {
-                          const rate = Math.round((f.approved_count / f.total_applications) * 100);
-                          return (
-                            <tr key={idx} style={{ borderBottom: "1px solid var(--gray-100)" }}>
-                              <td style={{ padding: "0.55rem 0.6rem" }}>
-                                <div style={{ fontWeight: 600, color: "var(--gray-900)" }}>{f.faculty_name}</div>
-                                <div style={{ width: "100%", backgroundColor: "var(--gray-100)", height: "4px", borderRadius: "2px", marginTop: "3px" }}>
-                                  <div style={{ width: `${rate}%`, backgroundColor: rate >= 80 ? "#16a34a" : "#d97706", height: "100%", borderRadius: "2px" }} />
-                                </div>
-                              </td>
-                              <td style={{ padding: "0.55rem 0.6rem", textAlign: "center", fontWeight: 700 }}>{f.total_applications}</td>
-                              <td style={{ padding: "0.55rem 0.6rem", textAlign: "center", color: "#16a34a", fontWeight: 700 }}>{f.approved_count}</td>
-                              <td style={{ padding: "0.55rem 0.6rem", textAlign: "center", color: "#d97706" }}>{f.pending_count}</td>
-                              <td style={{ padding: "0.55rem 0.6rem", textAlign: "right" }}>
-                                <span style={{
-                                  fontSize: "0.75rem",
-                                  fontWeight: 700,
-                                  backgroundColor: rate >= 80 ? "#dcfce7" : "#fef3c7",
-                                  color: rate >= 80 ? "#16a34a" : "#d97706",
-                                  padding: "0.15rem 0.45rem",
-                                  borderRadius: "9999px"
-                                }}>
-                                  {rate}%
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-
-                {/* Policy Distribution & Monthly Trend */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  <Card padding="md">
-                    <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <Layers size={16} color="#d97706" />
-                      Cơ cấu Danh mục Chính sách Sinh viên
-                    </h4>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                      {ctsvBreakdown.policy_distribution.map((pol, idx) => (
-                        <div key={idx} style={{ padding: "0.55rem 0.75rem", borderRadius: "var(--radius-sm)", backgroundColor: "var(--gray-50)", border: "1px solid var(--gray-200)" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-900)" }}>{pol.policy_name}</span>
-                            <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--primary-700)" }}>{pol.percentage}%</span>
-                          </div>
-                          <div style={{ width: "100%", backgroundColor: "var(--gray-200)", height: "6px", borderRadius: "3px", marginTop: "4px" }}>
-                            <div style={{ width: `${pol.percentage}%`, backgroundColor: idx === 0 ? "var(--primary-600)" : idx === 1 ? "#16a34a" : idx === 2 ? "#d97706" : "#0284c7", height: "100%", borderRadius: "3px" }} />
-                          </div>
-                          <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)", marginTop: "3px", textAlign: "right" }}>
-                            {pol.count} hồ sơ thụ hưởng
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-
-                  {/* Monthly Application Trend */}
-                  <Card padding="md">
-                    <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <TrendingUp size={16} color="#16a34a" />
-                      Tiến độ Nộp Hồ sơ Theo Tháng (Date Histogram)
-                    </h4>
-                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${ctsvBreakdown.monthly_application_trend.length}, 1fr)`, gap: "0.5rem", alignItems: "flex-end", height: "130px", paddingTop: "1rem" }}>
-                      {ctsvBreakdown.monthly_application_trend.map((m, idx) => {
-                        const maxVal = Math.max(...ctsvBreakdown.monthly_application_trend.map((item) => item.applications));
-                        const heightPct = Math.round((m.applications / maxVal) * 100);
-                        return (
-                          <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
-                            <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--primary-700)", marginBottom: "2px" }}>{m.applications}</span>
-                            <div
-                              style={{
-                                width: "70%",
-                                height: `${heightPct}%`,
-                                backgroundColor: "var(--primary-500)",
-                                borderRadius: "4px 4px 0 0",
-                                transition: "height 0.3s ease",
-                              }}
-                              title={`${m.month}: ${m.applications} đơn (${m.approved} đã duyệt)`}
-                            />
-                            <span style={{ fontSize: "0.625rem", color: "var(--gray-500)", marginTop: "4px" }}>{m.month.slice(5)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Card>
-                </div>
-              </div>
-            </>
-          ) : null}
-        </div>
-      )}
-
-
 
       {/* ==================================================================== */}
       {/* MODAL 1: THẨM ĐỊNH CHÍNH SÁCH TỰ ĐỘNG (POLICY AUTO-AUDIT)            */}

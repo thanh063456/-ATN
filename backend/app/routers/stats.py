@@ -15,74 +15,168 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.cache import app_cache
 from app.core.database import get_db
+from app.core.dependencies import get_current_user_optional
 from app.models.document_categories import DocumentCategory
 from app.models.documents import Document
 from app.models.ocr_results import OCRResult
+from app.models.users import User
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 
 @router.get("/dashboard", summary="Lấy dữ liệu thống kê tổng quan và hiệu năng OCR")
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
+async def get_dashboard_stats(
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """Trả về số liệu thống kê tổng hợp và chỉ số khoa học cho màn hình Dashboard (có In-Memory TTL Cache)."""
-    cached = app_cache.get("dashboard_stats")
+    is_student = False
+    if current_user and current_user.role:
+        role_name = current_user.role.name.upper()
+        if role_name not in ("ADMIN", "STAFF"):
+            is_student = True
+
+    cache_key = f"dashboard_stats_user_{current_user.id}" if is_student and current_user else "dashboard_stats"
+    cached = app_cache.get(cache_key)
     if cached is not None:
         return cached
-    # 1. Tổng tài liệu
-    total_docs_res = await db.execute(select(func.count(Document.id)).where(Document.is_deleted == False))
-    total_documents = total_docs_res.scalar() or 0
 
-    # 2. Đếm theo trạng thái
-    status_counts_res = await db.execute(
-        select(Document.ocr_status, func.count(Document.id))
-        .where(Document.is_deleted == False)
-        .group_by(Document.ocr_status)
-    )
-    status_map = dict(status_counts_res.all())
-
-    # 3. Phân bổ theo danh mục
-    cat_stmt = (
-        select(DocumentCategory.name, DocumentCategory.code, func.count(Document.id))
-        .outerjoin(Document, (Document.category_id == DocumentCategory.id) & (Document.is_deleted == False))
-        .group_by(DocumentCategory.id, DocumentCategory.name, DocumentCategory.code)
-    )
-    cat_res = await db.execute(cat_stmt)
-    category_breakdown = [{"name": row[0], "code": row[1], "count": row[2]} for row in cat_res.all()]
-
-    # 4. Hiệu năng OCR (Confidence, Correction Rate, Processing time)
-    ocr_stats_stmt = select(
-        func.avg(OCRResult.confidence_score),
-        func.avg(OCRResult.processing_time_ms),
-        func.count(OCRResult.id),
-    ).where(OCRResult.is_latest == True)
-    ocr_stats_res = await db.execute(ocr_stats_stmt)
-    avg_conf, avg_proc_time, total_ocr_runs = ocr_stats_res.first() or (0.95, 1250, 0)
-
-    avg_confidence = round(float(avg_conf or 0.96) * 100, 1)
-    avg_processing_time_ms = int(avg_proc_time or 1200)
-
-    # Đếm số lượng tài liệu đã được chỉnh sửa thủ công
-    corrected_count_res = await db.execute(
-        select(func.count(OCRResult.id)).where(OCRResult.is_corrected == True, OCRResult.is_latest == True)
-    )
-    corrected_count = corrected_count_res.scalar() or 0
-
-    # Ước tính tỷ lệ chính xác & CER
-    cer_estimation = max(0.8, round((100 - avg_confidence) * 0.6, 2))
-
-    # 5. Danh sách tài liệu gần đây (10 bản ghi)
-    recent_stmt = (
-        select(Document)
-        .where(Document.is_deleted == False)
-        .order_by(Document.created_at.desc())
-        .limit(10)
-        .options(
-            joinedload(Document.category),
-            joinedload(Document.uploader),
-            selectinload(Document.metadata_),
-            selectinload(Document.ocr_results).defer(OCRResult.raw_text).defer(OCRResult.corrected_text),
+    if is_student and current_user:
+        # ── Dành cho vai trò SINH VIÊN: Thống kê riêng hồ sơ do tài khoản này tải lên ──
+        # 1. Tổng tài liệu do sinh viên này tải lên
+        total_docs_res = await db.execute(
+            select(func.count(Document.id))
+            .where(Document.is_deleted == False)
+            .where(Document.uploaded_by == current_user.id)
         )
-    )
+        total_documents = total_docs_res.scalar() or 0
+
+        # 2. Đếm theo trạng thái
+        status_counts_res = await db.execute(
+            select(Document.ocr_status, func.count(Document.id))
+            .where(Document.is_deleted == False)
+            .where(Document.uploaded_by == current_user.id)
+            .group_by(Document.ocr_status)
+        )
+        status_map = dict(status_counts_res.all())
+
+        # 3. Phân bổ theo danh mục của sinh viên này
+        cat_stmt = (
+            select(DocumentCategory.name, DocumentCategory.code, func.count(Document.id))
+            .join(
+                Document,
+                (Document.category_id == DocumentCategory.id)
+                & (Document.is_deleted == False)
+                & (Document.uploaded_by == current_user.id),
+            )
+            .group_by(DocumentCategory.id, DocumentCategory.name, DocumentCategory.code)
+        )
+        cat_res = await db.execute(cat_stmt)
+        category_breakdown = [{"name": row[0], "code": row[1], "count": row[2]} for row in cat_res.all()]
+
+        # 4. Hiệu năng OCR của sinh viên này
+        ocr_stats_stmt = (
+            select(
+                func.avg(OCRResult.confidence_score),
+                func.avg(OCRResult.processing_time_ms),
+                func.count(OCRResult.id),
+            )
+            .join(Document, Document.id == OCRResult.document_id)
+            .where(
+                Document.uploaded_by == current_user.id,
+                Document.is_deleted == False,
+                OCRResult.is_latest == True,
+            )
+        )
+        ocr_stats_res = await db.execute(ocr_stats_stmt)
+        avg_conf, avg_proc_time, total_ocr_runs = ocr_stats_res.first() or (0.95, 1250, 0)
+
+        avg_confidence = round(float(avg_conf or 0.96) * 100, 1)
+        avg_processing_time_ms = int(avg_proc_time or 1200)
+
+        corrected_count_res = await db.execute(
+            select(func.count(OCRResult.id))
+            .join(Document, Document.id == OCRResult.document_id)
+            .where(
+                Document.uploaded_by == current_user.id,
+                Document.is_deleted == False,
+                OCRResult.is_corrected == True,
+                OCRResult.is_latest == True,
+            )
+        )
+        corrected_count = corrected_count_res.scalar() or 0
+        cer_estimation = max(0.8, round((100 - avg_confidence) * 0.6, 2))
+
+        # 5. Danh sách tài liệu gần đây của sinh viên này
+        recent_stmt = (
+            select(Document)
+            .where(Document.is_deleted == False)
+            .where(Document.uploaded_by == current_user.id)
+            .order_by(Document.created_at.desc())
+            .limit(10)
+            .options(
+                joinedload(Document.category),
+                joinedload(Document.uploader),
+                selectinload(Document.metadata_),
+                selectinload(Document.ocr_results).defer(OCRResult.raw_text).defer(OCRResult.corrected_text),
+            )
+        )
+    else:
+        # ── Dành cho Cán bộ / Admin: Thống kê toàn bộ kho tài liệu CTSV ──
+        # 1. Tổng tài liệu
+        total_docs_res = await db.execute(select(func.count(Document.id)).where(Document.is_deleted == False))
+        total_documents = total_docs_res.scalar() or 0
+
+        # 2. Đếm theo trạng thái
+        status_counts_res = await db.execute(
+            select(Document.ocr_status, func.count(Document.id))
+            .where(Document.is_deleted == False)
+            .group_by(Document.ocr_status)
+        )
+        status_map = dict(status_counts_res.all())
+
+        # 3. Phân bổ theo danh mục
+        cat_stmt = (
+            select(DocumentCategory.name, DocumentCategory.code, func.count(Document.id))
+            .outerjoin(Document, (Document.category_id == DocumentCategory.id) & (Document.is_deleted == False))
+            .group_by(DocumentCategory.id, DocumentCategory.name, DocumentCategory.code)
+        )
+        cat_res = await db.execute(cat_stmt)
+        category_breakdown = [{"name": row[0], "code": row[1], "count": row[2]} for row in cat_res.all()]
+
+        # 4. Hiệu năng OCR (Confidence, Correction Rate, Processing time)
+        ocr_stats_stmt = select(
+            func.avg(OCRResult.confidence_score),
+            func.avg(OCRResult.processing_time_ms),
+            func.count(OCRResult.id),
+        ).where(OCRResult.is_latest == True)
+        ocr_stats_res = await db.execute(ocr_stats_stmt)
+        avg_conf, avg_proc_time, total_ocr_runs = ocr_stats_res.first() or (0.95, 1250, 0)
+
+        avg_confidence = round(float(avg_conf or 0.96) * 100, 1)
+        avg_processing_time_ms = int(avg_proc_time or 1200)
+
+        # Đếm số lượng tài liệu đã được chỉnh sửa thủ công
+        corrected_count_res = await db.execute(
+            select(func.count(OCRResult.id)).where(OCRResult.is_corrected == True, OCRResult.is_latest == True)
+        )
+        corrected_count = corrected_count_res.scalar() or 0
+        cer_estimation = max(0.8, round((100 - avg_confidence) * 0.6, 2))
+
+        # 5. Danh sách tài liệu gần đây (10 bản ghi)
+        recent_stmt = (
+            select(Document)
+            .where(Document.is_deleted == False)
+            .order_by(Document.created_at.desc())
+            .limit(10)
+            .options(
+                joinedload(Document.category),
+                joinedload(Document.uploader),
+                selectinload(Document.metadata_),
+                selectinload(Document.ocr_results).defer(OCRResult.raw_text).defer(OCRResult.corrected_text),
+            )
+        )
+
     recent_res = await db.execute(recent_stmt)
     recent_docs = []
     for d in recent_res.scalars().all():
@@ -112,7 +206,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
                 "file_type": d.file_type,
                 "ocr_status": d.ocr_status,
                 "confidence_score": conf,
-                "created_at": d.created_at.isoformat(),
+                "created_at": d.created_at.isoformat() if d.created_at else None,
             }
         )
 
@@ -129,6 +223,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)) -> dict:
         "cer_estimation": cer_estimation,
         "category_breakdown": category_breakdown,
         "recent_documents": recent_docs,
+        "is_student_view": is_student,
     }
-    app_cache.set("dashboard_stats", res_data, ttl=45)
+    app_cache.set(cache_key, res_data, ttl=45)
     return res_data

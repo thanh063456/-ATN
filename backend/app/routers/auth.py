@@ -31,11 +31,13 @@ from app.models.roles import Role
 from app.models.users import User
 from app.schemas.auth import (
     ConfirmEmailRequest,
+    CreateUserByAdminRequest,
     LoginRequest,
     RegisterRequest,
     SignupRequest,
     TokenResponse,
     UpdateProfileRequest,
+    UserAdminItemResponse,
     UserResponse,
 )
 
@@ -393,3 +395,119 @@ async def update_me(
         is_active=current_user.is_active,
         created_at=current_user.created_at,
     )
+
+
+@router.get("/users", response_model=list[UserAdminItemResponse], summary="Danh sách toàn bộ người dùng trong hệ thống (Supabase DB)")
+async def list_users(
+    current_user: User = Depends(require_roles("ADMIN", "STAFF")),
+    db: AsyncSession = Depends(get_db),
+) -> list[UserAdminItemResponse]:
+    """Lấy danh sách toàn bộ tài khoản người dùng trực tiếp từ cơ sở dữ liệu Supabase."""
+    stmt = select(User).options(selectinload(User.role)).order_by(User.created_at.desc())
+    res = await db.execute(stmt)
+    users = res.scalars().all()
+    return [
+        UserAdminItemResponse(
+            id=str(u.id),
+            username=u.username,
+            fullName=u.full_name,
+            email=u.email,
+            mssv=u.mssv,
+            role=u.role.name if u.role else "STUDENT",
+            isActive=u.is_active,
+            lastLogin=u.last_login_at.strftime("%d/%m/%Y %H:%M") if u.last_login_at else "Chưa đăng nhập",
+            createdAt=u.created_at.strftime("%d/%m/%Y %H:%M") if u.created_at else "",
+        )
+        for u in users
+    ]
+
+
+@router.patch("/users/{user_id}/status", summary="Khóa / Mở khóa tài khoản người dùng")
+async def toggle_user_status(
+    user_id: uuid.UUID,
+    current_user: User = Depends(require_roles("ADMIN")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Khóa hoặc kích hoạt tài khoản người dùng."""
+    stmt = select(User).where(User.id == user_id)
+    res = await db.execute(stmt)
+    target_user = res.scalars().first()
+    if not target_user:
+        raise AppException(status_code=404, message="Không tìm thấy người dùng", error_code="USER_NOT_FOUND")
+    if target_user.id == current_user.id:
+        raise AppException(status_code=400, message="Không thể tự khóa tài khoản của chính mình", error_code="CANNOT_BLOCK_SELF")
+
+    target_user.is_active = not target_user.is_active
+    await db.commit()
+    await db.refresh(target_user)
+    return {
+        "id": str(target_user.id),
+        "username": target_user.username,
+        "isActive": target_user.is_active,
+    }
+
+
+@router.post("/users", summary="Admin tạo tài khoản người dùng mới")
+async def create_user_by_admin(
+    req: CreateUserByAdminRequest,
+    current_user: User = Depends(require_roles("ADMIN")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Tạo người dùng mới trực tiếp vào hệ thống Supabase."""
+    check_stmt = select(User).where(
+        (User.email == req.email.strip().lower()) | (User.username == req.username.strip())
+    )
+    check_res = await db.execute(check_stmt)
+    if check_res.scalars().first():
+        raise AppException(status_code=409, message="Email hoặc Username đã tồn tại trong hệ thống", error_code="USER_EXISTS")
+
+    target_role_name = req.role.upper()
+    role_stmt = select(Role).where(Role.name == target_role_name)
+    role_res = await db.execute(role_stmt)
+    role_obj = role_res.scalars().first()
+    if not role_obj:
+        role_stmt = select(Role).where(Role.name == "STUDENT")
+        role_res = await db.execute(role_stmt)
+        role_obj = role_res.scalars().first()
+
+    supa_uid = None
+    try:
+        supa_res = supabase_admin.auth.admin.create_user({
+            "email": req.email.strip().lower(),
+            "password": req.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "full_name": req.full_name.strip(),
+                "username": req.username.strip(),
+                "role": target_role_name,
+            }
+        })
+        if supa_res and supa_res.user:
+            supa_uid = supa_res.user.id
+    except Exception as exc:
+        logger.warning(f"Could not create user on Supabase auth directly: {exc}")
+
+    new_user = User(
+        id=uuid.uuid4(),
+        supabase_uid=supa_uid,
+        username=req.username.strip(),
+        email=req.email.strip().lower(),
+        full_name=req.full_name.strip(),
+        hashed_password=get_password_hash(req.password),
+        mssv=req.mssv.strip() if req.mssv else None,
+        role_id=role_obj.id,
+        is_active=True,
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    return {
+        "id": str(new_user.id),
+        "username": new_user.username,
+        "fullName": new_user.full_name,
+        "email": new_user.email,
+        "role": target_role_name,
+        "isActive": new_user.is_active,
+        "lastLogin": "Chưa đăng nhập",
+        "createdAt": new_user.created_at.strftime("%d/%m/%Y %H:%M") if new_user.created_at else "",
+    }

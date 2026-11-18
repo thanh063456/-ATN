@@ -137,6 +137,9 @@ async def _process_secondary_engine(doc_uuid: UUID, engine_name: str) -> None:
 
     processing_time_ms = round((time.perf_counter() - t_start) * 1000)
 
+    # Văn bản trích xuất chuẩn hóa từ engine OCR (không chạy AI hậu xử lý văn bản để giữ nguyên 100% chữ)
+    ai_refined_text = processed_text or raw_text
+
     async with AsyncSessionLocal() as session:
         stmt = (
             select(OCRResult)
@@ -149,24 +152,26 @@ async def _process_secondary_engine(doc_uuid: UUID, engine_name: str) -> None:
 
         if record:
             record.raw_text = raw_text if not ocr_failed else ""
-            record.corrected_text = processed_text if not ocr_failed else ""
+            record.corrected_text = ai_refined_text if not ocr_failed else ""
             record.confidence_score = confidence if not ocr_failed else 0.0
             record.ocr_engine_version = engine_version
             record.processing_time_ms = processing_time_ms
             record.status = status_val
             record.error_message = ocr_err_msg
+            record.is_corrected = is_ai_refined
         else:
             record = OCRResult(
                 document_id=doc_uuid,
                 ocr_engine=engine_name,
                 ocr_engine_version=engine_version,
                 raw_text=raw_text if not ocr_failed else "",
-                corrected_text=processed_text if not ocr_failed else "",
+                corrected_text=ai_refined_text if not ocr_failed else "",
                 confidence_score=confidence if not ocr_failed else 0.0,
                 processing_time_ms=processing_time_ms,
                 status=status_val,
                 error_message=ocr_err_msg,
                 is_latest=True,
+                is_corrected=is_ai_refined,
             )
             session.add(record)
 
@@ -287,7 +292,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 document_id=doc_uuid,
                 is_latest=True,
                 raw_text=raw_text if not ocr_failed else "",
-                corrected_text=processed_text if not ocr_failed else "",
+                corrected_text=(processed_text or raw_text) if not ocr_failed else "",
                 confidence_score=confidence if not ocr_failed else 0.0,
                 ocr_engine=target_engine,
                 ocr_engine_version=engine_version,
@@ -318,14 +323,13 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
 
             await _set_progress(session, 85)
 
-            # ── 5. Trích xuất Metadata & AI Smart Fields (dùng processed_text) ──
+            # ── 5. Trích xuất Metadata & Tự động gán nhãn AI (Smart Fields & Auto-tags) ──
             await _set_progress(session, 90)
-            # Dùng processed_text (đã qua post-process) để cải thiện độ chính xác metadata
             meta_text = processed_text if processed_text else raw_text
             meta_dict = await asyncio.to_thread(vietocr_service.extract_metadata, meta_text)
 
             try:
-                ai_fields = await ai_service.extract_smart_fields(raw_text)
+                ai_fields = await ai_service.extract_smart_fields(meta_text)
             except Exception as ai_err:
                 logger.warning("AI smart fields extraction error: {err}", err=str(ai_err))
                 ai_fields = {}
@@ -334,7 +338,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
             final_student_id = ai_fields.get("student_id") or meta_dict.get("student_id")
             final_student_name = ai_fields.get("student_name") or meta_dict.get("student_name")
             final_doc_no = ai_fields.get("document_number") or meta_dict.get("document_number")
-            auto_tags = ai_fields.get("tags") or tag_service.generate_auto_tags(raw_text, metadata=meta_dict)
+            auto_tags = ai_fields.get("tags") or tag_service.generate_auto_tags(meta_text, metadata=meta_dict)
             priority_score = ai_fields.get("priority_score") or tag_service.calculate_priority_score(auto_tags)
 
             # ── 6. Lưu / Cập nhật DocumentMetadata ────────────────────────────
@@ -400,7 +404,7 @@ async def async_process_ocr(document_id: str, task_id: str | None = None, engine
                 await search_index_service.index_document(
                     document_id=doc.id,
                     title=doc.title,
-                    content=raw_text,
+                    content=processed_text or raw_text,
                     category_code=doc.category.code if doc.category else meta_dict.get("detected_category"),
                     category_name=doc.category.name if doc.category else None,
                     student_id=final_student_id or meta_dict.get("student_id"),

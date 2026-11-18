@@ -4,17 +4,12 @@ import {
   FileText,
   Filter,
   UploadCloud,
-  CheckCircle2,
-  Clock,
   Eye,
   CheckSquare,
   Search,
   RefreshCw,
   XCircle,
   Camera,
-  FileCheck,
-  AlertCircle,
-  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -24,7 +19,7 @@ import {
 } from "lucide-react";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
-import { OCRStatusBadge, Badge } from "../components/common/Badge";
+import { Badge } from "../components/common/Badge";
 import { CameraCaptureModal } from "../components/common/CameraCaptureModal";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useToastStore } from "../stores/useToastStore";
@@ -34,28 +29,22 @@ import { statsApi, DashboardStatsResponse } from "../api/stats";
 // Helper hàm làm đẹp tiêu đề văn bản hành chính
 function formatDisplayTitle(rawTitle: string): { mainTitle: string; code?: string } {
   if (!rawTitle) return { mainTitle: "Tài liệu không tên" };
-  
-  // Loại bỏ tiền tố 0_, 1_, 2_
+
   let clean = rawTitle.replace(/^[0-9]+_/, "");
-  
-  // Trích xuất số hiệu công văn nếu có (vd: 1436-KH-ĐHĐL, 1353-KH-ĐHĐL)
-  let codeMatch = clean.match(/^([0-9A-Za-z]+-[A-Za-zĐđ]+-[A-Za-zĐđ]+)/);
-  let code = codeMatch ? codeMatch[1].replace(/-/g, "/") : undefined;
-  
+  const codeMatch = clean.match(/^([0-9A-Za-z]+-[A-Za-zĐđ]+-[A-Za-zĐđ]+)/);
+  const code = codeMatch ? codeMatch[1].replace(/-/g, "/") : undefined;
+
   if (codeMatch) {
     clean = clean.replace(codeMatch[0], "").replace(/^[_\s-]+/, "");
   }
-  
-  // Thay thế dấu gạch dưới thành dấu cách
+
   clean = clean.replace(/_/g, " ").trim();
-  
-  // Bỏ phần đuôi mở rộng file nếu có
   clean = clean.replace(/\.(pdf|jpg|jpeg|png|tiff)$/i, "");
-  
+
   if (!clean && code) {
     clean = `Văn bản số ${code}`;
   }
-  
+
   return { mainTitle: clean || rawTitle, code };
 }
 
@@ -76,7 +65,7 @@ export const DocumentsPage: React.FC = () => {
   const [togglingPublicId, setTogglingPublicId] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
 
-  // 📄 Phân trang & Thống kê toàn hệ thống
+  // Phân trang & Thống kê
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [totalItems, setTotalItems] = useState(0);
@@ -135,6 +124,7 @@ export const DocumentsPage: React.FC = () => {
         tag: selectedTag !== "ALL" ? selectedTag : undefined,
         page: page,
         pageSize: size,
+        onlyMyUploads: !isStaffOrAdmin ? true : undefined,
       });
       setDocs(res.items || []);
       setTotalItems(res.total || 0);
@@ -150,13 +140,11 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
-  // Reset về trang 1 khi thay đổi bộ lọc hoặc kích thước trang
   useEffect(() => {
     setCurrentPage(1);
     fetchDocuments(1, pageSize, true);
   }, [statusFilter, approvalFilter, selectedTag, pageSize]);
 
-  // Debounce tìm kiếm từ khóa (bỏ qua render ban đầu)
   useEffect(() => {
     if (isInitialSearchMount.current) {
       isInitialSearchMount.current = false;
@@ -169,7 +157,6 @@ export const DocumentsPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchFilter]);
 
-  // Real-time polling nếu có tài liệu đang xử lý OCR (PROCESSING hoặc PENDING)
   useEffect(() => {
     const hasProcessing = docs.some((d) => d.ocr_status === "PROCESSING" || d.ocr_status === "PENDING");
     if (!hasProcessing) return;
@@ -276,7 +263,6 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
-  // Dữ liệu hiển thị trực tiếp từ server, sắp xếp nghiêm ngặt theo thời gian thực upload (mới nhất lên đầu)
   const displayDocs = useMemo(() => {
     return docs
       .filter((doc) => {
@@ -291,7 +277,6 @@ export const DocumentsPage: React.FC = () => {
       });
   }, [docs, publicFilter]);
 
-  // KPI tóm tắt số liệu toàn hệ thống & theo bộ lọc
   const isFiltered = Boolean(searchFilter || statusFilter !== "ALL" || approvalFilter !== "ALL" || selectedTag !== "ALL");
 
   const totalCount = isFiltered ? totalItems : (systemStats?.total_documents ?? totalItems);
@@ -305,207 +290,147 @@ export const DocumentsPage: React.FC = () => {
     ? docs.filter((d) => d.ocr_status === "DONE" || d.ocr_status === "APPROVED").length
     : (systemStats ? (systemStats.done_count + systemStats.approved_count) : totalItems);
 
-  // Helper color map cho badge
-  const getTagBadgeStyle = (tag: string) => {
+  const getTagBadgeClass = (tag: string) => {
     const t = tag.toUpperCase();
     if (t.startsWith("#SO_") || /^#[0-9]/.test(t)) {
-      return { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" };
+      return "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100";
     }
     if (["#THONGBAO", "#KEHOACH", "#QUYETDINH", "#HUONGDAN", "#TOTRINH", "#BAOCAO", "#CONGVAN", "#GIAYMOI", "#BIENBAN", "#DANHSACH", "#DONTU"].includes(t)) {
-      return { bg: "#fef3c7", text: "#b45309", border: "#fde68a" };
+      return "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100";
     }
     if (t.startsWith("#NGANH")) {
-      return { bg: "#dcfce7", text: "#15803d", border: "#86efac" };
+      return "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100";
     }
     if (t.startsWith("#KHOA") && !/^#K[0-9]{2}/.test(t)) {
-      return { bg: "#e0e7ff", text: "#4338ca", border: "#c7d2fe" };
+      return "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100";
     }
     if (/^#K[0-9]{2}/.test(t)) {
-      return { bg: "#ede9fe", text: "#6d28d9", border: "#ddd6fe" };
+      return "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100";
     }
-    return { bg: "#ccfbf1", text: "#0f766e", border: "#99f6e4" };
+    return "bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100";
   };
 
   return (
-    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem", width: "100%" }}>
+    <div className="space-y-5 animate-fade-in w-full">
       {/* Top Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)", letterSpacing: "-0.02em" }}>
-              {isStaffOrAdmin ? "Quản lý & Phê duyệt Hồ sơ CTSV" : "Kho Tài liệu Công khai & Hồ sơ"}
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              {isStaffOrAdmin ? "Quản lý & Phê duyệt Hồ sơ CTSV" : "Lịch sử Upload Hồ sơ của bạn"}
             </h1>
             <Badge variant={user?.role === "ADMIN" ? "danger" : user?.role === "STAFF" ? "warning" : "info"}>
-              {user?.role || "STUDENT"}
+              {user?.role === "STUDENT" ? "SINH VIÊN" : (user?.role || "STUDENT")}
             </Badge>
           </div>
-          <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             {isStaffOrAdmin
               ? "Trợ lý CTSV kiểm tra kết quả nhận dạng OCR, phân loại nhãn thông minh và phê duyệt văn bản số."
-              : "Danh mục văn bản, thông báo và hồ sơ đã được Cán bộ phê duyệt và mở quyền công khai."}
+              : "Danh sách toàn bộ các tài liệu do tài khoản của bạn tải lên, tình trạng nhận dạng OCR và kết quả xử lý của Cán bộ CTSV."}
           </p>
         </div>
 
-        {/* Chỉ ADMIN mới thao tác Xuất Excel, Chụp ảnh và Tiếp nhận tại đây; Cán bộ (STAFF) sử dụng giao diện chuẩn hóa */}
-        {user?.role === "ADMIN" && (
-          <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap", alignItems: "center" }}>
-            <a
-              href={documentsApi.exportExcelUrl(statusFilter)}
-              download
-              target="_blank"
-              rel="noreferrer"
-              style={{ textDecoration: "none" }}
-            >
-              <Button variant="outline" size="sm" leftIcon={<FileText size={14} color="#16a34a" />}>
-                Xuất Excel (.csv)
-              </Button>
-            </a>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCameraOpen(true)}
-              leftIcon={<Camera size={15} color="#1e40af" />}
-            >
-              Chụp ảnh hồ sơ
+        {/* Nút thao tác nhanh */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCameraOpen(true)}
+            leftIcon={<Camera size={14} className="text-dlu-navy-700" />}
+          >
+            Chụp ảnh hồ sơ
+          </Button>
+          <Link to="/upload">
+            <Button variant="primary" size="sm" leftIcon={<UploadCloud size={14} />}>
+              {isStaffOrAdmin ? "Tiếp nhận hồ sơ" : "Tải lên hồ sơ mới"}
             </Button>
-            <Link to="/upload" style={{ textDecoration: "none" }}>
-              <Button variant="primary" size="sm" leftIcon={<UploadCloud size={15} />}>
-                Tiếp nhận hồ sơ
-              </Button>
-            </Link>
-          </div>
-        )}
+          </Link>
+        </div>
       </div>
 
       {/* Chỉ số hồ sơ nghiệp vụ */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.85rem" }}>
-        <div style={{
-          backgroundColor: "#fff",
-          padding: "0.85rem 1.15rem",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border-color)",
-          borderLeft: "3px solid #1e3a8a",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.85rem"
-        }}>
-          <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Tổng số hồ sơ</div>
-            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--gray-900)", fontFamily: "var(--font-mono)" }}>{totalCount}</div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-4 rounded-lg border border-slate-200/90 border-l-4 border-l-dlu-navy-900 shadow-paper">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            {isStaffOrAdmin ? "Tổng số hồ sơ" : "Hồ sơ bạn đã upload"}
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 font-mono mt-1">
+            {totalCount}
           </div>
         </div>
 
-        <div style={{
-          backgroundColor: "#fff",
-          padding: "0.85rem 1.15rem",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border-color)",
-          borderLeft: "3px solid #d97706",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.85rem"
-        }}>
-          <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Chờ phê duyệt</div>
-            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "#d97706", fontFamily: "var(--font-mono)" }}>{pendingCount}</div>
+        <div className="bg-white p-4 rounded-lg border border-slate-200/90 border-l-4 border-l-amber-500 shadow-paper">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            {isStaffOrAdmin ? "Chờ phê duyệt" : "Đang chờ duyệt"}
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-amber-600 font-mono mt-1">
+            {pendingCount}
           </div>
         </div>
 
-        <div style={{
-          backgroundColor: "#fff",
-          padding: "0.85rem 1.15rem",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border-color)",
-          borderLeft: "3px solid #16a34a",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.85rem"
-        }}>
-          <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Đã phê duyệt</div>
-            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "#16a34a", fontFamily: "var(--font-mono)" }}>{approvedCount}</div>
+        <div className="bg-white p-4 rounded-lg border border-slate-200/90 border-l-4 border-l-emerald-600 shadow-paper">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            {isStaffOrAdmin ? "Đã phê duyệt" : "Đã được phê duyệt"}
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-emerald-600 font-mono mt-1">
+            {approvedCount}
           </div>
         </div>
 
-        <div style={{
-          backgroundColor: "#fff",
-          padding: "0.85rem 1.15rem",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border-color)",
-          borderLeft: "3px solid #1e40af",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.85rem"
-        }}>
-          <div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--gray-600)" }}>Số hóa hoàn tất</div>
-            <div style={{ fontSize: "1.35rem", fontWeight: 700, color: "#1e40af", fontFamily: "var(--font-mono)" }}>{digitizedCount}</div>
+        <div className="bg-white p-4 rounded-lg border border-slate-200/90 border-l-4 border-l-sky-600 shadow-paper">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            {isStaffOrAdmin ? "Số hóa hoàn tất" : "Đã nhận dạng OCR"}
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-sky-700 font-mono mt-1">
+            {digitizedCount}
           </div>
         </div>
       </div>
 
       {/* Filter & Search Bar + 1-Click Smart Tag Cloud */}
       <Card padding="sm">
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ flex: "1 1 320px", position: "relative" }}>
-              <Search size={16} color="var(--gray-400)" style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)" }} />
+        <div className="space-y-3">
+          <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                placeholder="Tìm theo tên hồ sơ, số hiệu văn bản (1353/KH...), họ tên hoặc MSSV..."
-                style={{
-                  width: "100%",
-                  padding: "0.55rem 0.85rem 0.55rem 2.4rem",
-                  borderRadius: "0.5rem",
-                  border: "1px solid var(--border-color)",
-                  fontSize: "0.875rem",
-                  backgroundColor: "var(--gray-50)",
-                  transition: "all 0.2s ease",
-                }}
+                placeholder={
+                  isStaffOrAdmin
+                    ? "Tìm theo tên hồ sơ, số hiệu văn bản (1353/KH...), họ tên hoặc MSSV..."
+                    : "Tìm trong lịch sử upload theo tên hồ sơ, số hiệu, từ khóa..."
+                }
+                className="w-full pl-9 pr-3 py-2 rounded-md border border-slate-200 bg-slate-50/70 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-dlu-navy-500/20 focus:border-dlu-navy-600 outline-none transition-all"
               />
             </div>
 
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Trạng thái OCR:</span>
+            {/* Filter Dropdowns */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-600">Trạng thái:</span>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  style={{
-                    padding: "0.45rem 0.75rem",
-                    borderRadius: "0.5rem",
-                    border: "1px solid var(--border-color)",
-                    fontSize: "0.8125rem",
-                    backgroundColor: "#fff",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                  }}
+                  className="px-2.5 py-1.5 rounded-md border border-slate-200 text-xs bg-white text-slate-800 font-medium cursor-pointer outline-none focus:ring-2 focus:ring-dlu-navy-500/20 focus:border-dlu-navy-600"
                 >
                   <option value="ALL">Tất cả trạng thái</option>
                   <option value="APPROVED">Đã duyệt (APPROVED)</option>
                   <option value="DONE">OCR Xong (DONE)</option>
                   <option value="PROCESSING">Đang xử lý</option>
                   <option value="PENDING">Chờ xử lý</option>
-                  <option value="REJECTED">Từ chối (REJECTED)</option>
+                  <option value="FAILED">Thất bại (FAILED)</option>
                 </select>
               </div>
 
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Phê duyệt:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-600">Phê duyệt:</span>
                 <select
                   value={approvalFilter}
                   onChange={(e) => setApprovalFilter(e.target.value)}
-                  style={{
-                    padding: "0.45rem 0.75rem",
-                    borderRadius: "0.5rem",
-                    border: "1px solid var(--border-color)",
-                    fontSize: "0.8125rem",
-                    backgroundColor: "#fff",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                  }}
+                  className="px-2.5 py-1.5 rounded-md border border-slate-200 text-xs bg-white text-slate-800 font-medium cursor-pointer outline-none focus:ring-2 focus:ring-dlu-navy-500/20 focus:border-dlu-navy-600"
                 >
                   <option value="ALL">Tất cả</option>
                   <option value="APPROVED">Đã phê duyệt</option>
@@ -514,20 +439,12 @@ export const DocumentsPage: React.FC = () => {
               </div>
 
               {isStaffOrAdmin && (
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-600)" }}>Quyền xem:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-slate-600">Quyền xem:</span>
                   <select
                     value={publicFilter}
                     onChange={(e) => setPublicFilter(e.target.value as any)}
-                    style={{
-                      padding: "0.45rem 0.75rem",
-                      borderRadius: "0.5rem",
-                      border: "1px solid var(--border-color)",
-                      fontSize: "0.8125rem",
-                      backgroundColor: "#fff",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                    }}
+                    className="px-2.5 py-1.5 rounded-md border border-slate-200 text-xs bg-white text-slate-800 font-medium cursor-pointer outline-none focus:ring-2 focus:ring-dlu-navy-500/20 focus:border-dlu-navy-600"
                   >
                     <option value="ALL">Tất cả quyền</option>
                     <option value="PUBLIC">🌐 Công khai (Public)</option>
@@ -540,80 +457,48 @@ export const DocumentsPage: React.FC = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => fetchDocuments(currentPage, pageSize)}
-                leftIcon={<RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />}
+                leftIcon={<RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />}
               >
                 Làm mới
               </Button>
             </div>
           </div>
 
-          {/* 🏷️ 1-Click Smart Tag Cloud Filter (Phân loại theo Mức ưu tiên) */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            flexWrap: "wrap",
-            paddingTop: "0.625rem",
-            borderTop: "1px solid var(--border-light)",
-          }}>
-            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", display: "flex", alignItems: "center", gap: "0.25rem", marginRight: "0.25rem" }}>
-              <Filter size={13} color="var(--primary-600)" />
-              Lọc nhanh 1-Click theo Nhãn AI:
+          {/* 🏷️ 1-Click Smart Tag Cloud Filter */}
+          <div className="flex items-center gap-1.5 flex-wrap pt-2.5 border-t border-slate-100 text-xs">
+            <span className="font-bold text-slate-500 flex items-center gap-1 mr-1 text-[11px]">
+              <Filter size={12} className="text-dlu-navy-700" />
+              Lọc theo Nhãn AI:
             </span>
 
-            {/* Nút Tất cả */}
             <button
               onClick={() => setSelectedTag("ALL")}
-              style={{
-                padding: "0.25rem 0.625rem",
-                borderRadius: "9999px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                border: "1px solid",
-                borderColor: selectedTag === "ALL" ? "var(--primary-600)" : "var(--border-color)",
-                backgroundColor: selectedTag === "ALL" ? "var(--primary-600)" : "#fff",
-                color: selectedTag === "ALL" ? "#fff" : "var(--gray-700)",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
+              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-all ${
+                selectedTag === "ALL"
+                  ? "bg-dlu-navy-900 text-white border-dlu-navy-900 shadow-xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
             >
               Tất cả nhãn
             </button>
 
-            {/* Render Top Tag Items theo Priority */}
             {tagSummary.slice(0, 10).map((tItem) => {
               const isSelected = selectedTag.toLowerCase() === tItem.tag.toLowerCase();
-              const style = getTagBadgeStyle(tItem.tag);
+              const badgeClass = getTagBadgeClass(tItem.tag);
 
               return (
                 <button
                   key={tItem.tag}
                   onClick={() => setSelectedTag(isSelected ? "ALL" : tItem.tag)}
-                  style={{
-                    padding: "0.25rem 0.625rem",
-                    borderRadius: "9999px",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    border: "1px solid",
-                    borderColor: isSelected ? style.text : style.border,
-                    backgroundColor: isSelected ? style.text : style.bg,
-                    color: isSelected ? "#fff" : style.text,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.35rem",
-                    transition: "all 0.15s ease",
-                  }}
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border transition-all ${
+                    isSelected
+                      ? "bg-dlu-navy-900 text-white border-dlu-navy-900 shadow-xs"
+                      : badgeClass
+                  }`}
                   title={`Ưu tiên: ${tItem.priority} điểm - Danh mục: ${tItem.category}`}
                 >
                   <span>{tItem.tag}</span>
-                  <span style={{
-                    fontSize: "0.6875rem",
-                    padding: "0.05rem 0.35rem",
-                    borderRadius: "9999px",
-                    backgroundColor: isSelected ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.06)",
-                    color: isSelected ? "#fff" : style.text,
-                  }}>
+                  <span className={`text-[10px] font-mono px-1 rounded-full ${isSelected ? "bg-white/20 text-white" : "bg-black/5"}`}>
                     {tItem.count}
                   </span>
                 </button>
@@ -625,34 +510,45 @@ export const DocumentsPage: React.FC = () => {
 
       {/* Main Documents Table */}
       <Card padding="none">
-        <div style={{ width: "100%", overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto", minWidth: "900px" }}>
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-xs min-w-[960px]">
             <thead>
-              <tr style={{
-                backgroundColor: "var(--gray-50)",
-                borderBottom: "1px solid var(--border-color)",
-                color: "var(--gray-600)",
-                fontSize: "0.8125rem",
-                fontWeight: 700,
-                textAlign: "left",
-                letterSpacing: "0.02em"
-              }}>
-                <th style={{ padding: "0.85rem 1.25rem", width: isStaffOrAdmin ? "28%" : "38%" }}>TIÊU ĐỀ & THÔNG TIN HỒ SƠ</th>
-                <th style={{ padding: "0.85rem 1rem", width: isStaffOrAdmin ? "16%" : "22%" }}>NGƯỜI NỘP / MSSV</th>
-                <th style={{ padding: "0.85rem 1rem", width: isStaffOrAdmin ? "14%" : "20%" }}>DANH MỤC</th>
-                {isStaffOrAdmin && <th style={{ padding: "0.85rem 1rem", width: "12%" }}>TIẾN ĐỘ OCR</th>}
-                {isStaffOrAdmin && <th style={{ padding: "0.85rem 0.75rem", width: "11%" }}>QUYỀN XEM</th>}
-                <th style={{ padding: "0.85rem 0.75rem", width: "9%" }}>PHÊ DUYỆT</th>
-                <th style={{ padding: "0.85rem 1.25rem", width: isStaffOrAdmin ? "10%" : "11%", textAlign: "right" }}>THAO TÁC</th>
+              <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px] whitespace-nowrap">
+                <th className="px-5 py-3.5">Tiêu đề & Thông tin hồ sơ</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Người nộp / MSSV</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Danh mục</th>
+                {isStaffOrAdmin && <th className="px-4 py-3.5 whitespace-nowrap">Tiến độ OCR</th>}
+                {isStaffOrAdmin && <th className="px-3 py-3.5 whitespace-nowrap">Quyền xem</th>}
+                <th className="px-3 py-3.5 whitespace-nowrap">Phê duyệt</th>
+                <th className="px-5 py-3.5 text-right whitespace-nowrap min-w-[210px]">Thao tác</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {displayDocs.length === 0 ? (
                 <tr>
-                  <td colSpan={isStaffOrAdmin ? 7 : 5} style={{ padding: "3.5rem 1rem", textAlign: "center", color: "var(--gray-400)" }}>
-                    <FileText size={40} style={{ margin: "0 auto 0.75rem", opacity: 0.4 }} />
-                    <p style={{ fontSize: "0.9375rem", fontWeight: 500 }}>Không tìm thấy hồ sơ nào phù hợp.</p>
-                    <p style={{ fontSize: "0.8125rem", color: "var(--gray-400)", marginTop: "0.25rem" }}>Thử thay đổi bộ lọc hoặc tải lên hồ sơ mới.</p>
+                  <td colSpan={isStaffOrAdmin ? 7 : 5} className="py-14 px-4 text-center text-slate-400">
+                    <UploadCloud size={40} className="mx-auto text-slate-300 mb-2 opacity-60" />
+                    <p className="text-sm font-semibold text-slate-800">
+                      {isFiltered
+                        ? "Không tìm thấy hồ sơ nào khớp với bộ lọc."
+                        : isStaffOrAdmin
+                        ? "Không có hồ sơ nào trong hệ thống."
+                        : "Bạn chưa tải lên hồ sơ nào"}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto mb-4">
+                      {isFiltered
+                        ? "Thử xóa từ khóa tìm kiếm hoặc bỏ chọn các điều kiện lọc."
+                        : isStaffOrAdmin
+                        ? "Các hồ sơ vừa được tải lên sẽ hiển thị tại đây."
+                        : "Toàn bộ tài liệu, giấy tờ bạn gửi lên hệ thống sẽ được lưu tại đây để tiện theo dõi tiến độ."}
+                    </p>
+                    {!isStaffOrAdmin && !isFiltered && (
+                      <Link to="/upload">
+                        <Button variant="primary" size="sm" leftIcon={<UploadCloud size={14} />}>
+                          Tải lên hồ sơ mới ngay
+                        </Button>
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -664,116 +560,79 @@ export const DocumentsPage: React.FC = () => {
                   return (
                     <tr
                       key={doc.id}
-                      style={{
-                        borderBottom: "1px solid var(--border-light)",
-                        transition: "background-color 0.15s ease",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(243, 244, 246, 0.6)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                      className="hover:bg-slate-50/80 transition-colors"
                     >
                       {/* Tiêu đề & Thông tin file */}
-                      <td style={{ padding: "1rem 1.25rem" }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.625rem" }}>
-                          <div style={{
-                            padding: "0.4rem",
-                            borderRadius: "0.375rem",
-                            backgroundColor: doc.file_type?.toLowerCase() === "pdf" ? "#fee2e2" : "#e0e7ff",
-                            color: doc.file_type?.toLowerCase() === "pdf" ? "#dc2626" : "#4338ca",
-                            fontWeight: 700,
-                            fontSize: "0.6875rem",
-                            lineHeight: 1,
-                            flexShrink: 0,
-                            marginTop: "0.15rem"
-                          }}>
+                      <td className="px-5 py-3.5 max-w-md">
+                        <div className="flex items-start gap-2.5">
+                          <div
+                            className={`p-1.5 rounded font-bold text-[10px] leading-none shrink-0 mt-0.5 ${
+                              doc.file_type?.toLowerCase() === "pdf"
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                            }`}
+                          >
                             {doc.file_type || "PDF"}
                           </div>
                           <div>
                             <Link
                               to={`/documents/${doc.id}`}
-                              style={{
-                                color: "var(--primary-700)",
-                                fontWeight: 600,
-                                fontSize: "0.875rem",
-                                textDecoration: "none",
-                                display: "-webkit-box",
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: "vertical",
-                                overflow: "hidden",
-                                lineHeight: "1.35",
-                              }}
+                              className="text-dlu-navy-900 font-semibold text-xs sm:text-sm hover:underline line-clamp-2 leading-snug"
                             >
                               {mainTitle}
                             </Link>
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--gray-400)", marginTop: "0.25rem", flexWrap: "wrap" }}>
+
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-1 flex-wrap">
                               {doc.document_number ? (
-                                <span style={{
-                                  backgroundColor: "#eff6ff",
-                                  color: "#1d4ed8",
-                                  fontWeight: 700,
-                                  padding: "0.1rem 0.4rem",
-                                  borderRadius: "0.25rem",
-                                  border: "1px solid #bfdbfe",
-                                  fontSize: "0.7rem",
-                                }}>
+                                <span className="bg-sky-50 text-sky-800 font-bold px-1.5 py-0.2 rounded border border-sky-200 text-[10px]">
                                   Số: {doc.document_number}
                                 </span>
                               ) : code ? (
-                                <span style={{ color: "var(--primary-600)", fontWeight: 600 }}>{code}</span>
+                                <span className="text-dlu-navy-700 font-semibold">{code}</span>
                               ) : null}
-                              {doc.category_code === 'KHAC' && (
-                                <span style={{
-                                  backgroundColor: "#fef2f2",
-                                  color: "#dc2626",
-                                  fontWeight: 700,
-                                  padding: "0.1rem 0.4rem",
-                                  borderRadius: "0.25rem",
-                                  border: "1px solid #fca5a5",
-                                  fontSize: "0.7rem",
-                                }}>
+
+                              {doc.category_code === "KHAC" && (
+                                <span className="bg-rose-50 text-rose-700 font-bold px-1.5 py-0.2 rounded border border-rose-200 text-[10px]">
                                   Cần kiểm tra
                                 </span>
                               )}
-                              <span>{(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
+
+                              <span className="font-mono">
+                                {(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB
+                              </span>
                               <span>•</span>
                               <span
-                                style={{ color: "#1e3a8a", fontWeight: 600 }}
+                                className="text-dlu-navy-900 font-medium"
                                 title={`Thời gian upload: ${new Date(doc.created_at).toLocaleString("vi-VN")}`}
                               >
-                                {new Date(doc.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} • {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                                {new Date(doc.created_at).toLocaleTimeString("vi-VN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })} • {new Date(doc.created_at).toLocaleDateString("vi-VN")}
                               </span>
                             </div>
 
                             {/* Badges danh sách nhãn AI */}
                             {doc.tags && doc.tags.length > 0 && (
-                              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginTop: "0.35rem" }}>
-                                {doc.tags.slice(0, 3).map((t) => {
-                                  const tStyle = getTagBadgeStyle(t);
-                                  return (
-                                    <span
-                                      key={t}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setSelectedTag(t);
-                                      }}
-                                      style={{
-                                        fontSize: "0.6875rem",
-                                        fontWeight: 600,
-                                        padding: "0.1rem 0.4rem",
-                                        borderRadius: "0.25rem",
-                                        backgroundColor: tStyle.bg,
-                                        color: tStyle.text,
-                                        border: `1px solid ${tStyle.border}`,
-                                        cursor: "pointer",
-                                      }}
-                                      title={`Nhấp để lọc tài liệu theo nhãn ${t}`}
-                                    >
-                                      {t}
-                                    </span>
-                                  );
-                                })}
+                              <div className="flex gap-1 flex-wrap mt-1.5">
+                                {doc.tags.slice(0, 3).map((t) => (
+                                  <button
+                                    key={t}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setSelectedTag(t);
+                                    }}
+                                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-colors ${getTagBadgeClass(
+                                      t
+                                    )}`}
+                                    title={`Lọc tài liệu theo nhãn ${t}`}
+                                  >
+                                    {t}
+                                  </button>
+                                ))}
                                 {doc.tags.length > 3 && (
-                                  <span style={{ fontSize: "0.6875rem", color: "var(--gray-400)", alignSelf: "center" }}>
+                                  <span className="text-[10px] text-slate-400 self-center">
                                     +{doc.tags.length - 3}
                                   </span>
                                 )}
@@ -784,92 +643,81 @@ export const DocumentsPage: React.FC = () => {
                       </td>
 
                       {/* Người nộp / MSSV */}
-                      <td style={{ padding: "1rem 1rem", verticalAlign: "middle" }}>
-                        <div style={{ fontWeight: 600, color: "var(--gray-800)", fontSize: "0.8125rem" }}>
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="font-semibold text-slate-800 text-xs">
                           {doc.student_name || doc.uploader_name || "Cán bộ CTSV (Đại học Đà Lạt)"}
                         </div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--gray-400)", marginTop: "0.15rem" }}>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
                           {doc.student_id || doc.uploader_mssv ? (
-                            <span style={{ backgroundColor: "var(--gray-100)", padding: "0.1rem 0.35rem", borderRadius: "0.25rem", fontFamily: "monospace" }}>
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700">
                               MSSV: {doc.student_id || doc.uploader_mssv}
                             </span>
                           ) : (
-                            <span style={{ color: "var(--gray-400)" }}>Trường Đại học Đà Lạt</span>
+                            <span>Trường Đại học Đà Lạt</span>
                           )}
                         </div>
                       </td>
 
                       {/* Danh mục */}
-                      <td style={{ padding: "1rem 1rem", verticalAlign: "middle", color: "var(--gray-700)", fontSize: "0.8125rem" }}>
-                        <span style={{
-                          display: "inline-block",
-                          padding: "0.2rem 0.5rem",
-                          borderRadius: "0.375rem",
-                          backgroundColor: "var(--gray-100)",
-                          fontWeight: 500,
-                          fontSize: "0.75rem",
-                          color: "var(--gray-700)"
-                        }}>
+                      <td className="px-4 py-3.5 align-middle">
+                        <span className="inline-block px-2 py-0.5 rounded bg-slate-100 font-medium text-[11px] text-slate-700 border border-slate-200">
                           {doc.category_name || "Chưa phân loại"}
                         </span>
                       </td>
 
-                      {/* Tiến độ OCR - Chỉ hiển thị cho Cán bộ / Quản trị viên (Sinh viên không cần xem) */}
+                      {/* Tiến độ OCR */}
                       {isStaffOrAdmin && (
-                        <td style={{ padding: "1rem 1rem", verticalAlign: "middle", minWidth: "140px" }}>
+                        <td className="px-4 py-3.5 align-middle min-w-[130px]">
                           {(() => {
                             const status = doc.ocr_status;
                             const rawProgress = doc.ocr_progress ?? 0;
-                            const progress = status === "DONE" || status === "APPROVED" ? 100
-                              : status === "FAILED" ? 0
-                              : status === "PENDING" ? Math.max(rawProgress, 5)
-                              : rawProgress;
+                            const progress =
+                              status === "DONE" || status === "APPROVED"
+                                ? 100
+                                : status === "FAILED"
+                                ? 0
+                                : status === "PENDING"
+                                ? Math.max(rawProgress, 5)
+                                : rawProgress;
 
-                            const isProcessing = status === "PROCESSING" || status === "PENDING";
-                            const isFailed = status === "FAILED";
                             const isDone = status === "DONE" || status === "APPROVED";
-
-                            const barColor = isDone ? "#16a34a"
-                              : isFailed ? "#dc2626"
-                              : "#1e40af";
-
-                            const label = isDone ? "Hoàn thành"
-                              : isFailed ? "Thất bại"
-                              : status === "PENDING" ? "Chờ xử lý"
-                              : `Đang OCR...`;
+                            const isFailed = status === "FAILED";
 
                             return (
-                              <div>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                                  <span style={{
-                                    fontSize: "0.7rem",
-                                    fontWeight: 600,
-                                    color: isDone ? "#16a34a" : isFailed ? "#dc2626" : "#1e40af"
-                                  }}>
-                                    {label}
+                              <div className="space-y-1">
+                                <div className="flex justify-between items-center text-[11px]">
+                                  <span
+                                    className={`font-semibold ${
+                                      isDone
+                                        ? "text-emerald-700"
+                                        : isFailed
+                                        ? "text-rose-700"
+                                        : "text-dlu-navy-700"
+                                    }`}
+                                  >
+                                    {isDone
+                                      ? "Hoàn thành"
+                                      : isFailed
+                                      ? "Thất bại"
+                                      : status === "PENDING"
+                                      ? "Chờ xử lý"
+                                      : "Đang OCR..."}
                                   </span>
-                                  <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--gray-700)" }}>
+                                  <span className="font-mono font-bold text-slate-600">
                                     {progress}%
                                   </span>
                                 </div>
-                                <div style={{
-                                  width: "100%",
-                                  height: "6px",
-                                  backgroundColor: "var(--gray-100)",
-                                  borderRadius: "999px",
-                                  overflow: "hidden",
-                                }}>
-                                  <div style={{
-                                    height: "100%",
-                                    width: `${progress}%`,
-                                    backgroundColor: barColor,
-                                    borderRadius: "999px",
-                                    transition: "width 0.6s ease",
-                                    backgroundImage: isProcessing && progress < 100
-                                      ? `repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(255,255,255,0.25) 8px, rgba(255,255,255,0.25) 16px)`
-                                      : "none",
-                                    animation: isProcessing && progress < 100 ? "progress-stripe 1s linear infinite" : "none",
-                                  }} />
+                                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      isDone
+                                        ? "bg-emerald-600"
+                                        : isFailed
+                                        ? "bg-rose-600"
+                                        : "bg-dlu-navy-700"
+                                    }`}
+                                    style={{ width: `${progress}%` }}
+                                  />
                                 </div>
                               </div>
                             );
@@ -877,40 +725,31 @@ export const DocumentsPage: React.FC = () => {
                         </td>
                       )}
 
-                      {/* Quyền xem Public / Nội bộ - Dành cho Cán bộ / Admin bật tắt 1-click */}
+                      {/* Quyền xem Public / Nội bộ */}
                       {isStaffOrAdmin && (
-                        <td style={{ padding: "1rem 0.75rem", verticalAlign: "middle" }}>
+                        <td className="px-3 py-3.5 align-middle">
                           <button
                             onClick={(e) => handleTogglePublic(doc.id, !doc.is_public, e)}
                             disabled={togglingPublicId === doc.id}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "0.35rem",
-                              padding: "0.25rem 0.6rem",
-                              borderRadius: "9999px",
-                              fontSize: "0.72rem",
-                              fontWeight: 700,
-                              border: doc.is_public ? "1px solid #86efac" : "1px solid #fed7aa",
-                              backgroundColor: doc.is_public ? "#f0fdf4" : "#fff7ed",
-                              color: doc.is_public ? "#15803d" : "#c2410c",
-                              cursor: "pointer",
-                              transition: "all 0.15s ease",
-                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
+                              doc.is_public
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                                : "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                            }`}
                             title={
                               doc.is_public
                                 ? "Tài liệu đang CÔNG KHAI cho Sinh viên. Nhấp để khóa thành Nội bộ"
-                                : "Tài liệu đang NỘI BỘ (Sinh viên không xem được). Nhấp để MỞ QUYỀN Public cho Sinh viên"
+                                : "Tài liệu đang NỘI BỘ. Nhấp để mở quyền cho Sinh viên xem"
                             }
                           >
                             {doc.is_public ? (
                               <>
-                                <Globe size={12} style={{ color: "#16a34a" }} />
+                                <Globe size={11} className="text-emerald-700" />
                                 <span>Công khai</span>
                               </>
                             ) : (
                               <>
-                                <Lock size={12} style={{ color: "#ea580c" }} />
+                                <Lock size={11} className="text-amber-700" />
                                 <span>Nội bộ</span>
                               </>
                             )}
@@ -919,21 +758,45 @@ export const DocumentsPage: React.FC = () => {
                       )}
 
                       {/* Trạng thái Phê duyệt */}
-                      <td style={{ padding: "1rem 0.75rem", verticalAlign: "middle" }}>
+                      <td className="px-3 py-3.5 align-middle whitespace-nowrap">
                         {isApproved ? (
-                          <Badge variant="success" dot>Đã duyệt</Badge>
+                          <div className="inline-flex flex-col items-start">
+                            <Badge variant="success" dot size="sm">Đã duyệt</Badge>
+                            {doc.approval_info?.approver_role && (
+                              <div
+                                className={`text-[10px] font-semibold mt-0.5 ${
+                                  doc.approval_info.approver_role === "ADMIN"
+                                    ? "text-rose-700"
+                                    : "text-sky-700"
+                                }`}
+                                title={`Phê duyệt bởi: ${
+                                  doc.approval_info.approver_name ||
+                                  doc.approval_info.approver_role_label
+                                }`}
+                              >
+                                {doc.approval_info.approver_role === "ADMIN" ? "Admin" : "CTSV"}
+                              </div>
+                            )}
+                          </div>
                         ) : isRejected ? (
-                          <Badge variant="danger" dot>Từ chối</Badge>
+                          <div className="inline-flex flex-col items-start">
+                            <Badge variant="danger" dot size="sm">Từ chối</Badge>
+                            {doc.approval_info?.approver_role && (
+                              <div className="text-[10px] font-semibold text-rose-800 mt-0.5">
+                                {doc.approval_info.approver_role === "ADMIN" ? "Admin" : "CTSV"}
+                              </div>
+                            )}
+                          </div>
                         ) : (
-                          <Badge variant="warning" dot>Chờ duyệt</Badge>
+                          <Badge variant="warning" dot size="sm">Chờ duyệt</Badge>
                         )}
                       </td>
 
                       {/* Hành động */}
-                      <td style={{ padding: "1rem 1.25rem", verticalAlign: "middle", textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
-                          <Link to={`/documents/${doc.id}`} style={{ textDecoration: "none" }}>
-                            <Button variant="outline" size="sm" leftIcon={<Eye size={13} />}>
+                      <td className="px-5 py-3.5 align-middle text-right whitespace-nowrap min-w-[280px]">
+                        <div className="inline-flex gap-1.5 items-center justify-end flex-nowrap">
+                          <Link to={`/documents/${doc.id}`} className="shrink-0 inline-flex">
+                            <Button variant="outline" size="sm" className="shrink-0" leftIcon={<Eye size={13} />}>
                               Chi tiết
                             </Button>
                           </Link>
@@ -944,6 +807,7 @@ export const DocumentsPage: React.FC = () => {
                                 <Button
                                   variant="primary"
                                   size="sm"
+                                  className="shrink-0"
                                   onClick={(e) => handleApprove(doc.id, e)}
                                   leftIcon={<CheckSquare size={13} />}
                                 >
@@ -954,6 +818,7 @@ export const DocumentsPage: React.FC = () => {
                                 <Button
                                   variant="danger"
                                   size="sm"
+                                  className="shrink-0"
                                   onClick={(e) => handleReject(doc.id, e)}
                                   leftIcon={<XCircle size={13} />}
                                 >
@@ -973,24 +838,14 @@ export const DocumentsPage: React.FC = () => {
         </div>
 
         {/* Pagination & Display Controls */}
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "1rem",
-          padding: "0.85rem 1.25rem",
-          borderTop: "1px solid var(--border-color)",
-          backgroundColor: "#fff",
-        }}>
-          {/* Left: Summary & Page Size Selector */}
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "0.8125rem", color: "var(--gray-600)" }}>
-              Hiển thị <strong style={{ color: "var(--gray-900)" }}>{totalItems > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong> - <strong style={{ color: "var(--gray-900)" }}>{Math.min(currentPage * pageSize, totalItems)}</strong> trong tổng số <strong style={{ color: "var(--primary-700)" }}>{totalItems}</strong> hồ sơ
+        <div className="flex justify-between items-center flex-wrap gap-4 px-5 py-3.5 border-t border-slate-200/80 bg-white">
+          <div className="flex items-center gap-3 sm:gap-5 flex-wrap text-xs text-slate-500">
+            <span>
+              Hiển thị <strong className="text-slate-900 font-mono">{totalItems > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong> - <strong className="text-slate-900 font-mono">{Math.min(currentPage * pageSize, totalItems)}</strong> trong tổng số <strong className="text-dlu-navy-900 font-mono">{totalItems}</strong> hồ sơ
             </span>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span style={{ fontSize: "0.8125rem", color: "var(--gray-500)" }}>Số mục / trang:</span>
+            <div className="flex items-center gap-1.5">
+              <span>Số mục / trang:</span>
               <select
                 value={pageSize}
                 onChange={(e) => {
@@ -998,16 +853,7 @@ export const DocumentsPage: React.FC = () => {
                   setPageSize(newSize);
                   setCurrentPage(1);
                 }}
-                style={{
-                  padding: "0.3rem 0.6rem",
-                  fontSize: "0.8125rem",
-                  borderRadius: "0.375rem",
-                  border: "1px solid var(--border-color)",
-                  backgroundColor: "var(--gray-50)",
-                  cursor: "pointer",
-                  color: "var(--gray-800)",
-                  fontWeight: 600,
-                }}
+                className="px-2 py-1 text-xs rounded border border-slate-200 bg-slate-50 text-slate-800 font-medium cursor-pointer outline-none focus:ring-1 focus:ring-dlu-navy-500"
               >
                 <option value={20}>20 hồ sơ</option>
                 <option value={50}>50 hồ sơ</option>
@@ -1017,58 +863,31 @@ export const DocumentsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right: Page Navigation Buttons */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+          {/* Page Navigation Buttons */}
+          <div className="flex items-center gap-1">
             <button
               onClick={() => handlePageChange(1)}
               disabled={currentPage <= 1 || isLoading}
               title="Về trang đầu"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "0.35rem 0.6rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: currentPage <= 1 ? "var(--gray-100)" : "#fff",
-                color: currentPage <= 1 ? "var(--gray-400)" : "var(--gray-700)",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                cursor: currentPage <= 1 ? "not-allowed" : "pointer",
-                transition: "all 0.15s ease",
-              }}
+              className="p-1.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs transition-colors"
             >
-              <ChevronsLeft size={14} />
+              <ChevronsLeft size={13} />
             </button>
 
             <button
               onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage <= 1 || isLoading}
               title="Trang trước"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.25rem",
-                padding: "0.35rem 0.75rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: currentPage <= 1 ? "var(--gray-100)" : "#fff",
-                color: currentPage <= 1 ? "var(--gray-400)" : "var(--gray-700)",
-                fontSize: "0.8125rem",
-                fontWeight: 600,
-                cursor: currentPage <= 1 ? "not-allowed" : "pointer",
-                transition: "all 0.15s ease",
-              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium transition-colors"
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={13} />
               Trước
             </button>
 
-            {/* Page number buttons */}
             {getPageNumbers().map((p, idx) => {
               if (p === -1) {
                 return (
-                  <span key={`ellipsis-${idx}`} style={{ padding: "0 0.35rem", color: "var(--gray-400)", fontSize: "0.875rem" }}>
+                  <span key={`ellipsis-${idx}`} className="px-1 text-slate-400 text-xs">
                     ...
                   </span>
                 );
@@ -1079,22 +898,11 @@ export const DocumentsPage: React.FC = () => {
                   key={`page-${p}`}
                   onClick={() => handlePageChange(p)}
                   disabled={isLoading}
-                  style={{
-                    minWidth: "32px",
-                    height: "32px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: "0.375rem",
-                    border: isActive ? "1px solid var(--primary-600)" : "1px solid var(--border-color)",
-                    backgroundColor: isActive ? "var(--primary-600)" : "#fff",
-                    color: isActive ? "#fff" : "var(--gray-700)",
-                    fontSize: "0.8125rem",
-                    fontWeight: isActive ? 700 : 500,
-                    cursor: "pointer",
-                    transition: "all 0.15s ease",
-                    boxShadow: isActive ? "0 1px 2px rgba(99, 102, 241, 0.3)" : "none",
-                  }}
+                  className={`w-7 h-7 inline-flex items-center justify-center rounded text-xs font-mono font-semibold transition-all ${
+                    isActive
+                      ? "bg-dlu-navy-900 text-white shadow-xs"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
                 >
                   {p}
                 </button>
@@ -1105,45 +913,19 @@ export const DocumentsPage: React.FC = () => {
               onClick={() => handlePageChange(currentPage + 1)}
               disabled={currentPage >= totalPages || isLoading}
               title="Trang sau"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.25rem",
-                padding: "0.35rem 0.75rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: currentPage >= totalPages ? "var(--gray-100)" : "#fff",
-                color: currentPage >= totalPages ? "var(--gray-400)" : "var(--gray-700)",
-                fontSize: "0.8125rem",
-                fontWeight: 600,
-                cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
-                transition: "all 0.15s ease",
-              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium transition-colors"
             >
               Sau
-              <ChevronRight size={14} />
+              <ChevronRight size={13} />
             </button>
 
             <button
               onClick={() => handlePageChange(totalPages)}
               disabled={currentPage >= totalPages || isLoading}
               title="Đến trang cuối"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "0.35rem 0.6rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: currentPage >= totalPages ? "var(--gray-100)" : "#fff",
-                color: currentPage >= totalPages ? "var(--gray-400)" : "var(--gray-700)",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
-                transition: "all 0.15s ease",
-              }}
+              className="p-1.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs transition-colors"
             >
-              <ChevronsRight size={14} />
+              <ChevronsRight size={13} />
             </button>
           </div>
         </div>

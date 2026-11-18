@@ -19,78 +19,40 @@ export const Button: React.FC<ButtonProps> = ({
   leftIcon,
   rightIcon,
   disabled,
+  className = "",
   style,
   ...props
 }) => {
-  const getStyles = () => {
-    let base: React.CSSProperties = {
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "0.5rem",
-      fontWeight: 600,
-      borderRadius: "var(--radius-md)",
-      transition: "all 0.15s ease",
-      cursor: disabled || isLoading ? "not-allowed" : "pointer",
-      opacity: disabled || isLoading ? 0.65 : 1,
-    };
+  // Size classes
+  const sizeClasses = {
+    sm: "btn-sm text-xs px-2.5 py-1 min-h-[2rem] h-8",
+    md: "btn-md text-sm px-4 h-10 min-h-[2.5rem]",
+    lg: "btn-lg text-base px-6 h-12 min-h-[3rem]",
+  }[size];
 
-    // Size
-    if (size === "sm") {
-      base = { ...base, padding: "0.35rem 0.75rem", fontSize: "0.8125rem" };
-    } else if (size === "lg") {
-      base = { ...base, padding: "0.75rem 1.5rem", fontSize: "1rem" };
-    } else {
-      base = { ...base, padding: "0.5rem 1rem", fontSize: "0.875rem" };
-    }
-
-    // Variant
-    if (variant === "primary") {
-      base = {
-        ...base,
-        backgroundColor: "var(--primary-700)",
-        color: "#ffffff",
-        boxShadow: "0 1px 2px rgba(30, 58, 138, 0.15)",
-      };
-    } else if (variant === "secondary") {
-      base = {
-        ...base,
-        backgroundColor: "var(--gray-100)",
-        color: "var(--gray-700)",
-      };
-    } else if (variant === "outline") {
-      base = {
-        ...base,
-        backgroundColor: "transparent",
-        color: "var(--gray-700)",
-        border: "1px solid var(--border-color)",
-      };
-    } else if (variant === "danger") {
-      base = {
-        ...base,
-        backgroundColor: "var(--danger-600)",
-        color: "#ffffff",
-      };
-    } else if (variant === "ghost") {
-      base = {
-        ...base,
-        backgroundColor: "transparent",
-        color: "var(--gray-600)",
-      };
-    }
-
-    return { ...base, ...style };
-  };
+  // Variant classes adhering to DLU Academic palette
+  const variantClasses = {
+    primary: "btn-primary bg-dlu-navy-900 hover:bg-dlu-navy-800 text-white border-transparent shadow-sm",
+    secondary: "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200",
+    outline: "btn-outline border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400 hover:text-slate-900",
+    danger: "bg-dlu-crimson-700 hover:bg-dlu-crimson-800 text-white border-transparent shadow-sm",
+    ghost: "btn-ghost text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-transparent",
+  }[variant];
 
   return (
-    <button disabled={disabled || isLoading} style={getStyles()} {...props}>
+    <button
+      disabled={disabled || isLoading}
+      className={`btn normal-case font-medium rounded-md transition-all duration-150 inline-flex !flex-nowrap items-center justify-center gap-1.5 !whitespace-nowrap shrink-0 focus:ring-2 focus:ring-dlu-navy-500/30 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed ${sizeClasses} ${variantClasses} ${className}`}
+      style={{ flexWrap: "nowrap", whiteSpace: "nowrap", ...style }}
+      {...props}
+    >
       {isLoading ? (
-        <span style={{ display: "inline-block", width: "14px", height: "14px", border: "2px solid currentColor", borderRightColor: "transparent", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+        <span className="loading loading-spinner loading-xs text-current shrink-0" />
       ) : (
-        leftIcon
+        leftIcon && <span className="shrink-0 inline-flex items-center">{leftIcon}</span>
       )}
-      {children}
-      {!isLoading && rightIcon}
+      <span className="whitespace-nowrap shrink-0">{children}</span>
+      {!isLoading && rightIcon && <span className="shrink-0 inline-flex items-center">{rightIcon}</span>}
     </button>
   );
 };
