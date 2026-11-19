@@ -20,8 +20,6 @@ export interface SearchHit {
   needs_review?: boolean;
   student_id?: string;
   student_name?: string;
-  uploader_name?: string;
-  uploader_mssv?: string;
   document_date?: string;
   document_number?: string;
   ocr_status: string;
@@ -58,6 +56,9 @@ export interface SearchResponse {
     [key: string]: any;
   };
   results: SearchHit[];
+  did_you_mean?: string | null;
+  resolved_query?: string | null;
+  detected_intent?: string | null;
 }
 
 export interface SuggestItem {
@@ -97,6 +98,7 @@ export interface RequiredFormItem {
 
 export interface FaqAnswerResponse {
   query: string;
+  resolved_query?: string;
   matched_article: string;
   regulation_title: string;
   summary_answer: string;
@@ -745,7 +747,6 @@ export interface HybridRrfHit {
   category_name: string;
   student_name?: string;
   student_id?: string;
-  uploader_name?: string;
   bm25_rank?: number;
   knn_rank?: number;
   bm25_score?: number;
