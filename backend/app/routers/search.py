@@ -4176,7 +4176,8 @@ async def get_ocr_quality_distribution(
     # 1. Truy vấn từ CSDL PostgreSQL (Dual-engine fallback)
     stmt = select(OCRResult.confidence_score).where(OCRResult.confidence_score.isnot(None))
     res = await db.execute(stmt)
-    confidences = [r for (r,) in res.all() if r is not None]
+    raw_scores = res.scalars().all()
+    confidences: list[float] = [float(r) for r in raw_scores if r is not None]
 
     total_count = len(confidences) if confidences else 156
     if not confidences:
