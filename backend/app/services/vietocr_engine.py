@@ -273,23 +273,47 @@ class VietOCREngine:
 
         # Sort-by-width: nhóm dòng có độ rộng gần nhau vào cùng batch
         indexed = sorted(enumerate(cleaned), key=lambda iv: iv[1].size[0])
-        orig_indices  = [i for i, _ in indexed]
+        orig_indices = [i for i, _ in indexed]
         sorted_images = [img for _, img in indexed]
 
-        # OCR theo batch (sorted by width)
+        # Nhóm dòng theo width buckets thông minh để tránh đệm trắng quá lớn làm méo chữ số hẹp (như số 4 viết tay)
+        batches: list[list[Image.Image]] = []
+        batches_idx: list[list[int]] = []
+        cur_batch: list[Image.Image] = []
+        cur_batch_idx: list[int] = []
+
+        for im, idx in zip(sorted_images, orig_indices):
+            if not cur_batch:
+                cur_batch.append(im)
+                cur_batch_idx.append(idx)
+            elif (im.size[0] / max(1, cur_batch[0].size[0]) <= 1.45) and len(cur_batch) < _batch_size:
+                cur_batch.append(im)
+                cur_batch_idx.append(idx)
+            else:
+                batches.append(cur_batch)
+                batches_idx.append(cur_batch_idx)
+                cur_batch = [im]
+                cur_batch_idx = [idx]
+        if cur_batch:
+            batches.append(cur_batch)
+            batches_idx.append(cur_batch_idx)
+
+        # OCR theo từng width bucket
         sorted_texts: dict[int, str] = {}
         sorted_probs: dict[int, float] = {}
-        for batch_start in range(0, total_lines, _batch_size):
-            batch     = sorted_images[batch_start: batch_start + _batch_size]
-            batch_idx = orig_indices[batch_start: batch_start + _batch_size]
+        processed_count = 0
+        for batch, batch_idx in zip(batches, batches_idx):
+            wmin = batch[0].size[0]
+            wmax = batch[-1].size[0]
             logger.info(
                 "[VietOCR] Dòng {s}-{e}/{t} (w={wmin}-{wmax}px)",
-                s=batch_start + 1,
-                e=min(batch_start + _batch_size, total_lines),
+                s=processed_count + 1,
+                e=processed_count + len(batch),
                 t=total_lines,
-                wmin=batch[0].size[0],
-                wmax=batch[-1].size[0],
+                wmin=wmin,
+                wmax=wmax,
             )
+            processed_count += len(batch)
             try:
                 texts, probs = self.predict_batch_padded(batch, return_prob=True)
             except Exception:

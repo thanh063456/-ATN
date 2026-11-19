@@ -51,11 +51,11 @@ _NATIONAL_HEADER_PATTERNS = [
 # ─── Pattern số hiệu văn bản ─────────────────────────────────────────────────
 # Bắt: "Số: 1328/QĐ-ĐHĐL", "Số : 1328 /QD-DHDL", "Số: 13.28/QĐ-ĐHĐL", "Sề: /KH-PHĐL"
 _DOC_NO_PATTERN = re.compile(
-    r'S[oốõọẽeèéẻẹổôềế]\s*[:\-]?\s*'
-    r'(?:<hw>)?([0-9A-Za-z\s\./]{0,9})(?:</hw>)?'
-    r'\s*[/\\]\s*'
-    r'([A-Za-z\u0110\u0111\u00d4\u00f4\u0102\u0103\u00c2\u00e2]'
-    r'[A-Za-z\u0110\u0111\u00d4\u00f4\u0102\u0103\u00c2\u00e20-9\-\u2013]{1,20})',
+    r"S[oốõọẽeèéẻẹổôềế]\s*[:\-]?\s*"
+    r"(?:<hw>)?([0-9A-Za-z\s\./\.\u2026\-_~]{0,25})(?:</hw>)?"
+    r"\s*[/\\]\s*"
+    r"([A-Za-z\u0110\u0111\u00d4\u00f4\u0102\u0103\u00c2\u00e2]"
+    r"[A-Za-z\u0110\u0111\u00d4\u00f4\u0102\u0103\u00c2\u00e20-9\-\u2013]{1,25})",
     re.IGNORECASE,
 )
 
@@ -109,14 +109,24 @@ def _normalize_doc_number(header_text: str) -> tuple[str, str | None]:
         if any(w in context_before for w in reject_words):
             continue
             
-        num = re.sub(r'[\s\.]+', '', m.group(1))   # "13 28" / "13.28" → "1328"
+        raw_num = m.group(1).strip()
         code = m.group(2).strip().upper()
         normalized_code = normalize_document_code(code)
-        if not num:
-            doc_no = f'Số: [chưa đọc được]/{normalized_code}'
+
+        # Xử lý trường hợp chữ số viết tay '4' bị OCR nhầm thành dấu '/' (vd: '18/8' -> '1848')
+        if "/" in raw_num and "4" not in raw_num:
+            raw_num_fixed = re.sub(r"(\d)\s*/\s*(\d)", r"\g<1>4\g<2>", raw_num)
+            if re.search(r"^\d+$", re.sub(r"[\s\.\u2026\-_]+", "", raw_num_fixed)):
+                raw_num = raw_num_fixed
+
+        # Kiểm tra xem có phải bản nháp / để trống dấu chấm không
+        is_blank_placeholder = bool(re.fullmatch(r"[\s\.\u2026\-_~]*", raw_num))
+        num = re.sub(r"[\s\.\u2026\-_/]+", "", raw_num)
+        if is_blank_placeholder or not num:
+            doc_no = f"Số: [chưa đọc được]/{normalized_code}"
         else:
-            doc_no = f'Số: {num}/{normalized_code}'
-    
+            doc_no = f"Số: {num}/{normalized_code}"
+
         text = header_text[:m.start()] + doc_no + header_text[m.end():]
         return text, doc_no
 

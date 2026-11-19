@@ -558,12 +558,13 @@ async def upload_document(
     )
 
     celery_task_id = None
-    # Khởi chạy tác vụ OCR nền tự động cho toàn bộ các engine (VietOCR, TrOCR, Tesseract)
+    # Khởi chạy tác vụ OCR nền: ưu tiên chạy VietOCR
     if _is_redis_available():
-        task = process_all_ocr_task.delay(str(document.id))
+        from app.worker.tasks import process_ocr_task
+        task = process_ocr_task.delay(str(document.id), engine="vietocr")
         celery_task_id = task.id
     else:
-        asyncio.create_task(async_process_all_ocr_engines(str(document.id), task_id="async_worker"))
+        asyncio.create_task(async_process_ocr(str(document.id), engine="vietocr", task_id="async_worker"))
 
     return DocumentUploadResponse(
         id=document.id,

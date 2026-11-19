@@ -33,6 +33,9 @@ export const Button: React.FC<ButtonProps> = ({
       transition: "all 0.15s ease",
       cursor: disabled || isLoading ? "not-allowed" : "pointer",
       opacity: disabled || isLoading ? 0.65 : 1,
+      whiteSpace: "nowrap",
+      flexWrap: "nowrap",
+      flexShrink: 0,
     };
 
     // Size

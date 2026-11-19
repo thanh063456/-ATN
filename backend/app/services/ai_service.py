@@ -41,6 +41,57 @@ class AIService:
             return "openai"
         return "ollama"
 
+    def _is_valid_refinement(self, original: str, refined: str) -> bool:
+        """Kiểm tra nghiêm ngặt kết quả AI hiệu đính để ngăn chặn tuyệt đối tình trạng mất chữ hoặc bịa nội dung."""
+        if not refined or not refined.strip():
+            return False
+
+        orig_clean = original.strip()
+        ref_clean = refined.strip()
+
+        # 1. Kiểm tra độ dài: Sửa lỗi chính tả không được làm giảm quá 10% hoặc tăng quá 15% độ dài
+        if len(ref_clean) < len(orig_clean) * 0.90 or len(ref_clean) > len(orig_clean) * 1.15:
+            logger.warning(
+                "AI refinement rejected: length anomaly (orig={orig}, ref={ref})",
+                orig=len(orig_clean),
+                ref=len(ref_clean),
+            )
+            return False
+
+        # 2. Không được làm mất các từ khóa tiêu đề hoặc phần mở đầu nếu bản gốc có
+        critical_keywords = [
+            "THÔNG BÁO",
+            "QUYẾT ĐỊNH",
+            "KẾ HOẠCH",
+            "TỜ TRÌNH",
+            "CÔNG VĂN",
+            "HƯỚNG DẪN",
+            "BIÊN BẢN",
+            "BÁO CÁO",
+            "ĐƠN XIN",
+            "Kính gửi",
+            "Căn cứ",
+            "V/v",
+        ]
+        for kw in critical_keywords:
+            if kw.lower() in orig_clean.lower() and kw.lower() not in ref_clean.lower():
+                logger.warning("AI refinement rejected: dropped critical keyword '{kw}'", kw=kw)
+                return False
+
+        # 3. Không được hallucinate các đề mục/thuật ngữ bịa đặt
+        hallucination_checks = ["MỤC ĐÍCH", "Tuần sinh hoạt công dân"]
+        for term in hallucination_checks:
+            if term.lower() in ref_clean.lower() and term.lower() not in orig_clean.lower():
+                logger.warning("AI refinement rejected: hallucinated term '{term}'", term=term)
+                return False
+
+        # 4. Bảo toàn bảng biểu Markdown nếu bản gốc có
+        if "|---" in orig_clean and "|---" not in ref_clean:
+            logger.warning("AI refinement rejected: lost Markdown table structure")
+            return False
+
+        return True
+
     async def _refine_single_chunk(self, chunk: str, provider: str) -> str | None:
         """Hiệu đính 1 đoạn hoặc 1 trang văn bản qua LLM provider, bảo vệ cấu trúc header 2 cột."""
         if not chunk.strip():
@@ -73,13 +124,14 @@ class AIService:
         prompt = (
             "Bạn là trợ lý ngôn ngữ tiếng Việt chuyên nghiệp hiệu đính văn bản hành chính công tác sinh viên Đại học Đà Lạt.\n"
             "Dưới đây là phần nội dung văn bản trích xuất từ mô hình OCR quét tài liệu (có thể có lỗi nhận dạng dấu hoặc chữ cái, nhầm số/ký tự).\n"
-            "Nhiệm vụ của bạn:\n"
-            "1. Sửa triệt để các lỗi chính tả, phục hồi đúng dấu câu tiếng Việt chuẩn xác.\n"
-            "   - Sửa các lỗi OCR phổ biến: '6 ất công dân' hoặc 'công dân?' sửa thành 'công dân - HSSV'; 'L MỤC ĐÍCH' sửa thành 'I. MỤC ĐÍCH'.\n"
-            "   - Chuẩn hóa tên chương trình: 'Tuần sinh hoạt công dân - HSSV' đầu khóa dành cho Tân sinh viên khóa 49, năm học 2025-2026.\n"
-            "2. Giữ nguyên 100% các dữ liệu thực tế quan trọng: Mã số sinh viên, số tiền, ngày tháng năm, tên riêng người và trường.\n"
-            "3. Giữ nguyên cấu trúc các đề mục (KẾ HOẠCH, I., II., 1.1., a., b., c.).\n"
-            "4. CHỈ TRẢ VỀ DUY NHẤT VĂN BẢN ĐÃ ĐƯỢC HIỆU ĐÍNH, KHÔNG KÈM LỜI DẪN, KHÔNG GIẢI THÍCH.\n\n"
+            "Nhiệm vụ duy nhất: Sửa triệt để các lỗi chính tả, phục hồi đúng dấu câu tiếng Việt chuẩn xác.\n\n"
+            "CÁC NGUYÊN TẮC BẮT BUỘC:\n"
+            "1. BẢO TOÀN NGUYÊN VẸN 100% CÁC CÂU, DÒNG, ĐOẠN, TIÊU ĐỀ (THÔNG BÁO, QUYẾT ĐỊNH, KẾ HOẠCH, TỜ TRÌNH, KÍNH GỬI,...), LỜI DẪN, BẢNG BIỂU.\n"
+            "2. TUYỆT ĐỐI KHÔNG TÓM TẮT, KHÔNG BỎ BỚT BẤT KỲ CÂU CHỮ HAY DÒNG NÀO CỦA VĂN BẢN.\n"
+            "3. TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ BỊA ĐẶT NỘI DUNG, KHÔNG TỰ Ý CHÈN CÁC TIÊU ĐỀ/ĐỀ MỤC KHÔNG CÓ TRONG VĂN BẢN.\n"
+            "4. Giữ nguyên 100% các dữ liệu thực tế quan trọng: Mã số sinh viên, số tiền, ngày tháng năm, tên riêng người và trường.\n"
+            "5. Giữ nguyên cấu trúc các đề mục (I., II., 1., 1.1., a., b., c.).\n"
+            "6. CHỈ TRẢ VỀ DUY NHẤT VĂN BẢN ĐÃ ĐƯỢC HIỆU ĐÍNH, KHÔNG KÈM LỜI DẪN, KHÔNG GIẢI THÍCH.\n\n"
             f"--- NỘI DUNG OCR ---\n{body_to_refine}\n--- HẾT ---"
         )
 
@@ -91,11 +143,12 @@ class AIService:
         elif provider == "ollama":
             refined = await self._call_ollama(prompt)
 
-        if refined and len(refined) > len(body_to_refine) * 0.3:
+        if refined and self._is_valid_refinement(body_to_refine, refined):
             final_text = header_prefix + refined
             return post_process_vietnamese(final_text)
 
-        return None
+        logger.info("AI refinement unverified or rejected; falling back to post_process_vietnamese for this chunk")
+        return post_process_vietnamese(chunk)
 
     async def refine_ocr_text(self, raw_text: str) -> dict[str, Any]:
         """
@@ -126,7 +179,7 @@ class AIService:
                 elif part.strip():
                     try:
                         p_res = await self._refine_single_chunk(part, provider)
-                        if p_res and len(p_res) > len(part) * 0.3:
+                        if p_res and self._is_valid_refinement(part, p_res):
                             refined_parts.append(p_res)
                             any_llm_success = True
                         else:
@@ -149,7 +202,7 @@ class AIService:
         # Văn bản đơn trang hoặc không có dấu trang
         try:
             refined = await self._refine_single_chunk(raw_text, provider)
-            if refined and len(refined) > len(raw_text) * 0.3:
+            if refined and self._is_valid_refinement(raw_text, refined):
                 return {
                     "original_text": raw_text,
                     "refined_text": refined,

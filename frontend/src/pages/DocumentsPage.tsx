@@ -647,7 +647,7 @@ export const DocumentsPage: React.FC = () => {
                 {isStaffOrAdmin && <th style={{ padding: "0.85rem 1rem", width: "12%" }}>TIẾN ĐỘ OCR</th>}
                 {isStaffOrAdmin && <th style={{ padding: "0.85rem 0.75rem", width: "11%" }}>QUYỀN XEM</th>}
                 <th style={{ padding: "0.85rem 0.75rem", width: "9%" }}>PHÊ DUYỆT</th>
-                <th style={{ padding: "0.85rem 1.25rem", width: isStaffOrAdmin ? "10%" : "11%", textAlign: "right" }}>THAO TÁC</th>
+                <th style={{ padding: "0.85rem 1.25rem", width: isStaffOrAdmin ? "18%" : "12%", minWidth: isStaffOrAdmin ? "250px" : "110px", textAlign: "right", whiteSpace: "nowrap" }}>THAO TÁC</th>
               </tr>
             </thead>
             <tbody>
@@ -929,8 +929,8 @@ export const DocumentsPage: React.FC = () => {
                       </td>
 
                       {/* Hành động */}
-                      <td style={{ padding: "1rem 1.25rem", verticalAlign: "middle", textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
+                      <td style={{ padding: "1rem 1.25rem", verticalAlign: "middle", textAlign: "right", whiteSpace: "nowrap", minWidth: isStaffOrAdmin ? "250px" : "110px" }}>
+                        <div style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end", flexWrap: "nowrap" }}>
                           <Link to={`/documents/${doc.id}`} style={{ textDecoration: "none" }}>
                             <Button variant="outline" size="sm" leftIcon={<Eye size={13} />}>
                               Chi tiết

@@ -95,7 +95,10 @@ export const DocumentDetailPage: React.FC = () => {
   const { user, token } = useAuthStore();
   const { addToast } = useToastStore();
 
-  const isStaffOrAdmin = user?.role === "ADMIN" || user?.role === "STAFF";
+  const isAdmin = user?.role === "ADMIN";
+  const isStaff = user?.role === "STAFF";
+  const isStudent = user?.role === "STUDENT";
+  const isStaffOrAdmin = isAdmin || isStaff;
 
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [verification, setVerification] = useState<VerificationData | null>(null);
@@ -888,7 +891,7 @@ export const DocumentDetailPage: React.FC = () => {
               <h1 style={{ fontSize: "1.35rem", fontWeight: 800, color: "var(--gray-900)", margin: 0 }}>
                 {doc.title}
               </h1>
-              <OCRStatusBadge status={doc.ocr_status as any} />
+              {isAdmin && <OCRStatusBadge status={doc.ocr_status as any} />}
               {isApproved && <Badge variant="success" dot>Đã xác thực điện tử</Badge>}
             </div>
             <div style={{ fontSize: "0.75rem", color: "var(--gray-400)", marginTop: "0.2rem" }}>
@@ -918,8 +921,8 @@ export const DocumentDetailPage: React.FC = () => {
             </Button>
           )}
 
-          {/* Dropdown OCR lại (Chỉ dành cho Cán bộ / Admin) */}
-          {isStaffOrAdmin && (
+          {/* Dropdown OCR lại (Chỉ dành cho Admin kỹ thuật) */}
+          {isAdmin && (
             <div style={{ position: "relative" }}>
               <Button
                 variant="outline"
@@ -1033,8 +1036,8 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Dynamic Processing Alert Banner (Chỉ hiển thị cho Cán bộ / Admin) */}
-      {isStaffOrAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
+      {/* Dynamic Processing Alert Banner (Chỉ hiển thị cho Admin kỹ thuật) */}
+      {isAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
         <div
           style={{
             display: "flex",
@@ -1079,8 +1082,8 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Notice when only first page was OCRed (Chỉ hiển thị cho Cán bộ / Admin) */}
-      {isStaffOrAdmin && doc.ocr_status === "DONE" && (doc.metadata?.extra?.ocr_scope === "first_page" || ((doc.page_count ?? 1) > 1 && doc.metadata?.extra?.ocr_scope !== "full")) && (
+      {/* Notice when only first page was OCRed (Chỉ hiển thị cho Admin kỹ thuật) */}
+      {isAdmin && doc.ocr_status === "DONE" && (doc.metadata?.extra?.ocr_scope === "first_page" || ((doc.page_count ?? 1) > 1 && doc.metadata?.extra?.ocr_scope !== "full")) && (
         <div
           style={{
             display: "flex",
@@ -1286,66 +1289,58 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Tabs */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          backgroundColor: "#fff",
-          padding: "0.35rem",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border-color)",
-          width: "fit-content",
-        }}
-      >
-        <button
-          onClick={() => setActiveTab("ocr")}
+      {/* Tabs (Chỉ hiển thị cho Admin kỹ thuật khi đối chiếu mô hình OCR) */}
+      {isAdmin && (
+        <div
           style={{
-            padding: "0.45rem 1rem",
-            borderRadius: "var(--radius-md)",
-            border: "none",
-            backgroundColor: activeTab === "ocr" ? "var(--primary-600)" : "transparent",
-            color: activeTab === "ocr" ? "#fff" : "var(--gray-600)",
-            fontWeight: 600,
-            fontSize: "0.8125rem",
-            cursor: "pointer",
-            display: "inline-flex",
+            display: "flex",
             alignItems: "center",
-            gap: "6px",
+            gap: "0.5rem",
+            backgroundColor: "#fff",
+            padding: "0.35rem",
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--border-color)",
+            width: "fit-content",
           }}
         >
-          {isStaffOrAdmin ? (
-            <>
-              <Edit3 size={14} /> Trình đối chiếu & Sửa lỗi OCR (Live Editor)
-            </>
-          ) : (
-            <>
-              <FileText size={14} /> Văn bản số hóa & Nội dung
-            </>
-          )}
-        </button>
+          <button
+            onClick={() => setActiveTab("ocr")}
+            style={{
+              padding: "0.45rem 1rem",
+              borderRadius: "var(--radius-md)",
+              border: "none",
+              backgroundColor: activeTab === "ocr" ? "var(--primary-600)" : "transparent",
+              color: activeTab === "ocr" ? "#fff" : "var(--gray-600)",
+              fontWeight: 600,
+              fontSize: "0.8125rem",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <Edit3 size={14} /> Trình đối chiếu & Sửa lỗi OCR (Live Editor)
+          </button>
 
-        <button
-          onClick={() => setActiveTab("fields")}
-          style={{
-            padding: "0.45rem 1rem",
-            borderRadius: "var(--radius-md)",
-            border: "none",
-            backgroundColor: activeTab === "fields" ? "var(--primary-600)" : "transparent",
-            color: activeTab === "fields" ? "#fff" : "var(--gray-600)",
-            fontWeight: 600,
-            fontSize: "0.8125rem",
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-          }}
-        >
-          <Sparkles size={14} /> {isStaffOrAdmin ? "Bóc tách Thông tin AI (Smart Fields)" : "Thông tin hồ sơ sinh viên"}
-        </button>
+          <button
+            onClick={() => setActiveTab("fields")}
+            style={{
+              padding: "0.45rem 1rem",
+              borderRadius: "var(--radius-md)",
+              border: "none",
+              backgroundColor: activeTab === "fields" ? "var(--primary-600)" : "transparent",
+              color: activeTab === "fields" ? "#fff" : "var(--gray-600)",
+              fontWeight: 600,
+              fontSize: "0.8125rem",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <Sparkles size={14} /> Bóc tách Thông tin AI (Smart Fields)
+          </button>
 
-        {isStaffOrAdmin && (
           <button
             onClick={() => {
               setActiveTab("benchmark");
@@ -1369,31 +1364,31 @@ export const DocumentDetailPage: React.FC = () => {
           >
             <Layers size={14} /> Đối sánh 3 Mô hình (VietOCR vs TrOCR vs Tesseract)
           </button>
-        )}
 
-        <button
-          onClick={() => setActiveTab("verification")}
-          style={{
-            padding: "0.45rem 1rem",
-            borderRadius: "var(--radius-md)",
-            border: "none",
-            backgroundColor: activeTab === "verification" ? "var(--primary-600)" : "transparent",
-            color: activeTab === "verification" ? "#fff" : "var(--gray-600)",
-            fontWeight: 600,
-            fontSize: "0.8125rem",
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-          }}
-        >
-          <QrCode size={14} /> Con dấu & Mã QR Xác thực
-        </button>
-      </div>
+          <button
+            onClick={() => setActiveTab("verification")}
+            style={{
+              padding: "0.45rem 1rem",
+              borderRadius: "var(--radius-md)",
+              border: "none",
+              backgroundColor: activeTab === "verification" ? "var(--primary-600)" : "transparent",
+              color: activeTab === "verification" ? "#fff" : "var(--gray-600)",
+              fontWeight: 600,
+              fontSize: "0.8125rem",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <QrCode size={14} /> Con dấu & Mã QR Xác thực
+          </button>
+        </div>
+      )}
 
       {/* TAB 1: SIDE-BY-SIDE OCR VIEWER & LIVE EDITOR */}
       {activeTab === "ocr" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: "1.25rem", minHeight: "620px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1.15fr" : "1fr", gap: "1.25rem", minHeight: isAdmin ? "620px" : "750px" }}>
           {/* LEFT: DOCUMENT VIEWER */}
           <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
             {/* Viewer Toolbar */}
@@ -1467,11 +1462,11 @@ export const DocumentDetailPage: React.FC = () => {
                 justifyContent: "center",
                 padding: "0",
                 overflow: "hidden",
-                minHeight: "560px",
+                minHeight: isAdmin ? "560px" : "750px",
                 position: "relative",
               }}
             >
-              {isStaffOrAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
+              {isAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
                 <div
                   style={{
                     position: "absolute",
@@ -1504,7 +1499,7 @@ export const DocumentDetailPage: React.FC = () => {
                   style={{
                     width: "100%",
                     height: "100%",
-                    minHeight: "560px",
+                    minHeight: isAdmin ? "560px" : "750px",
                     border: "none",
                     backgroundColor: "#ffffff",
                   }}
@@ -1519,7 +1514,7 @@ export const DocumentDetailPage: React.FC = () => {
                     justifyContent: "center",
                     overflow: "auto",
                     padding: "1rem",
-                    minHeight: "560px",
+                    minHeight: isAdmin ? "560px" : "750px",
                   }}
                 >
                   <img
@@ -1539,8 +1534,9 @@ export const DocumentDetailPage: React.FC = () => {
             </div>
           </Card>
 
-          {/* RIGHT: LIVE OCR TEXT EDITOR & COMPARISON */}
-          <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          {/* RIGHT: LIVE OCR TEXT EDITOR & COMPARISON (Chỉ hiển thị cho Admin kỹ thuật) */}
+          {isAdmin && (
+            <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             
             {/* Tabs for OCR Engines (Chỉ hiển thị cho Cán bộ / Admin) */}
             {isStaffOrAdmin ? (
@@ -2228,6 +2224,7 @@ export const DocumentDetailPage: React.FC = () => {
               </>
             )}
           </Card>
+          )}
         </div>
       )}
 

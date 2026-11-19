@@ -583,7 +583,18 @@ class VietOCRService:
             return True
 
         x, y, w, h = box
-        
+
+        # Bảo vệ tuyệt đối: Không bao giờ lọc bỏ các dòng chứa từ khóa hành chính / trích yếu / văn bản
+        t_lower = t.lower()
+        admin_safe_kws = (
+            "v/v", "viv", "về việc", "thông báo", "quyết định", "kế hoạch", "tờ trình",
+            "kính gửi", "học bổng", "học bồng", "sinh viên", "công ty", "trường đại học", "đại học đà lạt",
+            "cộng hòa", "độc lập", "bộ giáo dục", "tiêu chuẩn", "thời gian", "địa điểm",
+            "căn cứ", "điều ", "chương ", "nơi nhận", "lưu ý", "phòng công tác", "ctsv", "development"
+        )
+        if any(kw in t_lower for kw in admin_safe_kws):
+            return False
+
         # Hallucination guard: crop rất rộng nhưng model trả về chuỗi siêu ngắn
         if w > 3 * h_med and len(t) < 3 and not re.search(r'\d', t):
             return True
@@ -634,7 +645,11 @@ class VietOCRService:
         if t in ("2.2", "42", "4.2", "22", "Coll", "Chines", "CHILL", "0%", "2/42", "Contracts", "Contract"):
             return True
             
-        if re.search(r'\b(?:Contracts?|Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable|Organization|Administration|Characteristics?|[A-Za-z]{10,})\b', t, re.IGNORECASE):
+        if re.search(
+            r"\b(?:Contracts?|Contractionalists?|Accommodating|Internationalization|Responsibilit(?:y|ies)|Unbelievable)\b",
+            t,
+            re.IGNORECASE,
+        ):
             return True
 
         # Rác lề mép ngoài văn bản (x sát mép phải > 88% chiều rộng trang hoặc trái < 5%)
@@ -650,7 +665,15 @@ class VietOCRService:
             return True
 
         # Ảo giác watermark mờ rác
-        if len(re.findall(r'\"\"+', t)) >= 2 or len(re.findall(r'\d/\d/\d/\d', t)) >= 1 or '??T2' in t or 'yhng' in t or 'nghvay' in t or 'vụvv' in t or 'viv' in t:
+        if (
+            len(re.findall(r'\"\"+', t)) >= 2
+            or len(re.findall(r'\d/\d/\d/\d', t)) >= 1
+            or '??T2' in t
+            or 'yhng' in t
+            or 'nghvay' in t
+            or 'vụvv' in t
+            or bool(re.fullmatch(r"[\s\?]*viv[\s\?]*", t, re.IGNORECASE))
+        ):
             return True
 
         # Lặp từ do con dấu tròn đỏ

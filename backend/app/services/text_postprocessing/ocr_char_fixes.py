@@ -17,6 +17,13 @@ import re
 # QUAN TRỌNG: Thứ tự quan trọng — rule trước có thể ảnh hưởng rule sau.
 
 OCR_CHAR_RULES: list[tuple[str, str, int, str]] = [
+    # Sửa lỗi OCR nhầm "V/v" (về việc) thành "Viv" hoặc "V1v" hoặc "Vlv"
+    (
+        r'(?i)\bV[i|1/]v\s+',
+        r'V/v ',
+        0,
+        'viv_to_vv: "Viv xét cấp" → "V/v xét cấp"',
+    ),
     # Ngày tháng bị thêm ký tự lạ sau số tháng: "tháng 40)" → "tháng 4 năm"
     (
         r'tháng\s+(\d{1,2})[)\]\.]+\s*(năm|n[aă]m)',
