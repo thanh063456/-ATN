@@ -861,9 +861,17 @@ async def search_documents(
         if ocr_status:
             stmt = stmt.where(Document.ocr_status == ocr_status.upper())
         if date_from:
-            stmt = stmt.where(Document.created_at >= date_from)
+            try:
+                dt_from = datetime.fromisoformat(date_from) if "T" in date_from else datetime.strptime(date_from[:10], "%Y-%m-%d")
+                stmt = stmt.where(Document.created_at >= dt_from)
+            except Exception:
+                pass
         if date_to:
-            stmt = stmt.where(Document.created_at <= f"{date_to} 23:59:59")
+            try:
+                dt_to = datetime.fromisoformat(date_to) if "T" in date_to else datetime.strptime(date_to[:10], "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+                stmt = stmt.where(Document.created_at <= dt_to)
+            except Exception:
+                pass
         if min_confidence is not None:
             stmt = stmt.where(Document.ocr_results.any(OCRResult.confidence_score >= min_confidence))
         if max_confidence is not None:
