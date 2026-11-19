@@ -1,14 +1,13 @@
-from uuid import uuid4
-
 import pytest
+from httpx import AsyncClient
+from uuid import uuid4
+from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
-from app.models.audit_logs import AuditLog
+from app.models.documents import Document
 from app.models.document_categories import DocumentCategory
 from app.models.document_metadata import DocumentMetadata
-from app.models.documents import Document
+from app.models.audit_logs import AuditLog
 from app.models.users import User
-from httpx import AsyncClient
-from sqlalchemy import select
 
 
 @pytest.mark.asyncio
@@ -52,14 +51,12 @@ async def test_ocr_full_rbac(async_client: AsyncClient, student_token: str, staf
     # 3. Check AuditLog entry for TRIGGER_OCR_FULL
     async with AsyncSessionLocal() as session:
         log = (
-            (
-                await session.execute(
-                    select(AuditLog).where(AuditLog.resource_id == doc_id, AuditLog.action == "TRIGGER_OCR_FULL")
+            await session.execute(
+                select(AuditLog).where(
+                    AuditLog.resource_id == doc_id, AuditLog.action == "TRIGGER_OCR_FULL"
                 )
             )
-            .scalars()
-            .first()
-        )
+        ).scalars().first()
         assert log is not None
         assert "Kích hoạt" in log.detail.get("message", "")
 
@@ -149,22 +146,20 @@ async def test_override_document_type(async_client: AsyncClient, student_token: 
         updated_doc = await session.get(Document, doc_id)
         assert updated_doc.category_id == cat2.id
         updated_meta = (
-            (await session.execute(select(DocumentMetadata).where(DocumentMetadata.document_id == doc_id)))
-            .scalars()
-            .first()
-        )
+            await session.execute(
+                select(DocumentMetadata).where(DocumentMetadata.document_id == doc_id)
+            )
+        ).scalars().first()
         assert updated_meta.extra.get("doc_type_source") == "manual"
         assert updated_meta.extra.get("source") == "manual"
 
         # 4. Verify audit log entry
         log = (
-            (
-                await session.execute(
-                    select(AuditLog).where(AuditLog.resource_id == doc_id, AuditLog.action == "OVERRIDE_TYPE")
+            await session.execute(
+                select(AuditLog).where(
+                    AuditLog.resource_id == doc_id, AuditLog.action == "OVERRIDE_TYPE"
                 )
             )
-            .scalars()
-            .first()
-        )
+        ).scalars().first()
         assert log is not None
         assert cat2_code in log.detail.get("new_type", "")

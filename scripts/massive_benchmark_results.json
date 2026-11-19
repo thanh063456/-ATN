@@ -1,0 +1,937 @@
+{
+  "metadata": {
+    "title": "Minh chứng Kiểm thử Tự động Toàn diện Elasticsearch 8",
+    "system": "DocuCTSV - Trường Đại học Đà Lạt",
+    "executed_at": "2026-11-18T15:21:07.470220",
+    "total_scenarios": 660,
+    "total_passed": 660,
+    "overall_pass_rate": "100.00%",
+    "total_duration_sec": 17.05,
+    "latency_metrics": {
+      "avg_ms": 25.45,
+      "p50_ms": 21.98,
+      "p95_ms": 55.73,
+      "p99_ms": 166.72
+    }
+  },
+  "evaluation_criteria": {
+    "MRR": 0.965,
+    "Precision@1": 0.985,
+    "Precision@3": 0.952,
+    "Recall@5": 0.978,
+    "PII_Leakage_Rate": "0.00%",
+    "Fault_Tolerance_Availability": "100.0%"
+  },
+  "groups_summary": [
+    {
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "total": 80,
+      "passed": 80,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 53.91,
+      "p95_latency_ms": 71.69
+    },
+    {
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "total": 70,
+      "passed": 70,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 45.9,
+      "p95_latency_ms": 61.14
+    },
+    {
+      "group_id": 3,
+      "group_name": "Chịu lỗi OCR & Fuzzy Matching",
+      "total": 70,
+      "passed": 70,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 42.15,
+      "p95_latency_ms": 58.04
+    },
+    {
+      "group_id": 4,
+      "group_name": "Tìm kiếm Lai Ngữ nghĩa Hybrid RRF",
+      "total": 70,
+      "passed": 70,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 34.62,
+      "p95_latency_ms": 51.17
+    },
+    {
+      "group_id": 5,
+      "group_name": "Bộ lọc Đa diện Faceting",
+      "total": 50,
+      "passed": 50,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 12.83,
+      "p95_latency_ms": 31.54
+    },
+    {
+      "group_id": 6,
+      "group_name": "Trợ lý Hỏi đáp Quy chế & Ngoài lề",
+      "total": 60,
+      "passed": 60,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 7.11,
+      "p95_latency_ms": 26.82
+    },
+    {
+      "group_id": 7,
+      "group_name": "More-Like-This & Đối soát Gian lận",
+      "total": 50,
+      "passed": 50,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 16.55,
+      "p95_latency_ms": 34.53
+    },
+    {
+      "group_id": 8,
+      "group_name": "Percolator Routing & Thẩm định NĐ 81",
+      "total": 60,
+      "passed": 60,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 12.53,
+      "p95_latency_ms": 32.27
+    },
+    {
+      "group_id": 9,
+      "group_name": "Trích xuất Tọa độ Bounding Box 2D",
+      "total": 40,
+      "passed": 40,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 7.6,
+      "p95_latency_ms": 21.99
+    },
+    {
+      "group_id": 10,
+      "group_name": "Bảo mật Dữ liệu FLS & DLS",
+      "total": 40,
+      "passed": 40,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 8.19,
+      "p95_latency_ms": 27.1
+    },
+    {
+      "group_id": 11,
+      "group_name": "Pipeline CDC & Tự phục hồi DLQ",
+      "total": 35,
+      "passed": 35,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 14.16,
+      "p95_latency_ms": 79.69
+    },
+    {
+      "group_id": 12,
+      "group_name": "Quản lý ILM Hot-Cold & Giám sát SLA",
+      "total": 35,
+      "passed": 35,
+      "pass_rate": "100.0%",
+      "avg_latency_ms": 3.45,
+      "p95_latency_ms": 17.58
+    }
+  ],
+  "sample_detailed_logs": [
+    {
+      "test_id": "FT_001",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 383.06,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_002",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 38.85,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_003",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 60.0,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_004",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 42.2,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_005",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 44.98,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_006",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 41.35,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_007",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 46.36,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_008",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 53.55,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_009",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 37.07,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_010",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 26.68,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_011",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 30.5,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_012",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 43.5,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_013",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 31.2,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_014",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 27.74,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_015",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 29.55,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_016",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 29.49,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_017",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 34.29,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_018",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 28.89,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_019",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 30.18,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_020",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 33.25,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_021",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 32.85,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_022",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 33.93,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_023",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 33.66,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_024",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 31.99,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_025",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 41.55,
+      "snippet": "Total hits: 16, Returned: 10"
+    },
+    {
+      "test_id": "FT_026",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 58.97,
+      "snippet": "Total hits: 16, Returned: 10"
+    },
+    {
+      "test_id": "FT_027",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 41.28,
+      "snippet": "Total hits: 16, Returned: 10"
+    },
+    {
+      "test_id": "FT_028",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 40.47,
+      "snippet": "Total hits: 16, Returned: 10"
+    },
+    {
+      "test_id": "FT_029",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 41.83,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "FT_030",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 38.24,
+      "snippet": "Total hits: 16, Returned: 10"
+    },
+    {
+      "test_id": "FT_031",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 37.44,
+      "snippet": "Total hits: 16, Returned: 10"
+    },
+    {
+      "test_id": "FT_032",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 53.79,
+      "snippet": "Total hits: 16, Returned: 10"
+    },
+    {
+      "test_id": "FT_033",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 50.0,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_034",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 38.91,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_035",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 63.99,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_036",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 44.66,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_037",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 42.39,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_038",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 39.11,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_039",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 53.72,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_040",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 63.71,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_041",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 47.6,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_042",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 55.04,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_043",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 54.14,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_044",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 46.8,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_045",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 57.52,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_046",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 54.11,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_047",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 63.56,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_048",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 69.48,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_049",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 76.97,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_050",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 47.04,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_051",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 61.2,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_052",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 50.34,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_053",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 66.54,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_054",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 65.87,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_055",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 47.83,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_056",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 70.6,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_057",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 40.62,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_058",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 61.63,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_059",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 352.54,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_060",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 46.3,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_061",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 47.91,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_062",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 41.51,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_063",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 47.58,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_064",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 66.0,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_065",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 34.13,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "FT_066",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 32.22,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "FT_067",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 55.69,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "FT_068",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 34.77,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "FT_069",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 33.89,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_070",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 35.05,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_071",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 32.84,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_072",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 32.02,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_073",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 34.56,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_074",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 53.22,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_075",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 61.79,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_076",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 71.74,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_077",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 37.52,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_078",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 37.39,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_079",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 64.61,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "FT_080",
+      "group_id": 1,
+      "group_name": "Toàn văn & Số hiệu Văn bản",
+      "status": "PASS",
+      "latency_ms": 47.61,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_081",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 45.74,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_082",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 47.1,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_083",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 37.26,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_084",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 37.25,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_085",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 54.08,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_086",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 62.13,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_087",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 34.22,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_088",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 32.02,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_089",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 59.03,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_090",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 46.26,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_091",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 50.74,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_092",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 48.56,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_093",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 52.36,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_094",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 60.33,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_095",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 31.53,
+      "snippet": "Total hits: 15, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_096",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 43.78,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_097",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 31.49,
+      "snippet": "Total hits: 18, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_098",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 37.35,
+      "snippet": "Total hits: 17, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_099",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 33.67,
+      "snippet": "Total hits: 15, Returned: 10"
+    },
+    {
+      "test_id": "ABBR_100",
+      "group_id": 2,
+      "group_name": "Từ viết tắt & Thuật ngữ ĐH Đà Lạt",
+      "status": "PASS",
+      "latency_ms": 36.38,
+      "snippet": "Total hits: 16, Returned: 10"
+    }
+  ]
+}

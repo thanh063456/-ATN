@@ -20,8 +20,8 @@ Ví dụ (sau khi người dùng điền):
 
 File sinh ra (cột nhãn rỗng)
 ------------------------------
-    dataset/crops/scan_001_line_000.png
-    dataset/crops/scan_001_line_001.png
+    dataset/crops/scan_001_line_000.png	
+    dataset/crops/scan_001_line_001.png	
 
 Đầu ra
 ------
@@ -48,17 +48,16 @@ from pathlib import Path
 from typing import List, Tuple
 
 # Ensure UTF-8 output on Windows
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tiff", ".bmp"}
 ANNOTATION_TAB = "\t"
 
 
 # ── Core ───────────────────────────────────────────────────────────────────────
-
 
 def collect_crop_paths(crops_dir: Path, relative_to: Path) -> List[str]:
     """
@@ -69,13 +68,16 @@ def collect_crop_paths(crops_dir: Path, relative_to: Path) -> List[str]:
     if not crops_dir.exists():
         return []
 
-    paths = sorted([p for p in crops_dir.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_IMAGE_EXTS])
+    paths = sorted([
+        p for p in crops_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in SUPPORTED_IMAGE_EXTS
+    ])
 
     relative_paths: List[str] = []
     for p in paths:
         try:
             rel = p.relative_to(relative_to)
-            relative_paths.append(str(rel).replace("\\", "/"))  # Unix-style path
+            relative_paths.append(str(rel).replace("\\", "/"))   # Unix-style path
         except ValueError:
             relative_paths.append(str(p).replace("\\", "/"))
 
@@ -135,7 +137,6 @@ def write_annotation_file(
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Sinh file annotation rỗng theo định dạng VietOCR để gán nhãn thủ công.",
@@ -143,7 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # Xác định project root từ vị trí script
-    script_dir = Path(__file__).resolve().parent
+    script_dir  = Path(__file__).resolve().parent
     project_root = script_dir.parent
 
     parser.add_argument(
@@ -187,10 +188,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = build_parser()
-    args = parser.parse_args()
+    args   = parser.parse_args()
 
-    crops_dir = args.crops_dir.resolve()
-    output_dir = args.output_dir.resolve()
+    crops_dir    = args.crops_dir.resolve()
+    output_dir   = args.output_dir.resolve()
     project_root = args.project_root.resolve()
 
     print(f"[annotation_template] Quét crops từ: {crops_dir}")
@@ -210,14 +211,14 @@ def main() -> None:
     train_paths, val_paths = split_paths(paths, args.train_ratio, args.seed)
 
     train_file = output_dir / "annotation_train.txt"
-    val_file = output_dir / "annotation_val.txt"
+    val_file   = output_dir / "annotation_val.txt"
 
     n_train = write_annotation_file(train_file, train_paths, note_header=not args.no_header)
-    n_val = write_annotation_file(val_file, val_paths, note_header=not args.no_header)
+    n_val   = write_annotation_file(val_file,   val_paths,   note_header=not args.no_header)
 
     print(f"[annotation_template] Tổng {len(paths)} ảnh crop:")
     print(f"  Train ({args.train_ratio:.0%}): {n_train} ảnh → {train_file}")
-    print(f"  Val   ({1 - args.train_ratio:.0%}): {n_val}   ảnh → {val_file}")
+    print(f"  Val   ({1-args.train_ratio:.0%}): {n_val}   ảnh → {val_file}")
     print()
     print("  BƯỚC TIẾP THEO:")
     print("  1. Mở annotation_train.txt và annotation_val.txt.")

@@ -19,14 +19,15 @@ Verifies:
    - /health returns 200.
    - /api/v1/documents is active.
 """
-
 import uuid
-
-import httpx
 import pytest
+import httpx
 from app.core.database import AsyncSessionLocal
+from app.core.tickets import create_file_ticket, validate_and_consume_file_ticket
 from app.models.documents import Document
+from app.models.users import User
 from app.services.storage_service import storage_service
+from sqlalchemy import select
 
 
 @pytest.mark.asyncio
@@ -245,3 +246,4 @@ async def test_p0_13_staff_toggle_public_permission_and_student_access(
         headers={"Authorization": f"Bearer {student_token}"},
     )
     assert detail_revoked.status_code == 403
+

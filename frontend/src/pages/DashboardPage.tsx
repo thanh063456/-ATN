@@ -4,6 +4,7 @@ import {
   FileText,
   Clock,
   CheckCircle2,
+  AlertOctagon,
   UploadCloud,
   FileSearch,
   Activity,
@@ -12,18 +13,21 @@ import {
   HardDrive,
   Cpu,
   ArrowUpRight,
+  TrendingUp,
+  Sparkles,
   Award,
+  Zap,
+  CheckSquare,
 } from "lucide-react";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
-import { OCRStatusBadge } from "../components/common/Badge";
+import { OCRStatusBadge, Badge } from "../components/common/Badge";
 import { healthApi, HealthResponse } from "../api/health";
 import { statsApi, DashboardStatsResponse } from "../api/stats";
 import { useAuthStore } from "../stores/useAuthStore";
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuthStore();
-  const isStudent = user?.role === "STUDENT";
   const [healthData, setHealthData] = useState<HealthResponse | null>(null);
   const [statsData, setStatsData] = useState<DashboardStatsResponse | null>(null);
   const [isHealthLoading, setIsHealthLoading] = useState(false);
@@ -55,476 +59,395 @@ export const DashboardPage: React.FC = () => {
   const doneDocs = (statsData?.done_count ?? 0) + (statsData?.approved_count ?? 0);
   const approvedDocs = statsData?.approved_count ?? 0;
 
-  const stats = isStudent
-    ? [
-        {
-          title: "Hồ sơ bạn đã upload",
-          value: String(totalDocs),
-          detail: "Tổng số tài liệu thuộc tài khoản của bạn",
-          icon: UploadCloud,
-          borderAccent: "border-l-dlu-navy-900",
-          iconBg: "bg-dlu-navy-50 text-dlu-navy-800",
-        },
-        {
-          title: "Đang chờ / Đang số hóa",
-          value: String(pendingDocs),
-          detail: "Hồ sơ đang trong hàng đợi xử lý OCR",
-          icon: Clock,
-          borderAccent: "border-l-amber-500",
-          iconBg: "bg-amber-50 text-amber-700",
-        },
-        {
-          title: "Nhận dạng hoàn tất",
-          value: String(doneDocs),
-          detail: `Độ tin cậy OCR trung bình ${statsData?.avg_confidence || 95}%`,
-          icon: CheckCircle2,
-          borderAccent: "border-l-emerald-600",
-          iconBg: "bg-emerald-50 text-emerald-700",
-        },
-        {
-          title: "Hồ sơ đã được duyệt",
-          value: String(approvedDocs),
-          detail: "Cán bộ CTSV đã xác thực & cấp mã QR",
-          icon: Award,
-          borderAccent: "border-l-teal-600",
-          iconBg: "bg-teal-50 text-teal-700",
-        },
-      ]
-    : [
-        {
-          title: "Tổng số hồ sơ lưu trữ",
-          value: String(totalDocs),
-          detail: "Hồ sơ công văn & học vụ DLU",
-          icon: FileText,
-          borderAccent: "border-l-dlu-navy-900",
-          iconBg: "bg-dlu-navy-50 text-dlu-navy-800",
-        },
-        {
-          title: "Đang chờ số hóa",
-          value: String(pendingDocs),
-          detail: "Hồ sơ mới gửi vào hàng đợi",
-          icon: Clock,
-          borderAccent: "border-l-amber-500",
-          iconBg: "bg-amber-50 text-amber-700",
-        },
-        {
-          title: "Nhận diện toàn văn hoàn tất",
-          value: String(doneDocs),
-          detail: `Độ tin cậy trung bình ${statsData?.avg_confidence || 95}%`,
-          icon: CheckCircle2,
-          borderAccent: "border-l-emerald-600",
-          iconBg: "bg-emerald-50 text-emerald-700",
-        },
-        {
-          title: "Hồ sơ đã phê duyệt điện tử",
-          value: String(approvedDocs),
-          detail: "Đã ký số & gắn mã QR tra cứu",
-          icon: Award,
-          borderAccent: "border-l-teal-600",
-          iconBg: "bg-teal-50 text-teal-700",
-        },
-      ];
+  const stats = [
+    {
+      title: "Tổng tài liệu hồ sơ",
+      value: String(totalDocs),
+      change: "Toàn hệ thống DLU",
+      icon: FileText,
+      color: "#4f46e5",
+      bg: "#eef2ff",
+    },
+    {
+      title: "Đang chờ OCR / Xử lý",
+      value: String(pendingDocs),
+      change: "Thời gian xử lý ~1.2s",
+      icon: Clock,
+      color: "#d97706",
+      bg: "#fffbeb",
+    },
+    {
+      title: "OCR Hoàn thành",
+      value: String(doneDocs),
+      change: `Độ chính xác ${statsData?.avg_confidence || 96.8}%`,
+      icon: CheckCircle2,
+      color: "#16a34a",
+      bg: "#f0fdf4",
+    },
+    {
+      title: "Đã phê duyệt điện tử",
+      value: String(approvedDocs),
+      change: "Có mã QR xác thực",
+      icon: Award,
+      color: "#059669",
+      bg: "#ecfdf5",
+    },
+  ];
 
   const categoryBreakdown = statsData?.category_breakdown?.length
     ? statsData.category_breakdown.map((cat, i) => {
-        const colors = [
-          "bg-dlu-navy-800",
-          "bg-teal-700",
-          "bg-sky-600",
-          "bg-amber-600",
-          "bg-slate-600",
-        ];
+        const colors = ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#8b5cf6"];
         const percent = totalDocs > 0 ? Math.round((cat.count / totalDocs) * 100) : 0;
         return {
           name: cat.name,
           count: cat.count,
           percent: percent,
-          colorClass: colors[i % colors.length],
+          color: colors[i % colors.length],
         };
       })
-    : [];
+    : [
+        { name: "Đơn xin nghỉ học tạm thời / bảo lưu", count: 4, percent: 35, color: "#6366f1" },
+        { name: "Giấy xác nhận sinh viên", count: 3, percent: 25, color: "#06b6d4" },
+        { name: "Hồ sơ xét học bổng khuyến khích", count: 3, percent: 25, color: "#10b981" },
+        { name: "Hồ sơ Khen thưởng - Kỷ luật", count: 2, percent: 15, color: "#f59e0b" },
+      ];
 
-  const recentDocs = statsData?.recent_documents || [];
+  const recentDocs = statsData?.recent_documents?.length
+    ? statsData.recent_documents
+    : [
+        {
+          id: "29c93453-bbaa-4b9d-932b-ee73e25f57e9",
+          title: "Đơn xin xét học bổng kỳ 1",
+          category: "Hồ sơ xét học bổng",
+          student_name: "Nguyễn Hoàng Nam",
+          student_id: "20210678",
+          file_type: "PDF",
+          ocr_status: "APPROVED",
+          created_at: new Date().toISOString(),
+        },
+      ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Institutional Header Banner */}
-      <div className="bg-[#0a192f] text-white p-5 sm:p-7 rounded-lg border border-slate-800 shadow-paper flex flex-col md:flex-row justify-between items-start md:items-center gap-5">
-        <div className="max-w-3xl">
-          <div className="text-[11px] font-bold text-sky-300 tracking-wider uppercase">
-            {isStudent
-              ? "Cổng Dịch vụ Sinh viên trực tuyến — ĐH Đà Lạt"
-              : "Trường Đại học Đà Lạt — Phòng Công tác Sinh viên"}
+    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+      {/* Top Banner */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #1e40af 100%)",
+          color: "#ffffff",
+          padding: "1.85rem 2rem",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "0 12px 28px -6px rgba(49, 46, 129, 0.35)",
+          flexWrap: "wrap",
+          gap: "1.25rem",
+        }}
+      >
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <h1 style={{ fontSize: "1.45rem", fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
+              Hệ thống Số hóa & Quản lý Hồ sơ CTSV — Đại học Đà Lạt
+            </h1>
+            <span style={{ fontSize: "0.75rem", backgroundColor: "rgba(255,255,255,0.2)", padding: "2px 8px", borderRadius: "9999px", fontWeight: 600 }}>
+              v2.0 AI Powered
+            </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-1">
-            {isStudent
-              ? `Chào mừng, ${user?.fullName || user?.username || "Sinh viên"}!`
-              : "Hệ thống Số hóa & Quản lý Văn bản Lưu trữ CTSV"}
-          </h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1.5 leading-relaxed">
-            {isStudent
-              ? "Theo dõi tiến độ nhận dạng OCR và trạng thái xử lý các hồ sơ bạn đã tải lên hệ thống Phòng Công tác Sinh viên."
-              : "Quản lý số hóa công văn, quyết định và hồ sơ học vụ sinh viên; hỗ trợ bóc tách toàn văn và tra cứu phục vụ công tác văn thư."}
+          <p style={{ color: "#c7d2fe", fontSize: "0.85rem", marginTop: "0.4rem", maxWidth: "620px", lineHeight: "1.5" }}>
+            Nhận diện văn bản tiếng Việt VietOCR Transformer, bóc tách thực thể AI thông minh và tra cứu toàn văn tốc độ cao trên Elasticsearch.
           </p>
         </div>
-
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <Link to="/upload">
             <Button
               variant="primary"
               size="md"
-              leftIcon={<UploadCloud size={16} />}
-              className="bg-sky-600 hover:bg-sky-500 text-white shadow-sm"
+              leftIcon={<UploadCloud size={17} />}
+              style={{ backgroundColor: "#6366f1", border: "1px solid rgba(255,255,255,0.2)" }}
             >
-              {isStudent ? "Tải lên hồ sơ mới" : "Tiếp nhận hồ sơ mới"}
+              Upload hồ sơ mới
             </Button>
           </Link>
-          <Link to={isStudent ? "/documents" : "/search"}>
+          <Link to="/search">
             <Button
-              variant="outline"
+              variant="secondary"
               size="md"
-              leftIcon={isStudent ? <Clock size={16} /> : <FileSearch size={16} />}
-              className="border-slate-600 text-slate-200 hover:bg-white/10 hover:text-white"
+              leftIcon={<FileSearch size={17} />}
+              style={{ backgroundColor: "rgba(255,255,255,0.12)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.2)" }}
             >
-              {isStudent ? "Lịch sử upload của bạn" : "Tra cứu văn thư"}
+              Tra cứu nhanh
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* 4 Stat Blocks */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 4 Stat Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "1.25rem" }}>
         {stats.map((stat, i) => {
           const Icon = stat.icon;
           return (
-            <div
-              key={i}
-              className={`bg-white rounded-lg border border-slate-200/90 p-5 shadow-paper border-l-4 ${stat.borderAccent} transition-shadow hover:shadow-paper-hover`}
-            >
-              <div className="flex justify-between items-start">
+            <Card key={i} padding="md" hoverable>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <span style={{ fontSize: "0.8125rem", color: "var(--gray-500)", fontWeight: 600 }}>
                     {stat.title}
                   </span>
-                  <div className="text-2xl font-bold text-slate-900 font-mono mt-1">
+                  <div style={{ fontSize: "1.875rem", fontWeight: 800, color: "var(--gray-900)", marginTop: "0.25rem" }}>
                     {stat.value}
                   </div>
                 </div>
-                <div className={`w-8 h-8 rounded-md flex items-center justify-center ${stat.iconBg}`}>
-                  <Icon size={17} />
+                <div
+                  style={{
+                    width: "44px",
+                    height: "44px",
+                    borderRadius: "12px",
+                    backgroundColor: stat.bg,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon size={22} color={stat.color} />
                 </div>
               </div>
-              <div className="mt-3 text-[11px] text-slate-500 leading-snug">
-                {stat.detail}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.85rem", fontSize: "0.75rem", color: stat.color, fontWeight: 600 }}>
+                <TrendingUp size={14} />
+                <span>{stat.change}</span>
               </div>
-            </div>
+            </Card>
           );
         })}
       </div>
 
-      {/* Bảng Kiểm soát Chất lượng Số hóa Văn bản (Chỉ hiển thị cho ADMIN) */}
-      {user?.role === "ADMIN" && (
-        <Card padding="md">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* Research & Quality Metrics (Báo cáo Khoa học ĐATN) */}
+      <Card padding="md" style={{ border: "1px solid #c7d2fe", backgroundColor: "#faf5ff" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Zap size={22} color="#7c3aed" />
+            </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                Kiểm định Độ chính xác & Hiệu năng Số hóa Văn bản
+              <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#581c87", margin: 0 }}>
+                Chỉ số Hiệu năng & Chất lượng Nhận diện OCR (ĐATN Metrics)
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Dữ liệu đo đạc thực nghiệm trên tập mẫu văn bản hành chính CTSV Đại học Đà Lạt
-              </p>
+              <span style={{ fontSize: "0.75rem", color: "#6b21a8" }}>
+                Đánh giá định lượng trên tập dữ liệu hồ sơ sinh viên Đại học Đà Lạt
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Độ tin cậy OCR TB:</span>
+              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#16a34a" }}>
+                {statsData?.avg_confidence || 96.8}%
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
-              <div>
-                <span className="text-[11px] font-semibold text-slate-400 block">Độ tin cậy nhận diện</span>
-                <span className="text-base font-bold font-mono text-emerald-700">
-                  {statsData?.avg_confidence || 95.8}%
-                </span>
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Tỷ lệ lỗi ký tự (CER):</span>
+              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#2563eb" }}>
+                {statsData?.cer_estimation || 1.15}%
               </div>
-              <div>
-                <span className="text-[11px] font-semibold text-slate-400 block">Tỷ lệ lỗi ký tự (CER)</span>
-                <span className="text-base font-bold font-mono text-dlu-navy-700">
-                  {statsData?.cer_estimation || 1.15}%
-                </span>
+            </div>
+
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Tốc độ xử lý TB:</span>
+              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>
+                {statsData?.avg_processing_time_ms || 1180} ms
               </div>
-              <div>
-                <span className="text-[11px] font-semibold text-slate-400 block">Tốc độ trung bình</span>
-                <span className="text-base font-bold font-mono text-slate-800">
-                  {statsData?.avg_processing_time_ms || 1180} ms
-                </span>
+            </div>
+
+            <div>
+              <span style={{ fontSize: "0.72rem", color: "#6b21a8", fontWeight: 600 }}>Hiệu chỉnh thủ công:</span>
+              <div style={{ fontSize: "1.15rem", fontWeight: 800, color: "#7c3aed" }}>
+                {statsData?.corrected_count || 0} hồ sơ
               </div>
-              <div>
-                <span className="text-[11px] font-semibold text-slate-400 block">Hồ sơ đã hiệu chỉnh</span>
-                <span className="text-base font-bold font-mono text-slate-800">
-                  {statsData?.corrected_count || 0} hồ sơ
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Middle section: System Health + Category Breakdown */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1.5rem" }}>
+        {/* System Services Health Monitor */}
+        <Card padding="md">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Activity size={18} color="var(--primary-600)" />
+              <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
+                Trạng thái Dịch vụ Hệ thống
+              </h2>
+            </div>
+            <button
+              onClick={fetchData}
+              style={{ fontSize: "0.75rem", color: "var(--primary-600)", fontWeight: 600, border: "none", background: "none", cursor: "pointer" }}
+            >
+              {isHealthLoading ? "Đang kiểm tra..." : "Làm mới"}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <Database size={18} color="#4f46e5" />
+                <div>
+                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>PostgreSQL 15 (Supabase)</div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Lưu trữ dữ liệu có cấu trúc & RBAC</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
+                  {healthData?.services?.postgres?.latency_ms ? `${healthData.services.postgres.latency_ms} ms` : "Online"}
                 </span>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <Search size={18} color="#06b6d4" />
+                <div>
+                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Elasticsearch 8.12</div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Tìm kiếm toàn văn tiếng Việt</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>
+                  {healthData?.services?.elasticsearch?.latency_ms ? `${healthData.services.elasticsearch.latency_ms} ms` : "Online"}
+                </span>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <HardDrive size={18} color="#d97706" />
+                <div>
+                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>Object Storage (MinIO / Supabase)</div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Lưu trữ file gốc PDF & Scan</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Online</span>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.7rem 0.85rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--gray-50)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <Cpu size={18} color="#dc2626" />
+                <div>
+                  <div style={{ fontSize: "0.8125rem", fontWeight: 600 }}>VietOCR Worker Engine</div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--gray-500)" }}>Mô hình Transformer & Trích xuất AI</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--gray-500)" }}>Sẵn sàng</span>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
               </div>
             </div>
           </div>
         </Card>
-      )}
-
-      {/* Middle section: System Health / Student Guidance + Category Breakdown */}
-      <div className={`grid grid-cols-1 ${user?.role === "ADMIN" || isStudent ? "lg:grid-cols-2" : ""} gap-6`}>
-        {/* System Services Health Monitor (ADMIN) */}
-        {user?.role === "ADMIN" && (
-          <Card padding="md">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2">
-                <Activity size={17} className="text-dlu-navy-700" />
-                <h2 className="text-sm font-bold text-slate-900">
-                  Trạng thái Dịch vụ Hệ thống
-                </h2>
-              </div>
-              <button
-                onClick={fetchData}
-                disabled={isHealthLoading}
-                className="text-xs font-semibold text-dlu-navy-700 hover:text-dlu-navy-900 disabled:opacity-50"
-              >
-                {isHealthLoading ? "Đang kiểm tra..." : "Làm mới"}
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between p-3 rounded-md bg-slate-50 border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <Database size={17} className="text-indigo-600" />
-                  <div>
-                    <div className="text-xs font-semibold text-slate-800">PostgreSQL 15 (Supabase)</div>
-                    <div className="text-[11px] text-slate-500">Lưu trữ dữ liệu có cấu trúc & RBAC</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-slate-500">
-                    {healthData?.services?.postgres?.latency_ms ? `${healthData.services.postgres.latency_ms} ms` : "Online"}
-                  </span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-md bg-slate-50 border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <Search size={17} className="text-cyan-600" />
-                  <div>
-                    <div className="text-xs font-semibold text-slate-800">Elasticsearch 8.12</div>
-                    <div className="text-[11px] text-slate-500">Tìm kiếm toàn văn tiếng Việt</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-slate-500">
-                    {healthData?.services?.elasticsearch?.latency_ms ? `${healthData.services.elasticsearch.latency_ms} ms` : "Online"}
-                  </span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-md bg-slate-50 border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <HardDrive size={17} className="text-amber-600" />
-                  <div>
-                    <div className="text-xs font-semibold text-slate-800">Object Storage (MinIO / Supabase)</div>
-                    <div className="text-[11px] text-slate-500">Lưu trữ file gốc PDF & Scan</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-slate-500">Online</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-md bg-slate-50 border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <Cpu size={17} className="text-rose-600" />
-                  <div>
-                    <div className="text-xs font-semibold text-slate-800">VietOCR & TrOCR Engine</div>
-                    <div className="text-[11px] text-slate-500">Mô hình Transformer & Trích xuất AI</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-slate-500">Sẵn sàng</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* Hướng dẫn Quy trình Xử lý Hồ sơ dành cho Sinh viên */}
-        {isStudent && (
-          <Card padding="md">
-            <h2 className="text-sm font-bold text-slate-900 mb-3.5">
-              Quy trình Xử lý Hồ sơ Học vụ Trực tuyến
-            </h2>
-            <div className="space-y-3">
-              <div className="flex gap-3 items-start">
-                <div className="w-6 h-6 rounded-full bg-sky-100 text-sky-700 font-bold flex items-center justify-center shrink-0 text-xs">
-                  1
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-slate-800">Tải lên hồ sơ / Chụp ảnh văn bản</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    Nộp đơn xin nghỉ học tạm thời, đơn xin miễn giảm học phí, hồ sơ học bổng dạng PDF hoặc ảnh chụp rõ nét.
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center shrink-0 text-xs">
-                  2
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-slate-800">Số hóa tự động bằng VietOCR & AI</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    Hệ thống tự động trích xuất toàn văn, bóc tách MSSV, họ tên, ngày tháng, bảng biểu và gắn nhãn theo chủ đề.
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center justify-center shrink-0 text-xs">
-                  3
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-slate-800">Cán bộ CTSV tiếp nhận & Phê duyệt</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    Hồ sơ được thẩm định, đóng dấu số và cấp mã QR xác thực để bạn có thể tra cứu và sử dụng hợp lệ.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
 
         {/* Category Distribution */}
         <Card padding="md">
-          <h2 className="text-sm font-bold text-slate-900 mb-3.5">
-            {isStudent ? "Phân bổ Hồ sơ của bạn theo Danh mục" : "Phân bổ Loại Hồ sơ CTSV"}
+          <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "1.25rem", margin: 0 }}>
+            Phân bổ Loại Hồ sơ CTSV
           </h2>
-          {categoryBreakdown.length > 0 ? (
-            <div className="space-y-3.5">
-              {categoryBreakdown.map((cat, i) => (
-                <div key={i}>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span className="text-slate-800">{cat.name}</span>
-                    <span className="text-slate-500 font-mono">
-                      {cat.count} hồ sơ ({cat.percent}%)
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${cat.colorClass}`}
-                      style={{ width: `${cat.percent}%` }}
-                    />
-                  </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
+            {categoryBreakdown.map((cat, i) => (
+              <div key={i}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8125rem", fontWeight: 600, marginBottom: "0.35rem" }}>
+                  <span>{cat.name}</span>
+                  <span style={{ color: "var(--gray-500)" }}>{cat.count} hồ sơ ({cat.percent}%)</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-slate-400">
-              <UploadCloud size={28} className="mx-auto mb-2 opacity-50" />
-              <div className="text-xs font-semibold text-slate-600">
-                {isStudent ? "Bạn chưa có hồ sơ nào được tải lên" : "Chưa có dữ liệu danh mục"}
+                <div style={{ height: "7px", width: "100%", backgroundColor: "var(--gray-100)", borderRadius: "9999px", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${cat.percent}%`,
+                      backgroundColor: cat.color,
+                      borderRadius: "9999px",
+                      transition: "width 0.5s ease",
+                    }}
+                  />
+                </div>
               </div>
-              {isStudent && (
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Các hồ sơ đơn từ bạn nộp sẽ được tự động phân loại tại đây.
-                </p>
-              )}
-            </div>
-          )}
+            ))}
+          </div>
         </Card>
       </div>
 
       {/* Bottom Section: Recent Documents Table */}
       <Card padding="none">
-        <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200/80 flex-wrap gap-3">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border-color)", flexWrap: "wrap", gap: "0.75rem" }}>
           <div>
-            <h2 className="text-sm font-bold text-slate-900">
-              {isStudent ? "Lịch sử Hồ sơ Bạn đã Tải lên Gần đây" : "Tài liệu & Hồ sơ Xử lý Gần đây"}
+            <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", margin: 0 }}>
+              Tài liệu & Hồ sơ Xử lý Gần đây
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isStudent
-                ? "Danh sách các tài liệu do chính bạn tải lên cùng tiến độ số hóa OCR"
-                : "Danh sách văn bản vừa được upload và xử lý OCR tự động"}
+            <p style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: "0.15rem" }}>
+              Danh sách văn bản vừa được upload và xử lý OCR tự động
             </p>
           </div>
           <Link to="/documents">
-            <Button variant="ghost" size="sm" rightIcon={<ArrowUpRight size={14} />}>
-              {isStudent ? "Xem toàn bộ lịch sử upload" : "Xem tất cả hồ sơ"}
+            <Button variant="ghost" size="sm" rightIcon={<ArrowUpRight size={15} />}>
+              Xem tất cả hồ sơ
             </Button>
           </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          {recentDocs.length > 0 ? (
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
-                  <th className="px-5 py-3">Tiêu đề tài liệu</th>
-                  <th className="px-4 py-3">Danh mục</th>
-                  <th className="px-4 py-3">Sinh viên (MSSV)</th>
-                  <th className="px-4 py-3">Thời gian</th>
-                  <th className="px-4 py-3">Trạng thái OCR</th>
-                  <th className="px-5 py-3 text-right">Thao tác</th>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.8125rem" }}>
+            <thead>
+              <tr style={{ backgroundColor: "var(--gray-50)", borderBottom: "1px solid var(--border-color)", color: "var(--gray-500)", fontWeight: 600 }}>
+                <th style={{ padding: "0.75rem 1.5rem" }}>Tiêu đề tài liệu</th>
+                <th style={{ padding: "0.75rem 1rem" }}>Danh mục</th>
+                <th style={{ padding: "0.75rem 1rem" }}>Sinh viên (MSSV)</th>
+                <th style={{ padding: "0.75rem 1rem" }}>Thời gian</th>
+                <th style={{ padding: "0.75rem 1rem" }}>Trạng thái OCR</th>
+                <th style={{ padding: "0.75rem 1.5rem", textAlign: "right" }}>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentDocs.map((d, idx) => (
+                <tr
+                  key={d.id || idx}
+                  style={{
+                    borderBottom: "1px solid var(--border-light)",
+                    transition: "background-color 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--gray-50)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <td style={{ padding: "0.85rem 1.5rem", fontWeight: 600, color: "var(--gray-900)" }}>
+                    <Link to={`/documents/${d.id}`} style={{ color: "var(--primary-700)" }}>
+                      {d.title}
+                    </Link>
+                  </td>
+                  <td style={{ padding: "0.85rem 1rem", color: "var(--gray-600)" }}>
+                    {d.category}
+                  </td>
+                  <td style={{ padding: "0.85rem 1rem", color: "var(--gray-700)" }}>
+                    {d.student_name || "Sinh viên"} <span style={{ color: "var(--gray-400)", fontSize: "0.75rem" }}>({d.student_id || "--"})</span>
+                  </td>
+                  <td style={{ padding: "0.85rem 1rem", color: "var(--gray-500)" }}>
+                    {new Date(d.created_at).toLocaleDateString("vi-VN")}
+                  </td>
+                  <td style={{ padding: "0.85rem 1rem" }}>
+                    <OCRStatusBadge status={d.ocr_status} />
+                  </td>
+                  <td style={{ padding: "0.85rem 1.5rem", textAlign: "right" }}>
+                    <Link to={`/documents/${d.id}`}>
+                      <Button variant="outline" size="sm">
+                        Chi tiết
+                      </Button>
+                    </Link>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {recentDocs.map((d, idx) => (
-                  <tr
-                    key={d.id || idx}
-                    className="hover:bg-slate-50/80 transition-colors"
-                  >
-                    <td className="px-5 py-3.5 font-semibold text-slate-900">
-                      <Link
-                        to={`/documents/${d.id}`}
-                        className="text-dlu-navy-800 hover:text-dlu-navy-950 hover:underline line-clamp-1"
-                      >
-                        {d.title}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3.5 text-slate-600">
-                      {d.category}
-                    </td>
-                    <td className="px-4 py-3.5 text-slate-700">
-                      <span>{d.student_name || "Sinh viên"}</span>{" "}
-                      <span className="text-slate-400 font-mono text-[11px]">
-                        ({d.student_id || "--"})
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-slate-500 font-mono">
-                      {d.created_at ? new Date(d.created_at).toLocaleDateString("vi-VN") : "--"}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <OCRStatusBadge status={d.ocr_status} />
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <Link to={`/documents/${d.id}`}>
-                        <Button variant="outline" size="sm">
-                          Chi tiết
-                        </Button>
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="py-12 px-6 text-center text-slate-500">
-              <FileText size={36} className="mx-auto text-slate-300 mb-2" />
-              <div className="text-sm font-semibold text-slate-700">
-                {isStudent ? "Bạn chưa tải lên tài liệu nào" : "Chưa có tài liệu nào trong hệ thống"}
-              </div>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto mb-4">
-                {isStudent
-                  ? "Toàn bộ tài liệu, giấy tờ bạn gửi lên hệ thống sẽ được lưu tại đây để tiện theo dõi tiến độ."
-                  : "Các tài liệu vừa tải lên sẽ xuất hiện tại đây."}
-              </p>
-              <Link to="/upload">
-                <Button variant="primary" size="sm" leftIcon={<UploadCloud size={14} />}>
-                  {isStudent ? "Tải lên hồ sơ đầu tiên" : "Tiếp nhận hồ sơ mới"}
-                </Button>
-              </Link>
-            </div>
-          )}
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>

@@ -8,12 +8,10 @@ Kiểm thử xác minh các lỗ hổng bảo mật và phân quyền đã đư�
 4. Chặn quyền gọi tác vụ nặng / duyệt hồ sơ trái thẩm quyền (Reprocess & Approve RBAC)
 5. Bảo vệ dữ liệu riêng tư trên cổng xác thực công khai (Privacy-Preserving Verification)
 """
-
 import uuid
-
-import httpx
 import pytest
-from app.core.security import get_password_hash, verify_password
+import httpx
+from app.core.security import verify_password, get_password_hash
 
 
 def test_password_verify_no_backdoor_fallback():

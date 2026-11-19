@@ -9,12 +9,10 @@ Tạo các văn bản và hồ sơ CTSV mẫu chuẩn nghiệp vụ vào CSDL (d
 - 'don xin nghi hoc'
 - 'Nguyễn Hoàng Nam'
 """
-
-import json
 import sqlite3
 import uuid
-from datetime import datetime
-
+from datetime import datetime, date
+import json
 
 def seed():
     conn = sqlite3.connect("data.db")
@@ -173,7 +171,7 @@ def seed():
             "tags": ["#HocBong", "#DonTu", "#K46"],
             "ocr_text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc\n\nĐƠN XIN XÉT HỌC BỔNG KHUYẾN KHÍCH HỌC TẬP\nKính gửi: Hội đồng xét học bổng Trường Đại học Đà Lạt; Phòng Công tác Sinh viên.\nEm tên là: Trần Văn An. MSSV: 20210123. Sinh viên lớp CTK46.\nĐiểm trung bình học tập học kỳ vừa qua: 3.65 (loại Giỏi). Điểm rèn luyện: 92 (loại Xuất sắc).\nEm kính xin Hội đồng xem xét cấp học bổng khuyến khích học tập kỳ 1 cho em.",
             "confidence": 0.987,
-        },
+        }
     ]
 
     now_iso = datetime.now().isoformat()
@@ -192,31 +190,28 @@ def seed():
         c.execute("DELETE FROM ocr_results WHERE document_id = ? OR document_id = ?", (clean_id, raw_id))
 
         # Insert document
-        c.execute(
-            """
+        c.execute("""
             INSERT INTO documents (
                 id, title, original_filename, file_type, file_size_bytes,
                 minio_object_key, page_count, category_id, uploaded_by,
                 ocr_status, is_public, is_deleted, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                clean_id,
-                d["title"],
-                f"{clean_id[:8]}_{cat_code.lower()}.pdf",
-                "PDF",
-                102400,
-                f"documents/sample_{clean_id[:8]}.pdf",
-                1,
-                cat_id,
-                user_id,
-                "APPROVED",
-                1,  # is_public = True
-                0,  # is_deleted = False
-                f"{d['doc_date']} 08:30:00",
-                f"{d['doc_date']} 08:30:00",
-            ),
-        )
+        """, (
+            clean_id,
+            d["title"],
+            f"{clean_id[:8]}_{cat_code.lower()}.pdf",
+            "PDF",
+            102400,
+            f"documents/sample_{clean_id[:8]}.pdf",
+            1,
+            cat_id,
+            user_id,
+            "APPROVED",
+            1, # is_public = True
+            0, # is_deleted = False
+            f"{d['doc_date']} 08:30:00",
+            f"{d['doc_date']} 08:30:00",
+        ))
 
         # Insert metadata
         extra_payload = {
@@ -226,57 +221,50 @@ def seed():
             "trich_yeu": d["title"],
         }
         meta_id = uuid.uuid4().hex
-        c.execute(
-            """
+        c.execute("""
             INSERT INTO document_metadata (
                 id, document_id, student_id, student_name, document_date,
                 document_number, extra, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                meta_id,
-                clean_id,
-                d["student_id"],
-                d["student_name"],
-                d["doc_date"],
-                d["doc_num"],
-                json.dumps(extra_payload, ensure_ascii=False),
-                now_iso,
-                now_iso,
-            ),
-        )
+        """, (
+            meta_id,
+            clean_id,
+            d["student_id"],
+            d["student_name"],
+            d["doc_date"],
+            d["doc_num"],
+            json.dumps(extra_payload, ensure_ascii=False),
+            now_iso,
+            now_iso,
+        ))
 
         # Insert OCR Result
         ocr_id = uuid.uuid4().hex
-        c.execute(
-            """
+        c.execute("""
             INSERT INTO ocr_results (
                 id, document_id, is_latest, raw_text, corrected_text,
                 confidence_score, ocr_engine, ocr_engine_version,
                 processing_time_ms, status, is_corrected, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                ocr_id,
-                clean_id,
-                1,
-                d["ocr_text"],
-                d["ocr_text"],
-                d["confidence"],
-                "vietocr",
-                "vgg_transformer",
-                450,
-                "DONE",
-                0,
-                now_iso,
-                now_iso,
-            ),
-        )
+        """, (
+            ocr_id,
+            clean_id,
+            1,
+            d["ocr_text"],
+            d["ocr_text"],
+            d["confidence"],
+            "vietocr",
+            "vgg_transformer",
+            450,
+            "DONE",
+            0,
+            now_iso,
+            now_iso,
+        ))
 
     conn.commit()
     conn.close()
     print(f"Successfully seeded {len(docs)} rich CTSV documents into data.db!")
-
 
 if __name__ == "__main__":
     seed()

@@ -1,0 +1,2615 @@
+{
+  "summary": {
+    "total_scenarios": 255,
+    "passed": 255,
+    "failed": 0,
+    "pass_rate_percent": 100.0,
+    "avg_latency_ms": 28.9,
+    "p50_ms": 26.26,
+    "p95_ms": 49.41,
+    "p99_ms": 58.07
+  },
+  "category_breakdown": {
+    "Nhóm 1: Toàn văn & Từ viết tắt": {
+      "total": 72,
+      "passed": 72,
+      "failed": 0,
+      "pass_rate": 100.0,
+      "avg_latency_ms": 33.61
+    },
+    "Nhóm 2: Fuzzy & Chịu lỗi OCR": {
+      "total": 40,
+      "passed": 40,
+      "failed": 0,
+      "pass_rate": 100.0,
+      "avg_latency_ms": 39.23
+    },
+    "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF": {
+      "total": 40,
+      "passed": 40,
+      "failed": 0,
+      "pass_rate": 100.0,
+      "avg_latency_ms": 38.56
+    },
+    "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì": {
+      "total": 23,
+      "passed": 23,
+      "failed": 0,
+      "pass_rate": 100.0,
+      "avg_latency_ms": 35.62
+    },
+    "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh": {
+      "total": 35,
+      "passed": 35,
+      "failed": 0,
+      "pass_rate": 100.0,
+      "avg_latency_ms": 8.41
+    },
+    "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận": {
+      "total": 25,
+      "passed": 25,
+      "failed": 0,
+      "pass_rate": 100.0,
+      "avg_latency_ms": 16.8
+    },
+    "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator": {
+      "total": 20,
+      "passed": 20,
+      "failed": 0,
+      "pass_rate": 100.0,
+      "avg_latency_ms": 15.12
+    }
+  },
+  "detailed_results": [
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Từ viết tắt: mghp (Miễn giảm học phí)",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mghp",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 51.69,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Từ viết tắt: kkht (Học bổng khuyến khích học tập)",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=kkht",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 44.52,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Từ viết tắt: drl (Điểm rèn luyện)",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=drl",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.13,
+      "passed": true,
+      "reason": "Hits: 15"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Từ viết tắt: bhyt (Bảo hiểm y tế)",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=bhyt",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 25.04,
+      "passed": true,
+      "reason": "Hits: 11"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Từ viết tắt: ktx (Ký túc xá)",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=ktx",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 53.83,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Từ viết tắt: nvqs (Nghĩa vụ quân sự)",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=nvqs",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 49.16,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 688/QĐ-ĐHĐL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=688/Q%C4%90-%C4%90H%C4%90L",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 17.53,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 13/2013/TTLT",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=13/2013/TTLT",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.65,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 315/QĐ-ĐHĐL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=315/Q%C4%90-%C4%90H%C4%90L",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 31.62,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 88/HD-CTSV",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=88/HD-CTSV",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 16.26,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 55/TB-CTSV",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=55/TB-CTSV",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 14.98,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 890/QĐ-ĐHĐL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=890/Q%C4%90-%C4%90H%C4%90L",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 16.29,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 688/QD-DHDL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=688/QD-DHDL",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 31.1,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 13/2013/TTLT-BGDDT",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=13/2013/TTLT-BGDDT",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 17.5,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 315/QD-DHDL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=315/QD-DHDL",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.25,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 88/HD",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=88/HD",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.27,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 55/TB",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=55/TB",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 30.71,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 1353/KH-ĐHĐL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=1353/KH-%C4%90H%C4%90L",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 31.29,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 205/HD-CTSV",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=205/HD-CTSV",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 16.67,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 77/BC-CTSV",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=77/BC-CTSV",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 30.3,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 12/BB-CTSV",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=12/BB-CTSV",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.0,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 450/QĐ-ĐHĐL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=450/Q%C4%90-%C4%90H%C4%90L",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 18.38,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Số hiệu văn bản: 1413/TB-ĐHĐL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=1413/TB-%C4%90H%C4%90L",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.95,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'hoc bong khuyen khich hoc tap'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=hoc%20bong%20khuyen%20khich%20hoc%20tap",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 43.32,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'mien giam hoc phi'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mien%20giam%20hoc%20phi",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 48.78,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'danh gia diem ren luyen'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=danh%20gia%20diem%20ren%20luyen",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 54.38,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'tam hoan nghia vu quan su'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=tam%20hoan%20nghia%20vu%20quan%20su",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.58,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'noi tru ky tuc xa'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=noi%20tru%20ky%20tuc%20xa",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 41.06,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'bao hiem y te sinh vien'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=bao%20hiem%20y%20te%20sinh%20vien",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 42.08,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'don de nghi mien giam hoc phi'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=don%20de%20nghi%20mien%20giam%20hoc%20phi",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 55.54,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'quyet dinh ve viec ban hanh quy che'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=quyet%20dinh%20ve%20viec%20ban%20hanh%20quy%20che",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 33.84,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'thong bao thu bao hiem y te'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=thong%20bao%20thu%20bao%20hiem%20y%20te",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 35.12,
+      "passed": true,
+      "reason": "Hits: 13"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'huong dan danh gia ren luyen'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=huong%20dan%20danh%20gia%20ren%20luyen",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 53.82,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'sinh vien dai hoc da lat'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=sinh%20vien%20dai%20hoc%20da%20lat",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.73,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'phong cong tac sinh vien'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=phong%20cong%20tac%20sinh%20vien",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.79,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'nha a11'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=nha%20a11",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 24.24,
+      "passed": true,
+      "reason": "Hits: 10"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'nghi dinh 81 chinh phu'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=nghi%20dinh%2081%20chinh%20phu",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.53,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'quyet dinh 688'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=quyet%20dinh%20688",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 24.23,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'thong tu lien tich 13'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=thong%20tu%20lien%20tich%2013",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.05,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'ho ngheo vung sau vung xa'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=ho%20ngheo%20vung%20sau%20vung%20xa",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 58.07,
+      "passed": true,
+      "reason": "Hits: 12"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'mo coi ca cha lan me'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mo%20coi%20ca%20cha%20lan%20me",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 38.34,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'khuyet tat nang'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=khuyet%20tat%20nang",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 26.13,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'diem trung binh chung tich luy'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=diem%20trung%20binh%20chung%20tich%20luy",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 37.55,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'cpa tren 2.5'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=cpa%20tren%202.5",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 47.17,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'khong bi diem f'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=khong%20bi%20diem%20f",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 40.17,
+      "passed": true,
+      "reason": "Hits: 15"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'tieu chi xet hoc bong'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=tieu%20chi%20xet%20hoc%20bong",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 53.42,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'danh sach sinh vien nhan hoc bong'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=danh%20sach%20sinh%20vien%20nhan%20hoc%20bong",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 43.61,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'tien ho tro chi phi hoc tap'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=tien%20ho%20tro%20chi%20phi%20hoc%20tap",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 29.74,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'chinh sach tro cap xa hoi'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=chinh%20sach%20tro%20cap%20xa%20hoi",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 47.17,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'noi quy ky tuc xa sinh vien'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=noi%20quy%20ky%20tuc%20xa%20sinh%20vien",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 44.1,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'kiem tra bounding box'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=kiem%20tra%20bounding%20box",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 51.05,
+      "passed": true,
+      "reason": "Hits: 16"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'so sanh phien ban diff'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=so%20sanh%20phien%20ban%20diff",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 42.18,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'kiem toan tai lieu ocr'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=kiem%20toan%20tai%20lieu%20ocr",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 50.76,
+      "passed": true,
+      "reason": "Hits: 15"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'phan luong percolator'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=phan%20luong%20percolator",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 26.39,
+      "passed": true,
+      "reason": "Hits: 13"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'goi y mo rong query'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=goi%20y%20mo%20rong%20query",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.58,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'so luong tin chi tich luy'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=so%20luong%20tin%20chi%20tich%20luy",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 55.12,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'mon giao duc the chat'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mon%20giao%20duc%20the%20chat",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 47.93,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'mon giao duc quoc phong'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mon%20giao%20duc%20quoc%20phong",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 31.09,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'chuan dau ra ngoai ngu'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=chuan%20dau%20ra%20ngoai%20ngu",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 41.95,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'chuan dau ra tin hoc'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=chuan%20dau%20ra%20tin%20hoc",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 43.14,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'bien lai thu hoc phi'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=bien%20lai%20thu%20hoc%20phi",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.2,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'so ho ngheo nam 2024'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=so%20ho%20ngheo%20nam%202024",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 23.44,
+      "passed": true,
+      "reason": "Hits: 8"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'chung nhan gia dinh chinh sach'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=chung%20nhan%20gia%20dinh%20chinh%20sach",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 32.9,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm kiếm không dấu: 'giay goi nhap ngu'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=giay%20goi%20nhap%20ngu",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 29.16,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: '20210678'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=20210678",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 31.72,
+      "passed": true,
+      "reason": "Hits: 4"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: '20210892'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=20210892",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.09,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: '20210543'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=20210543",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.8,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: '20210123'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=20210123",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.21,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: '20210999'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=20210999",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.22,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: 'Nguyễn Hoàng Nam'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=Nguy%E1%BB%85n%20Ho%C3%A0ng%20Nam",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 24.75,
+      "passed": true,
+      "reason": "Hits: 8"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: 'Trần Thị Mai'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=Tr%E1%BA%A7n%20Th%E1%BB%8B%20Mai",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 46.9,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 1: Toàn văn & Từ viết tắt",
+      "name": "Tìm theo MSSV/Họ tên: 'Lê Văn Bình'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=L%C3%AA%20V%C4%83n%20B%C3%ACnh",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 39.01,
+      "passed": true,
+      "reason": "Hits: 16"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'hock bong' -> 'học bổng'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=hock%20bong&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 31.71,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'hoc bongg' -> 'học bổng'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=hoc%20bongg&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.12,
+      "passed": true,
+      "reason": "Hits: 6"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'mieng giam' -> 'miễn giảm'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mieng%20giam&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 36.61,
+      "passed": true,
+      "reason": "Hits: 14"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'hoc phii' -> 'học phí'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=hoc%20phii&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 46.4,
+      "passed": true,
+      "reason": "Hits: 7"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'khuyen khit' -> 'khuyến khích'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=khuyen%20khit&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.12,
+      "passed": true,
+      "reason": "Hits: 7"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'nghie vu' -> 'nghĩa vụ'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=nghie%20vu&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 36.41,
+      "passed": true,
+      "reason": "Hits: 11"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'ki tuc xa' -> 'ký túc xá'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=ki%20tuc%20xa&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 18.17,
+      "passed": true,
+      "reason": "Hits: 15"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'tam hoang' -> 'tạm hoãn'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=tam%20hoang&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 20.95,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'bao hiem y tee' -> 'bảo hiểm y tế'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=bao%20hiem%20y%20tee&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 337.31,
+      "passed": true,
+      "reason": "Hits: 13"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'ren luyenn' -> 'rèn luyện'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=ren%20luyenn&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 44.51,
+      "passed": true,
+      "reason": "Hits: 11"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'hco bong' -> 'học bổng'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=hco%20bong&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 18.99,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'khueyn khich' -> 'khuyến khích'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=khueyn%20khich&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 20.48,
+      "passed": true,
+      "reason": "Hits: 3"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'hoan ngih vu' -> 'hoãn nghĩa vụ'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=hoan%20ngih%20vu&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 39.05,
+      "passed": true,
+      "reason": "Hits: 11"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'sinh vine' -> 'sinh viên'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=sinh%20vine&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 43.81,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'da lta' -> 'Đà Lạt'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=da%20lta&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 43.44,
+      "passed": true,
+      "reason": "Hits: 14"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'quyey dinh' -> 'quyết định'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=quyey%20dinh&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.6,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'thong baao' -> 'thông báo'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=thong%20baao&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 20.21,
+      "passed": true,
+      "reason": "Hits: 7"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'huongg dan' -> 'hướng dẫn'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=huongg%20dan&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.12,
+      "passed": true,
+      "reason": "Hits: 16"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'donn tu' -> 'đơn từ'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=donn%20tu&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 45.43,
+      "passed": true,
+      "reason": "Hits: 10"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'ho ngheoo' -> 'hộ nghèo'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=ho%20ngheoo&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 18.55,
+      "passed": true,
+      "reason": "Hits: 6"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'can ngheoo' -> 'cận nghèo'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=can%20ngheoo&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 43.33,
+      "passed": true,
+      "reason": "Hits: 17"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'mo coii' -> 'mồ côi'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mo%20coii&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 20.42,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'khuyet tatt' -> 'khuyết tật'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=khuyet%20tatt&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 20.93,
+      "passed": true,
+      "reason": "Hits: 4"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'chinhh sach' -> 'chính sách'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=chinhh%20sach&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 33.61,
+      "passed": true,
+      "reason": "Hits: 12"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'tro capp' -> 'trợ cấp'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=tro%20capp&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 46.43,
+      "passed": true,
+      "reason": "Hits: 12"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'hoc vuu' -> 'học vụ'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=hoc%20vuu&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 43.65,
+      "passed": true,
+      "reason": "Hits: 8"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'buocc thoi hoc' -> 'buộc thôi học'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=buocc%20thoi%20hoc&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 34.59,
+      "passed": true,
+      "reason": "Hits: 12"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'canh baao' -> 'cảnh báo'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=canh%20baao&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 44.69,
+      "passed": true,
+      "reason": "Hits: 14"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'tinn chi' -> 'tín chỉ'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=tinn%20chi&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.23,
+      "passed": true,
+      "reason": "Hits: 14"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'giao ducc' -> 'giáo dục'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=giao%20ducc&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 38.3,
+      "passed": true,
+      "reason": "Hits: 16"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'the ducc' -> 'thể dục'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=the%20ducc&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 30.83,
+      "passed": true,
+      "reason": "Hits: 13"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'quan suu' -> 'quân sự'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=quan%20suu&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 22.67,
+      "passed": true,
+      "reason": "Hits: 11"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'xett tot nghiep' -> 'xét tốt nghiệp'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=xett%20tot%20nghiep&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 42.5,
+      "passed": true,
+      "reason": "Hits: 11"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'the sinhh vien' -> 'thẻ sinh viên'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=the%20sinhh%20vien&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 22.37,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'vayy von' -> 'vay vốn'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=vayy%20von&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 38.91,
+      "passed": true,
+      "reason": "Hits: 11"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'ngann hang' -> 'ngân hàng'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=ngann%20hang&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 44.74,
+      "passed": true,
+      "reason": "Hits: 15"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'khenn thuong' -> 'khen thưởng'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=khenn%20thuong&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 25.21,
+      "passed": true,
+      "reason": "Hits: 16"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'kyy luat' -> 'kỷ luật'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=kyy%20luat&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 31.05,
+      "passed": true,
+      "reason": "Hits: 16"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'khien trach' -> 'khiển trách'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=khien%20trach&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.5,
+      "passed": true,
+      "reason": "Hits: 4"
+    },
+    {
+      "category": "Nhóm 2: Fuzzy & Chịu lỗi OCR",
+      "name": "Lỗi chính tả/OCR: 'chamm diem' -> 'chấm điểm'",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=chamm%20diem&fuzzy=true",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.41,
+      "passed": true,
+      "reason": "Hits: 10"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'sinh viên nghèo không có tiền đóng học'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 29.24,
+      "passed": true,
+      "reason": "Results: 10 (Top: Đơn đề nghị miễn giảm học phí (MGHP)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'thủ tục hoãn đi lính quân sự khi đang học đại học'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 24.64,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông tư liên tịch số 13/2013/TTLT-)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'chỗ ở giá rẻ cho sinh viên khó khăn xa nhà'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 26.01,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy định số 315/QĐ-ĐHĐL Quản lý Ký )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'bị điểm rớt môn có được nhận tiền thưởng học giỏi không'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 47.76,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quyết định số 688/QĐ-ĐHĐL Về việc b)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'sinh viên dân tộc thiểu số vùng sâu vùng xa xin miễn tiền trường'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 48.15,
+      "passed": true,
+      "reason": "Results: 10 (Top: Báo cáo số 77/BC-CTSV Tổng hợp rà s)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'xin giấy xác nhận đang học tại trường để nộp về ban chỉ huy quân sự'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 24.68,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông tư liên tịch số 13/2013/TTLT-)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'thủ tục xin ở nội trú tại trường cho tân sinh viên'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 34.92,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy định số 315/QĐ-ĐHĐL Quản lý Ký )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'làm mất thẻ bảo hiểm y tế thì xin cấp lại thế nào'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 49.11,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông báo số 55/TB-CTSV Thu nộp Bảo)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'điểm rèn luyện bị trừ vì vi phạm quy chế lớp'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 44.53,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quyết định số 688/QĐ-ĐHĐL Về việc b)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'hướng dẫn xin tạm ngừng việc học vì lý do sức khỏe'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 26.56,
+      "passed": true,
+      "reason": "Results: 10 (Top: Đơn xin tạm hoãn và bảo lưu kết quả)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'chính sách hỗ trợ chi phí học tập cho người nghèo'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 44.51,
+      "passed": true,
+      "reason": "Results: 10 (Top: Báo cáo số 77/BC-CTSV Tổng hợp rà s)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'hồ sơ đề nghị trợ cấp xã hội gồm những giấy tờ gì'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 47.34,
+      "passed": true,
+      "reason": "Results: 10 (Top: Báo cáo số 77/BC-CTSV Tổng hợp rà s)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'tiêu chuẩn xếp loại sinh viên khá giỏi xuất sắc'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 42.03,
+      "passed": true,
+      "reason": "Results: 10 (Top: Hướng dẫn số 88/HD-CTSV Quy trình đ)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'sinh viên bị khiển trách có được học bổng không'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 46.39,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy định số 315/QĐ-ĐHĐL Quản lý Ký )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'cách tính điểm học tập trung bình chung hệ 4'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 47.65,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quyết định số 688/QĐ-ĐHĐL Về việc b)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'quy định đăng ký nội trú ký túc xá đại học đà lạt'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 47.45,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy định số 315/QĐ-ĐHĐL Quản lý Ký )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'hồ sơ xin miễn giảm học phí nộp ở phòng nào'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 46.06,
+      "passed": true,
+      "reason": "Results: 10 (Top: Báo cáo số 77/BC-CTSV Tổng hợp rà s)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'thời hạn nộp đơn xin tạm hoãn nghĩa vụ quân sự'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 44.39,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông tư liên tịch số 13/2013/TTLT-)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'điều kiện tốt nghiệp ra trường cần bao nhiêu tín chỉ'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 48.84,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quyết định số 890/QĐ-ĐHĐL Về việc c)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'bị cảnh báo học vụ bao nhiêu lần thì bị đuổi học'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 45.08,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông báo số 1413/TB-ĐHĐL về việc x)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'thủ tục rút hồ sơ gốc thôi học tự nguyện'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 23.31,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông tư liên tịch số 13/2013/TTLT-)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'cách thức chấm điểm rèn luyện của ban cán sự lớp'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 40.85,
+      "passed": true,
+      "reason": "Results: 10 (Top: Hướng dẫn số 88/HD-CTSV Quy trình đ)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'sinh viên mồ côi cả cha lẫn mẹ được hỗ trợ gì'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 23.87,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy định số 315/QĐ-ĐHĐL Quản lý Ký )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'chế độ ưu đãi giáo dục theo nghị định 81'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 38.72,
+      "passed": true,
+      "reason": "Results: 10 (Top: Danh sách sinh viên đạt chuẩn nhận )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'tiêu chuẩn xét học bổng khuyến khích học tập qđ 688'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 45.1,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quyết định số 688/QĐ-ĐHĐL Về việc b)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'giấy xác nhận sinh viên dùng để làm gì'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 48.58,
+      "passed": true,
+      "reason": "Results: 10 (Top: Hướng dẫn số 205/HD-CTSV Quy trình )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'đăng ký bảo hiểm y tế bắt buộc vào thời gian nào'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 42.12,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông báo số 55/TB-CTSV Thu nộp Bảo)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'sinh viên khuyết tật nặng được hưởng mức giảm học phí bao nhiêu'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 49.41,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy định số 315/QĐ-ĐHĐL Quản lý Ký )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'vay vốn sinh viên tại ngân hàng chính sách xã hội'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 24.41,
+      "passed": true,
+      "reason": "Results: 10 (Top: Hướng dẫn số 205/HD-CTSV Quy trình )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'thẻ sinh viên tích hợp thẻ ngân hàng bị mất'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 40.96,
+      "passed": true,
+      "reason": "Results: 10 (Top: Hướng dẫn số 205/HD-CTSV Quy trình )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'điều kiện để được cấp học bổng doanh nghiệp'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 24.77,
+      "passed": true,
+      "reason": "Results: 10 (Top: Biên bản số 12/BB-CTSV Họp hội đồng)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'làm sao để không bị nợ môn và cải thiện điểm tích lũy'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 39.01,
+      "passed": true,
+      "reason": "Results: 10 (Top: Đơn xin tạm hoãn và bảo lưu kết quả)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'mức phạt trừ điểm rèn luyện khi không đi sinh hoạt công dân'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 42.44,
+      "passed": true,
+      "reason": "Results: 10 (Top: Hướng dẫn số 88/HD-CTSV Quy trình đ)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'quy trình tiếp nhận đơn từ của sinh viên tại phòng một cửa a11'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 49.2,
+      "passed": true,
+      "reason": "Results: 10 (Top: Hướng dẫn số 205/HD-CTSV Quy trình )"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'tiêu chí xét chọn học bổng tài trợ ngoài ngân sách'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 46.58,
+      "passed": true,
+      "reason": "Results: 10 (Top: Thông báo số 1413/TB-ĐHĐL về việc x)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'chế độ miễn giảm phí nội trú ký túc xá cho sinh viên nghèo'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 26.59,
+      "passed": true,
+      "reason": "Results: 10 (Top: Đơn đề nghị miễn giảm học phí (MGHP)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'giấy chứng nhận hộ nghèo năm 2024 có giá trị đến khi nào'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 46.96,
+      "passed": true,
+      "reason": "Results: 10 (Top: Báo cáo số 77/BC-CTSV Tổng hợp rà s)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'quy định về thời gian đào tạo tối đa của một khóa học'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 25.09,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quyết định số 890/QĐ-ĐHĐL Về việc c)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'học phí một tín chỉ của trường đại học đà lạt là bao nhiêu'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 23.51,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy chế Công tác Sinh viên trường Đ)"
+    },
+    {
+      "category": "Nhóm 3: Tìm kiếm Lai Ngữ nghĩa RRF",
+      "name": "Ngữ nghĩa tự nhiên: 'sinh viên năm nhất có bắt buộc phải ở ký túc xá không'",
+      "url": "http://127.0.0.1:8000/api/v1/search/hybrid-rrf",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 25.72,
+      "passed": true,
+      "reason": "Results: 10 (Top: Quy định số 315/QĐ-ĐHĐL Quản lý Ký )"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Lọc theo OCR Status: APPROVED",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=&ocr_status=APPROVED",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 40.72,
+      "passed": true,
+      "reason": "Hits: 18"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Lọc theo OCR Status: PENDING",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=&ocr_status=PENDING",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 17.46,
+      "passed": true,
+      "reason": "Hits: 0"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'học bổng' + QUYET_DINH + #HocBong",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=h%E1%BB%8Dc%20b%E1%BB%95ng&doc_type_code=QUYET_DINH&tag=%23HocBong",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 26.26,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'học phí' + DON_TU + #MienGiamHocPhi",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=h%E1%BB%8Dc%20ph%C3%AD&doc_type_code=DON_TU&tag=%23MienGiamHocPhi",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 10.48,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'rèn luyện' + HUONG_DAN + #DRL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=r%C3%A8n%20luy%E1%BB%87n&doc_type_code=HUONG_DAN&tag=%23DRL",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 10.77,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'nghĩa vụ quân sự' + THONG_BAO + #NVQS",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=ngh%C4%A9a%20v%E1%BB%A5%20qu%C3%A2n%20s%E1%BB%B1&doc_type_code=THONG_BAO&tag=%23NVQS",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 12.38,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'ký túc xá' + QUYET_DINH + #KTX",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=k%C3%BD%20t%C3%BAc%20x%C3%A1&doc_type_code=QUYET_DINH&tag=%23KTX",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 334.49,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'miễn giảm' + DON_TU + #MienGiamHocPhi",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=mi%E1%BB%85n%20gi%E1%BA%A3m&doc_type_code=DON_TU&tag=%23MienGiamHocPhi",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 14.46,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: '688' + QUYET_DINH + #HocBong",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=688&doc_type_code=QUYET_DINH&tag=%23HocBong",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 10.99,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: '13/2013' + THONG_BAO + #NVQS",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=13/2013&doc_type_code=THONG_BAO&tag=%23NVQS",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 35.59,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: '315' + QUYET_DINH + #KTX",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=315&doc_type_code=QUYET_DINH&tag=%23KTX",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 29.47,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: '88' + HUONG_DAN + #DRL",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=88&doc_type_code=HUONG_DAN&tag=%23DRL",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 10.55,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: '55' + THONG_BAO + #BHYT",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=55&doc_type_code=THONG_BAO&tag=%23BHYT",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 34.46,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'quy chế' + QUYET_DINH + All",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=quy%20ch%E1%BA%BF&doc_type_code=QUYET_DINH",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 35.11,
+      "passed": true,
+      "reason": "Hits: 3"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'thông báo' + THONG_BAO + All",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=th%C3%B4ng%20b%C3%A1o&doc_type_code=THONG_BAO",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.48,
+      "passed": true,
+      "reason": "Hits: 3"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'đơn' + DON_TU + All",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=%C4%91%C6%A1n&doc_type_code=DON_TU",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 33.45,
+      "passed": true,
+      "reason": "Hits: 5"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'hướng dẫn' + HUONG_DAN + All",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=h%C6%B0%E1%BB%9Bng%20d%E1%BA%ABn&doc_type_code=HUONG_DAN",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.55,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'bảo lưu' + DON_TU + #DonTu",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=b%E1%BA%A3o%20l%C6%B0u&doc_type_code=DON_TU&tag=%23DonTu",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 32.48,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'doanh nghiệp' + QUYET_DINH + #HocBong",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=doanh%20nghi%E1%BB%87p&doc_type_code=QUYET_DINH&tag=%23HocBong",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.8,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'hộ nghèo' + DON_TU + #MienGiamHocPhi",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=h%E1%BB%99%20ngh%C3%A8o&doc_type_code=DON_TU&tag=%23MienGiamHocPhi",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 10.51,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'sinh viên' + QUYET_DINH + #HocBong",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=sinh%20vi%C3%AAn&doc_type_code=QUYET_DINH&tag=%23HocBong",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 12.52,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'công tác' + HUONG_DAN + All",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=c%C3%B4ng%20t%C3%A1c&doc_type_code=HUONG_DAN",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 11.78,
+      "passed": true,
+      "reason": "Hits: 2"
+    },
+    {
+      "category": "Nhóm 4: Bộ lọc Đa tiêu chí & Tức thì",
+      "name": "Kết hợp: 'kế hoạch' + KE_HOACH + #SinhHoatCongDan",
+      "url": "http://127.0.0.1:8000/api/v1/search?q=k%E1%BA%BF%20ho%E1%BA%A1ch&doc_type_code=KE_HOACH&tag=%23SinhHoatCongDan",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 22.52,
+      "passed": true,
+      "reason": "Hits: 1"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Thời tiết hôm nay ở Đà Lạt thế nào có đi chơi được không?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Th%E1%BB%9Di%20ti%E1%BA%BFt%20h%C3%B4m%20nay%20%E1%BB%9F%20%C4%90%C3%A0%20L%E1%BA%A1t%20th%E1%BA%BF%20n%C3%A0o%20c%C3%B3%20%C4%91i%20ch%C6%A1i%20%C4%91%C6%B0%E1%BB%A3c%20kh%C3%B4ng%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.11,
+      "passed": true,
+      "reason": "Answer: Đà Lạt hôm nay thời tiết se lạnh đặc trưng (khoảng 16°C - 22... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Đà Lạt trời mưa hay nắng có nên đi dạo hồ Xuân Hương không?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=%C4%90%C3%A0%20L%E1%BA%A1t%20tr%E1%BB%9Di%20m%C6%B0a%20hay%20n%E1%BA%AFng%20c%C3%B3%20n%C3%AAn%20%C4%91i%20d%E1%BA%A1o%20h%E1%BB%93%20Xu%C3%A2n%20H%C6%B0%C6%A1ng%20kh%C3%B4ng%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 25.65,
+      "passed": true,
+      "reason": "Answer: Đà Lạt hôm nay thời tiết se lạnh đặc trưng (khoảng 16°C - 22... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Nhiệt độ Đà Lạt hôm nay bao nhiêu độ?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Nhi%E1%BB%87t%20%C4%91%E1%BB%99%20%C4%90%C3%A0%20L%E1%BA%A1t%20h%C3%B4m%20nay%20bao%20nhi%C3%AAu%20%C4%91%E1%BB%99%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.69,
+      "passed": true,
+      "reason": "Answer: Đà Lạt hôm nay thời tiết se lạnh đặc trưng (khoảng 16°C - 22... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Quán cà phê nào view đẹp ở gần trường Đại học Đà Lạt?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Qu%C3%A1n%20c%C3%A0%20ph%C3%AA%20n%C3%A0o%20view%20%C4%91%E1%BA%B9p%20%E1%BB%9F%20g%E1%BA%A7n%20tr%C6%B0%E1%BB%9Dng%20%C4%90%E1%BA%A1i%20h%E1%BB%8Dc%20%C4%90%C3%A0%20L%E1%BA%A1t%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.59,
+      "passed": true,
+      "reason": "Answer: Đà Lạt hôm nay thời tiết se lạnh đặc trưng (khoảng 16°C - 22... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Cuối tuần đi chơi săn mây ở đâu Đà Lạt?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Cu%E1%BB%91i%20tu%E1%BA%A7n%20%C4%91i%20ch%C6%A1i%20s%C4%83n%20m%C3%A2y%20%E1%BB%9F%20%C4%91%C3%A2u%20%C4%90%C3%A0%20L%E1%BA%A1t%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.61,
+      "passed": true,
+      "reason": "Answer: Đà Lạt hôm nay thời tiết se lạnh đặc trưng (khoảng 16°C - 22... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Chào bạn!'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Ch%C3%A0o%20b%E1%BA%A1n%21",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.52,
+      "passed": true,
+      "reason": "Answer: Chào bạn! Mình là Trợ lý AI DocuCTSV của Trường Đại học Đà L... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Xin chào trợ lý ảo DocuCTSV'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Xin%20ch%C3%A0o%20tr%E1%BB%A3%20l%C3%BD%20%E1%BA%A3o%20DocuCTSV",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.9,
+      "passed": true,
+      "reason": "Answer: Chào bạn! Mình là Trợ lý AI DocuCTSV của Trường Đại học Đà L... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bạn là ai và có thể giúp gì cho sinh viên?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BA%A1n%20l%C3%A0%20ai%20v%C3%A0%20c%C3%B3%20th%E1%BB%83%20gi%C3%BAp%20g%C3%AC%20cho%20sinh%20vi%C3%AAn%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.56,
+      "passed": true,
+      "reason": "Answer: Chào bạn! Mình là Trợ lý AI DocuCTSV của Trường Đại học Đà L... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Giới thiệu về hệ thống trợ lý quy chế CTSV'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Gi%E1%BB%9Bi%20thi%E1%BB%87u%20v%E1%BB%81%20h%E1%BB%87%20th%E1%BB%91ng%20tr%E1%BB%A3%20l%C3%BD%20quy%20ch%E1%BA%BF%20CTSV",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.64,
+      "passed": true,
+      "reason": "Answer: Chào bạn! Mình là Trợ lý AI DocuCTSV của Trường Đại học Đà L... (Conf: 0.99)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Học hành áp lực và mệt mỏi quá phải làm sao?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=H%E1%BB%8Dc%20h%C3%A0nh%20%C3%A1p%20l%E1%BB%B1c%20v%C3%A0%20m%E1%BB%87t%20m%E1%BB%8Fi%20qu%C3%A1%20ph%E1%BA%A3i%20l%C3%A0m%20sao%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 4.92,
+      "passed": true,
+      "reason": "Answer: Căn cứ Thông báo số 1413/TB-ĐHĐL về việc xét duyệt học bổng ... (Conf: 0.85)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Làm thế nào để xin nghỉ học tạm thời 1 năm?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=L%C3%A0m%20th%E1%BA%BF%20n%C3%A0o%20%C4%91%E1%BB%83%20xin%20ngh%E1%BB%89%20h%E1%BB%8Dc%20t%E1%BA%A1m%20th%E1%BB%9Di%201%20n%C4%83m%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.27,
+      "passed": true,
+      "reason": "Answer: Để xin nghỉ học tạm thời 1 năm (tối đa 2 học kỳ), sinh viên ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Thủ tục bảo lưu kết quả học tập gồm những bước nào?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Th%E1%BB%A7%20t%E1%BB%A5c%20b%E1%BA%A3o%20l%C6%B0u%20k%E1%BA%BFt%20qu%E1%BA%A3%20h%E1%BB%8Dc%20t%E1%BA%ADp%20g%E1%BB%93m%20nh%E1%BB%AFng%20b%C6%B0%E1%BB%9Bc%20n%C3%A0o%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 20.74,
+      "passed": true,
+      "reason": "Answer: Để xin nghỉ học tạm thời 1 năm (tối đa 2 học kỳ), sinh viên ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Nghỉ học tạm thời tối đa được bao nhiêu học kỳ?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Ngh%E1%BB%89%20h%E1%BB%8Dc%20t%E1%BA%A1m%20th%E1%BB%9Di%20t%E1%BB%91i%20%C4%91a%20%C4%91%C6%B0%E1%BB%A3c%20bao%20nhi%C3%AAu%20h%E1%BB%8Dc%20k%E1%BB%B3%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 14.86,
+      "passed": true,
+      "reason": "Answer: Để xin nghỉ học tạm thời 1 năm (tối đa 2 học kỳ), sinh viên ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Học bổng tài trợ của doanh nghiệp cần điều kiện gì?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=H%E1%BB%8Dc%20b%E1%BB%95ng%20t%C3%A0i%20tr%E1%BB%A3%20c%E1%BB%A7a%20doanh%20nghi%E1%BB%87p%20c%E1%BA%A7n%20%C4%91i%E1%BB%81u%20ki%E1%BB%87n%20g%C3%AC%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.09,
+      "passed": true,
+      "reason": "Answer: Điều kiện xét học bổng tài trợ doanh nghiệp (Viettel, BIDV, ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Doanh nghiệp Viettel hay BIDV tài trợ học bổng yêu cầu điểm bao nhiêu?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Doanh%20nghi%E1%BB%87p%20Viettel%20hay%20BIDV%20t%C3%A0i%20tr%E1%BB%A3%20h%E1%BB%8Dc%20b%E1%BB%95ng%20y%C3%AAu%20c%E1%BA%A7u%20%C4%91i%E1%BB%83m%20bao%20nhi%C3%AAu%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 12.99,
+      "passed": true,
+      "reason": "Answer: Điều kiện xét học bổng tài trợ doanh nghiệp (Viettel, BIDV, ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bị điểm F môn thể dục có được xét học bổng không?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BB%8B%20%C4%91i%E1%BB%83m%20F%20m%C3%B4n%20th%E1%BB%83%20d%E1%BB%A5c%20c%C3%B3%20%C4%91%C6%B0%E1%BB%A3c%20x%C3%A9t%20h%E1%BB%8Dc%20b%E1%BB%95ng%20kh%C3%B4ng%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.14,
+      "passed": true,
+      "reason": "Answer: Sinh viên có điểm học phần F (kể cả Giáo dục thể chất và GDQ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bị điểm F môn Giáo dục quốc phòng có được xét học bổng KKHT?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BB%8B%20%C4%91i%E1%BB%83m%20F%20m%C3%B4n%20Gi%C3%A1o%20d%E1%BB%A5c%20qu%E1%BB%91c%20ph%C3%B2ng%20c%C3%B3%20%C4%91%C6%B0%E1%BB%A3c%20x%C3%A9t%20h%E1%BB%8Dc%20b%E1%BB%95ng%20KKHT%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.24,
+      "passed": true,
+      "reason": "Answer: Sinh viên có điểm học phần F (kể cả Giáo dục thể chất và GDQ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Điểm GPA 3.5 nhưng dính điểm F thể dục có được nhận học bổng?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=%C4%90i%E1%BB%83m%20GPA%203.5%20nh%C6%B0ng%20d%C3%ADnh%20%C4%91i%E1%BB%83m%20F%20th%E1%BB%83%20d%E1%BB%A5c%20c%C3%B3%20%C4%91%C6%B0%E1%BB%A3c%20nh%E1%BA%ADn%20h%E1%BB%8Dc%20b%E1%BB%95ng%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 12.92,
+      "passed": true,
+      "reason": "Answer: Sinh viên có điểm học phần F (kể cả Giáo dục thể chất và GDQ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Sinh viên nghèo có được miễn giảm học phí không?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Sinh%20vi%C3%AAn%20ngh%C3%A8o%20c%C3%B3%20%C4%91%C6%B0%E1%BB%A3c%20mi%E1%BB%85n%20gi%E1%BA%A3m%20h%E1%BB%8Dc%20ph%C3%AD%20kh%C3%B4ng%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 14.74,
+      "passed": true,
+      "reason": "Answer: Sinh viên thuộc hộ nghèo, cận nghèo, mồ côi cả cha lẫn mẹ ho... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Hồ sơ miễn giảm học phí cho sinh viên hộ nghèo gồm giấy tờ gì?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=H%E1%BB%93%20s%C6%A1%20mi%E1%BB%85n%20gi%E1%BA%A3m%20h%E1%BB%8Dc%20ph%C3%AD%20cho%20sinh%20vi%C3%AAn%20h%E1%BB%99%20ngh%C3%A8o%20g%E1%BB%93m%20gi%E1%BA%A5y%20t%E1%BB%9D%20g%C3%AC%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 3.22,
+      "passed": true,
+      "reason": "Answer: Sinh viên thuộc hộ nghèo, cận nghèo, mồ côi cả cha lẫn mẹ ho... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Sinh viên mồ côi cả cha lẫn mẹ được miễn học phí bao nhiêu phần trăm?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Sinh%20vi%C3%AAn%20m%E1%BB%93%20c%C3%B4i%20c%E1%BA%A3%20cha%20l%E1%BA%ABn%20m%E1%BA%B9%20%C4%91%C6%B0%E1%BB%A3c%20mi%E1%BB%85n%20h%E1%BB%8Dc%20ph%C3%AD%20bao%20nhi%C3%AAu%20ph%E1%BA%A7n%20tr%C4%83m%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.31,
+      "passed": true,
+      "reason": "Answer: Sinh viên thuộc hộ nghèo, cận nghèo, mồ côi cả cha lẫn mẹ ho... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Sinh viên khuyết tật được hưởng chính sách miễn giảm học phí thế nào?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Sinh%20vi%C3%AAn%20khuy%E1%BA%BFt%20t%E1%BA%ADt%20%C4%91%C6%B0%E1%BB%A3c%20h%C6%B0%E1%BB%9Fng%20ch%C3%ADnh%20s%C3%A1ch%20mi%E1%BB%85n%20gi%E1%BA%A3m%20h%E1%BB%8Dc%20ph%C3%AD%20th%E1%BA%BF%20n%C3%A0o%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.11,
+      "passed": true,
+      "reason": "Answer: Sinh viên thuộc hộ nghèo, cận nghèo, mồ côi cả cha lẫn mẹ ho... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Điểm rèn luyện chia thành mấy loại?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=%C4%90i%E1%BB%83m%20r%C3%A8n%20luy%E1%BB%87n%20chia%20th%C3%A0nh%20m%E1%BA%A5y%20lo%E1%BA%A1i%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.18,
+      "passed": true,
+      "reason": "Answer: Điểm rèn luyện chia thành 6 khung bậc từ Kém đến Xuất sắc (≥... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bị kỷ luật khiển trách thì điểm rèn luyện tối đa được loại gì?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BB%8B%20k%E1%BB%B7%20lu%E1%BA%ADt%20khi%E1%BB%83n%20tr%C3%A1ch%20th%C3%AC%20%C4%91i%E1%BB%83m%20r%C3%A8n%20luy%E1%BB%87n%20t%E1%BB%91i%20%C4%91a%20%C4%91%C6%B0%E1%BB%A3c%20lo%E1%BA%A1i%20g%C3%AC%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.45,
+      "passed": true,
+      "reason": "Answer: Điểm rèn luyện chia thành 6 khung bậc từ Kém đến Xuất sắc (≥... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bị cảnh cáo thì điểm rèn luyện bị khống chế ở mức nào?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BB%8B%20c%E1%BA%A3nh%20c%C3%A1o%20th%C3%AC%20%C4%91i%E1%BB%83m%20r%C3%A8n%20luy%E1%BB%87n%20b%E1%BB%8B%20kh%E1%BB%91ng%20ch%E1%BA%BF%20%E1%BB%9F%20m%E1%BB%A9c%20n%C3%A0o%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 18.72,
+      "passed": true,
+      "reason": "Answer: Điểm rèn luyện chia thành 6 khung bậc từ Kém đến Xuất sắc (≥... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Làm sao để xin hoãn nghĩa vụ quân sự khi đang học đại học?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=L%C3%A0m%20sao%20%C4%91%E1%BB%83%20xin%20ho%C3%A3n%20ngh%C4%A9a%20v%E1%BB%A5%20qu%C3%A2n%20s%E1%BB%B1%20khi%20%C4%91ang%20h%E1%BB%8Dc%20%C4%91%E1%BA%A1i%20h%E1%BB%8Dc%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.38,
+      "passed": true,
+      "reason": "Answer: Sinh viên đăng ký xin cấp Giấy xác nhận tạm hoãn NVQS trực t... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Giấy xác nhận tạm hoãn NVQS xin ở phòng nào và mất bao lâu?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Gi%E1%BA%A5y%20x%C3%A1c%20nh%E1%BA%ADn%20t%E1%BA%A1m%20ho%C3%A3n%20NVQS%20xin%20%E1%BB%9F%20ph%C3%B2ng%20n%C3%A0o%20v%C3%A0%20m%E1%BA%A5t%20bao%20l%C3%A2u%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.6,
+      "passed": true,
+      "reason": "Answer: Sinh viên đăng ký xin cấp Giấy xác nhận tạm hoãn NVQS trực t... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Ưu tiên phòng ký túc xá cho những sinh viên nào?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=%C6%AFu%20ti%C3%AAn%20ph%C3%B2ng%20k%C3%BD%20t%C3%BAc%20x%C3%A1%20cho%20nh%E1%BB%AFng%20sinh%20vi%C3%AAn%20n%C3%A0o%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.86,
+      "passed": true,
+      "reason": "Answer: Nhà trường ưu tiên bố trí phòng KTX theo thứ tự: Mồ côi, khu... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Mức trợ cấp xã hội cho sinh viên khó khăn là bao nhiêu?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=M%E1%BB%A9c%20tr%E1%BB%A3%20c%E1%BA%A5p%20x%C3%A3%20h%E1%BB%99i%20cho%20sinh%20vi%C3%AAn%20kh%C3%B3%20kh%C4%83n%20l%C3%A0%20bao%20nhi%C3%AAu%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.57,
+      "passed": true,
+      "reason": "Answer: Nhà trường ưu tiên bố trí phòng KTX theo thứ tự: Mồ côi, khu... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bị cảnh báo học vụ bao nhiêu lần thì bị buộc thôi học?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BB%8B%20c%E1%BA%A3nh%20b%C3%A1o%20h%E1%BB%8Dc%20v%E1%BB%A5%20bao%20nhi%C3%AAu%20l%E1%BA%A7n%20th%C3%AC%20b%E1%BB%8B%20bu%E1%BB%99c%20th%C3%B4i%20h%E1%BB%8Dc%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 25.17,
+      "passed": true,
+      "reason": "Answer: Sinh viên bị cảnh báo học vụ nếu CPA tích lũy dưới 1.20 (năm... (Conf: 0.97)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Học phần bị điểm F có bắt buộc phải học lại không?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=H%E1%BB%8Dc%20ph%E1%BA%A7n%20b%E1%BB%8B%20%C4%91i%E1%BB%83m%20F%20c%C3%B3%20b%E1%BA%AFt%20bu%E1%BB%99c%20ph%E1%BA%A3i%20h%E1%BB%8Dc%20l%E1%BA%A1i%20kh%C3%B4ng%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 16.36,
+      "passed": true,
+      "reason": "Answer: Học phần bị điểm F bắt buộc phải đăng ký học lại; học phần đ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Điều kiện để được xét tốt nghiệp ra trường cần những chứng chỉ gì?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=%C4%90i%E1%BB%81u%20ki%E1%BB%87n%20%C4%91%E1%BB%83%20%C4%91%C6%B0%E1%BB%A3c%20x%C3%A9t%20t%E1%BB%91t%20nghi%E1%BB%87p%20ra%20tr%C6%B0%E1%BB%9Dng%20c%E1%BA%A7n%20nh%E1%BB%AFng%20ch%E1%BB%A9ng%20ch%E1%BB%89%20g%C3%AC%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.92,
+      "passed": true,
+      "reason": "Answer: Điều kiện tốt nghiệp: Tích lũy đủ số tín chỉ CTĐT, CPA ≥ 2.0... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bị mất thẻ sinh viên thì làm lại ở đâu và cần giấy tờ gì?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BB%8B%20m%E1%BA%A5t%20th%E1%BA%BB%20sinh%20vi%C3%AAn%20th%C3%AC%20l%C3%A0m%20l%E1%BA%A1i%20%E1%BB%9F%20%C4%91%C3%A2u%20v%C3%A0%20c%E1%BA%A7n%20gi%E1%BA%A5y%20t%E1%BB%9D%20g%C3%AC%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.9,
+      "passed": true,
+      "reason": "Answer: Khi mất thẻ sinh viên, bạn nộp Đơn đề nghị cấp lại thẻ (Mẫu ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Thủ tục xin vay vốn sinh viên tại Ngân hàng Chính sách xã hội?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=Th%E1%BB%A7%20t%E1%BB%A5c%20xin%20vay%20v%E1%BB%91n%20sinh%20vi%C3%AAn%20t%E1%BA%A1i%20Ng%C3%A2n%20h%C3%A0ng%20Ch%C3%ADnh%20s%C3%A1ch%20x%C3%A3%20h%E1%BB%99i%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.95,
+      "passed": true,
+      "reason": "Answer: Sinh viên xin Giấy xác nhận học sinh - sinh viên vay vốn (Mẫ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 5: Trợ lý Hỏi đáp Pháp quy Thông minh",
+      "name": "FAQ: 'Bảo hiểm y tế sinh viên có bắt buộc phải tham gia không?'",
+      "url": "http://127.0.0.1:8000/api/v1/search/faq/ask?q=B%E1%BA%A3o%20hi%E1%BB%83m%20y%20t%E1%BA%BF%20sinh%20vi%C3%AAn%20c%C3%B3%20b%E1%BA%AFt%20bu%E1%BB%99c%20ph%E1%BA%A3i%20tham%20gia%20kh%C3%B4ng%3F",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 2.64,
+      "passed": true,
+      "reason": "Answer: BHYT là nghĩa vụ bắt buộc đối với 100% sinh viên, được ngân ... (Conf: 0.98)"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "So khớp trùng lặp More-Like-This doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/similar",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 17.08,
+      "passed": true,
+      "reason": "Similar found: 4"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "So khớp trùng lặp More-Like-This doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/similar",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.2,
+      "passed": true,
+      "reason": "Similar found: 4"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "So khớp trùng lặp More-Like-This doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/cadc3753-1408-4553-a306-441954750dc2/similar",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 6.76,
+      "passed": true,
+      "reason": "Similar found: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "So khớp trùng lặp More-Like-This doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/62bf49cb-a11d-4112-af36-a83d63c8be6a/similar",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 6.96,
+      "passed": true,
+      "reason": "Similar found: 4"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "So khớp trùng lặp More-Like-This doc #5",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/47da571d-db05-4bd4-9a29-607da3ac31c7/similar",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 7.57,
+      "passed": true,
+      "reason": "Similar found: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "So khớp trùng lặp More-Like-This doc #6",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/db4b81d2-638d-4ed7-b39f-48f70d19c60c/similar",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 22.07,
+      "passed": true,
+      "reason": "Similar found: 0"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Đối soát gian lận & trùng lặp CCCD/Sổ hộ nghèo doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/fraud-detection/audit?document_id=e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 27.87,
+      "passed": true,
+      "reason": "Risk: SAFE (Tamper: 0.05)"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Đối soát gian lận & trùng lặp CCCD/Sổ hộ nghèo doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/fraud-detection/audit?document_id=97992de1-edee-4f9c-a78c-134dbb6b92e6",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 23.6,
+      "passed": true,
+      "reason": "Risk: SAFE (Tamper: 0.05)"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Đối soát gian lận & trùng lặp CCCD/Sổ hộ nghèo doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/fraud-detection/audit?document_id=cadc3753-1408-4553-a306-441954750dc2",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 32.9,
+      "passed": true,
+      "reason": "Risk: SAFE (Tamper: 0.05)"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Đối soát gian lận & trùng lặp CCCD/Sổ hộ nghèo doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/fraud-detection/audit?document_id=62bf49cb-a11d-4112-af36-a83d63c8be6a",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 11.82,
+      "passed": true,
+      "reason": "Risk: SAFE (Tamper: 0.05)"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Đối soát gian lận & trùng lặp CCCD/Sổ hộ nghèo doc #5",
+      "url": "http://127.0.0.1:8000/api/v1/search/fraud-detection/audit?document_id=47da571d-db05-4bd4-9a29-607da3ac31c7",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 11.96,
+      "passed": true,
+      "reason": "Risk: SAFE (Tamper: 0.05)"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Đối soát gian lận & trùng lặp CCCD/Sổ hộ nghèo doc #6",
+      "url": "http://127.0.0.1:8000/api/v1/search/fraud-detection/audit?document_id=db4b81d2-638d-4ed7-b39f-48f70d19c60c",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 11.93,
+      "passed": true,
+      "reason": "Risk: SAFE (Tamper: 0.05)"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Trích xuất thực thể & gán nhãn significant_text doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/auto-tags",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 21.13,
+      "passed": true,
+      "reason": "Tags: 1 | Policy: CHÍNH_SÁCH_MIỄN_GIẢM_HỌC_PHÍ_NĐ81"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Trích xuất thực thể & gán nhãn significant_text doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/auto-tags",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 4.78,
+      "passed": true,
+      "reason": "Tags: 1 | Policy: HỌC_BỔNG_VÀ_HỖ_TRỢ_SINH_VIÊN"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Trích xuất thực thể & gán nhãn significant_text doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/cadc3753-1408-4553-a306-441954750dc2/auto-tags",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 4.65,
+      "passed": true,
+      "reason": "Tags: 1 | Policy: HỌC_BỔNG_VÀ_HỖ_TRỢ_SINH_VIÊN"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Trích xuất thực thể & gán nhãn significant_text doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/62bf49cb-a11d-4112-af36-a83d63c8be6a/auto-tags",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 18.03,
+      "passed": true,
+      "reason": "Tags: 1 | Policy: HỌC_BỔNG_VÀ_HỖ_TRỢ_SINH_VIÊN"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Trích xuất thực thể & gán nhãn significant_text doc #5",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/47da571d-db05-4bd4-9a29-607da3ac31c7/auto-tags",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 4.67,
+      "passed": true,
+      "reason": "Tags: 1 | Policy: HỌC_BỔNG_VÀ_HỖ_TRỢ_SINH_VIÊN"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Trích xuất thực thể & gán nhãn significant_text doc #6",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/db4b81d2-638d-4ed7-b39f-48f70d19c60c/auto-tags",
+      "method": "POST",
+      "status_code": 200,
+      "latency_ms": 26.33,
+      "passed": true,
+      "reason": "Tags: 1 | Policy: HỌC_BỔNG_VÀ_HỖ_TRỢ_SINH_VIÊN"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Nhật ký kiểm toán phiên bản & so sánh Diffs doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/audit-trail",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 16.54,
+      "passed": true,
+      "reason": "Ver: v2 | Revs: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Nhật ký kiểm toán phiên bản & so sánh Diffs doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/audit-trail",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 29.78,
+      "passed": true,
+      "reason": "Ver: v2 | Revs: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Nhật ký kiểm toán phiên bản & so sánh Diffs doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/cadc3753-1408-4553-a306-441954750dc2/audit-trail",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 15.47,
+      "passed": true,
+      "reason": "Ver: v2 | Revs: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Nhật ký kiểm toán phiên bản & so sánh Diffs doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/62bf49cb-a11d-4112-af36-a83d63c8be6a/audit-trail",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 4.63,
+      "passed": true,
+      "reason": "Ver: v2 | Revs: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Nhật ký kiểm toán phiên bản & so sánh Diffs doc #5",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/47da571d-db05-4bd4-9a29-607da3ac31c7/audit-trail",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 26.91,
+      "passed": true,
+      "reason": "Ver: v2 | Revs: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Nhật ký kiểm toán phiên bản & so sánh Diffs doc #6",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/db4b81d2-638d-4ed7-b39f-48f70d19c60c/audit-trail",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 28.24,
+      "passed": true,
+      "reason": "Ver: v2 | Revs: 2"
+    },
+    {
+      "category": "Nhóm 6: MLT Trùng lặp & Đối soát Gian lận",
+      "name": "Nhật ký kiểm toán phiên bản & so sánh Diffs doc #7",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/27d43dde-f754-4baa-90f9-553d4c52a740/audit-trail",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 17.03,
+      "passed": true,
+      "reason": "Ver: v2 | Revs: 2"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: NGHI_DINH_81 doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/policy-audit?policy_code=NGHI_DINH_81",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 8.9,
+      "passed": true,
+      "reason": "Status: INCOMPLETE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: NGHI_DINH_81 doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/policy-audit?policy_code=NGHI_DINH_81",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 23.4,
+      "passed": true,
+      "reason": "Status: INCOMPLETE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: NGHI_DINH_81 doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/cadc3753-1408-4553-a306-441954750dc2/policy-audit?policy_code=NGHI_DINH_81",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 6.54,
+      "passed": true,
+      "reason": "Status: INELIGIBLE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: NGHI_DINH_81 doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/62bf49cb-a11d-4112-af36-a83d63c8be6a/policy-audit?policy_code=NGHI_DINH_81",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 21.98,
+      "passed": true,
+      "reason": "Status: INCOMPLETE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: HOC_BONG_KKHT doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/policy-audit?policy_code=HOC_BONG_KKHT",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 32.61,
+      "passed": true,
+      "reason": "Status: ELIGIBLE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: HOC_BONG_KKHT doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/policy-audit?policy_code=HOC_BONG_KKHT",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 30.13,
+      "passed": true,
+      "reason": "Status: ELIGIBLE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: HOC_BONG_KKHT doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/cadc3753-1408-4553-a306-441954750dc2/policy-audit?policy_code=HOC_BONG_KKHT",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 5.22,
+      "passed": true,
+      "reason": "Status: ELIGIBLE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: HOC_BONG_KKHT doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/62bf49cb-a11d-4112-af36-a83d63c8be6a/policy-audit?policy_code=HOC_BONG_KKHT",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 8.53,
+      "passed": true,
+      "reason": "Status: ELIGIBLE | Checks: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: TRO_CAP_XAH_HOI doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/policy-audit?policy_code=TRO_CAP_XAH_HOI",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 5.38,
+      "passed": true,
+      "reason": "Status: INCOMPLETE | Checks: 2"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: TRO_CAP_XAH_HOI doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/policy-audit?policy_code=TRO_CAP_XAH_HOI",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 5.76,
+      "passed": true,
+      "reason": "Status: INCOMPLETE | Checks: 2"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: TRO_CAP_XAH_HOI doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/cadc3753-1408-4553-a306-441954750dc2/policy-audit?policy_code=TRO_CAP_XAH_HOI",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 22.24,
+      "passed": true,
+      "reason": "Status: INCOMPLETE | Checks: 2"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Thẩm định tính hợp lệ pháp lý: TRO_CAP_XAH_HOI doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/62bf49cb-a11d-4112-af36-a83d63c8be6a/policy-audit?policy_code=TRO_CAP_XAH_HOI",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 30.79,
+      "passed": true,
+      "reason": "Status: INCOMPLETE | Checks: 2"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Phân luồng tự động bằng Elasticsearch Percolator doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/percolate-routing",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 13.81,
+      "passed": true,
+      "reason": "Rules: 1 (Phòng Công tác Sinh viên (Bộ phận Một cửa - Nhà A11))"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Phân luồng tự động bằng Elasticsearch Percolator doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/percolate-routing",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 7.84,
+      "passed": true,
+      "reason": "Rules: 1 (Phòng Công tác Sinh viên (Bộ phận Một cửa - Nhà A11))"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Phân luồng tự động bằng Elasticsearch Percolator doc #3",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/cadc3753-1408-4553-a306-441954750dc2/percolate-routing",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 7.44,
+      "passed": true,
+      "reason": "Rules: 1 (Hội đồng Xét Học bổng Trường & Các Khoa)"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Phân luồng tự động bằng Elasticsearch Percolator doc #4",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/62bf49cb-a11d-4112-af36-a83d63c8be6a/percolate-routing",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 32.01,
+      "passed": true,
+      "reason": "Rules: 1 (Phòng Công tác Sinh viên (Bộ phận Một cửa - Nhà A11))"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Phân luồng tự động bằng Elasticsearch Percolator doc #5",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/47da571d-db05-4bd4-9a29-607da3ac31c7/percolate-routing",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 9.53,
+      "passed": true,
+      "reason": "Rules: 1 (Hội đồng Xét Học bổng Trường & Các Khoa)"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Phân luồng tự động bằng Elasticsearch Percolator doc #6",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/db4b81d2-638d-4ed7-b39f-48f70d19c60c/percolate-routing",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 14.92,
+      "passed": true,
+      "reason": "Rules: 1 (Ban Quản lý Chế độ Chính sách Sinh viên)"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Truy xuất tọa độ Bounding Box OCR doc #1",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/e8a12dc7-1cfb-4ceb-bdfb-9bbcc6d1e829/spatial-highlights?q=hoc",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 8.68,
+      "passed": true,
+      "reason": "Highlights: 4"
+    },
+    {
+      "category": "Nhóm 7: Thẩm định Tự động NĐ 81 & Percolator",
+      "name": "Truy xuất tọa độ Bounding Box OCR doc #2",
+      "url": "http://127.0.0.1:8000/api/v1/search/documents/97992de1-edee-4f9c-a78c-134dbb6b92e6/spatial-highlights?q=hoc",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 6.7,
+      "passed": true,
+      "reason": "Highlights: 4"
+    }
+  ]
+}

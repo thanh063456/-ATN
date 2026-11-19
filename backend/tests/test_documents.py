@@ -3,9 +3,8 @@ backend/tests/test_documents.py — Documents Management & Approval Tests
 
 Tuân thủ AAA Pattern (Arrange - Act - Assert).
 """
-
-import httpx
 import pytest
+import httpx
 
 
 @pytest.mark.asyncio
@@ -54,9 +53,7 @@ async def test_approve_document(async_client: httpx.AsyncClient, staff_token: st
     pdf_content = b"%PDF-1.4 Test approval document"
     files = {"file": ("don_phe_duyet.pdf", pdf_content, "application/pdf")}
     headers = {"Authorization": f"Bearer {staff_token}"}
-    up_res = await async_client.post(
-        "/api/v1/documents/upload", data={"title": "Đơn cần phê duyệt"}, files=files, headers=headers
-    )
+    up_res = await async_client.post("/api/v1/documents/upload", data={"title": "Đơn cần phê duyệt"}, files=files, headers=headers)
     doc_id = up_res.json()["id"]
 
     # ── Act ───────────────────────────────────────────────────────────────
@@ -64,22 +61,4 @@ async def test_approve_document(async_client: httpx.AsyncClient, staff_token: st
 
     # ── Assert ────────────────────────────────────────────────────────────
     assert app_res.status_code == 200
-    res_json = app_res.json()
-    assert res_json["ocr_status"] == "APPROVED"
-    assert "approval_info" in res_json
-    if res_json["approval_info"]:
-        assert res_json["approval_info"]["status"] == "APPROVED"
-        assert res_json["approval_info"]["approver_role"] in ("ADMIN", "STAFF")
-
-
-@pytest.mark.asyncio
-async def test_get_document_notifications(async_client: httpx.AsyncClient, staff_token: str):
-    """Kiểm tra API lấy danh sách thông báo xét duyệt hồ sơ."""
-    headers = {"Authorization": f"Bearer {staff_token}"}
-    response = await async_client.get("/api/v1/documents/notifications?limit=10", headers=headers)
-    assert response.status_code == 200
-    data = response.json()
-    assert "items" in data
-    assert "total" in data
-    assert "unread_count" in data
-    assert isinstance(data["items"], list)
+    assert app_res.json()["ocr_status"] == "APPROVED"

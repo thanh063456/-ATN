@@ -11,8 +11,8 @@ Thực thi kiểm thử E2E trong môi trường cô lập:
 6. Kiểm thử RBAC phân quyền bảo mật (ngăn chặn quyền Student).
 7. Xuất báo cáo docs/doctype_e2e_report.md hoàn chỉnh.
 """
-
 import asyncio
+import io
 import os
 import sys
 import time
@@ -39,6 +39,9 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 import fitz  # PyMuPDF
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+
 from app.core.database import AsyncSessionLocal, init_db
 from app.core.elasticsearch import is_es_available
 from app.core.security import create_access_token
@@ -50,8 +53,7 @@ from app.models.documents import Document
 from app.models.ocr_results import OCRResult
 from app.models.users import User
 from app.services.doctype_service import doctype_service
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from app.services.vietocr_service import vietocr_service
 
 
 def extract_pdf_first_page_text(pdf_bytes: bytes) -> str:
@@ -194,6 +196,7 @@ async def run_e2e_tests():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+
         # ── Test 1: Sinh dữ liệu & Phân loại trang đầu trên 6 loại văn bản ─────
         print("\n[E2E-1] Kiểm thử nhận diện và phân loại trang 1 (Text-layer & Scanned)...")
         classification_results = []
@@ -210,25 +213,17 @@ async def run_e2e_tests():
                 pred_type, conf = cls_res.code, cls_res.confidence
                 dt = (time.perf_counter() - t0) * 1000
                 timings_extract["text_layer"].append((page_count, dt))
-                is_correct = (
-                    (pred_type == doc_type)
-                    or (doc_type == "DANH_SACH" and pred_type in ["DANH_SACH", "DON_TU"])
-                    or (doc_type == "DON_TU" and pred_type in ["DON_TU", "DON_NGHI_HOC", "GIAY_XAC_NHAN"])
-                )
-                classification_results.append(
-                    {
-                        "expected": doc_type,
-                        "predicted": pred_type,
-                        "pages": page_count,
-                        "mode": "text-layer",
-                        "confidence": conf,
-                        "correct": is_correct,
-                        "latency_ms": dt,
-                    }
-                )
-                print(
-                    f"  ✓ Text-layer {doc_type:10} ({page_count}p): Dự đoán={pred_type:12} | Conf={conf:.2f} | {dt:.1f}ms"
-                )
+                is_correct = (pred_type == doc_type) or (doc_type == "DANH_SACH" and pred_type in ["DANH_SACH", "DON_TU"]) or (doc_type == "DON_TU" and pred_type in ["DON_TU", "DON_NGHI_HOC", "GIAY_XAC_NHAN"])
+                classification_results.append({
+                    "expected": doc_type,
+                    "predicted": pred_type,
+                    "pages": page_count,
+                    "mode": "text-layer",
+                    "confidence": conf,
+                    "correct": is_correct,
+                    "latency_ms": dt,
+                })
+                print(f"  ✓ Text-layer {doc_type:10} ({page_count}p): Dự đoán={pred_type:12} | Conf={conf:.2f} | {dt:.1f}ms")
 
         # ── Test 2: Thử nghiệm Policy OCR Scope (Text-layer vs Scanned) ────────
         print("\n[E2E-2] Kiểm thử Scope Policy (Text-layer extract all vs Scanned first page)...")
@@ -268,49 +263,37 @@ async def run_e2e_tests():
                 extra={"ocr_scope": "first_page", "pages_ocr": 1, "doc_type_source": "auto"},
             )
             session.add(test_meta)
-            session.add(
-                OCRResult(
-                    document_id=doc_uuid,
-                    is_latest=True,
-                    raw_text="--- Trang 1 ---\nTHÔNG BÁO VỀ KỲ THI",
-                    corrected_text="--- Trang 1 ---\nTHÔNG BÁO VỀ KỲ THI",
-                    confidence_score=0.92,
-                    ocr_engine="vietocr",
-                    ocr_engine_version="v2",
-                    status="DONE",
-                    is_corrected=False,
-                )
-            )
+            session.add(OCRResult(
+                document_id=doc_uuid,
+                is_latest=True,
+                raw_text="--- Trang 1 ---\nTHÔNG BÁO VỀ KỲ THI",
+                corrected_text="--- Trang 1 ---\nTHÔNG BÁO VỀ KỲ THI",
+                confidence_score=0.92,
+                ocr_engine="vietocr",
+                ocr_engine_version="v2",
+                status="DONE",
+                is_corrected=False,
+            ))
             await session.commit()
 
         # Kiểm tra status trước khi kích hoạt
-        st_res1 = await client.get(
-            f"/api/v1/documents/{doc_uuid}/ocr-full/status", headers={"Authorization": f"Bearer {staff_token}"}
-        )
+        st_res1 = await client.get(f"/api/v1/documents/{doc_uuid}/ocr-full/status", headers={"Authorization": f"Bearer {staff_token}"})
         assert st_res1.status_code == 200
         assert st_res1.json()["ocr_scope"] == "first_page"
         assert st_res1.json()["pages_ocr"] == 1
         print("  ✓ GET /ocr-full/status: Trạng thái ban đầu = first_page (1/3 trang)")
 
         # Kích hoạt OCR Full
-        trig_res = await client.post(
-            f"/api/v1/documents/{doc_uuid}/ocr-full", headers={"Authorization": f"Bearer {staff_token}"}
-        )
+        trig_res = await client.post(f"/api/v1/documents/{doc_uuid}/ocr-full", headers={"Authorization": f"Bearer {staff_token}"})
         assert trig_res.status_code == 200
         assert trig_res.json()["status"] == "PROCESSING"
         print("  ✓ POST /ocr-full: Kích hoạt thành công, trạng thái PROCESSING")
 
         # Kiểm tra Audit Log của trigger
         async with AsyncSessionLocal() as session:
-            audit = (
-                (
-                    await session.execute(
-                        select(AuditLog).where(AuditLog.resource_id == doc_uuid, AuditLog.action == "TRIGGER_OCR_FULL")
-                    )
-                )
-                .scalars()
-                .first()
-            )
+            audit = (await session.execute(
+                select(AuditLog).where(AuditLog.resource_id == doc_uuid, AuditLog.action == "TRIGGER_OCR_FULL")
+            )).scalars().first()
             assert audit is not None, "Phải ghi nhận AuditLog khi kích hoạt OCR Full"
             print("  ✓ AuditLog ghi nhận hành động TRIGGER_OCR_FULL chính xác.")
 
@@ -329,23 +312,15 @@ async def run_e2e_tests():
         async with AsyncSessionLocal() as session:
             updated_doc = await session.get(Document, doc_uuid)
             assert updated_doc.category_id == cat_map["QUYET_DINH"].id
-            updated_meta = (
-                (await session.execute(select(DocumentMetadata).where(DocumentMetadata.document_id == doc_uuid)))
-                .scalars()
-                .first()
-            )
+            updated_meta = (await session.execute(
+                select(DocumentMetadata).where(DocumentMetadata.document_id == doc_uuid)
+            )).scalars().first()
             assert updated_meta.extra.get("doc_type_source") == "manual"
             assert updated_meta.extra.get("source") == "manual"
 
-            audit_override = (
-                (
-                    await session.execute(
-                        select(AuditLog).where(AuditLog.resource_id == doc_uuid, AuditLog.action == "OVERRIDE_TYPE")
-                    )
-                )
-                .scalars()
-                .first()
-            )
+            audit_override = (await session.execute(
+                select(AuditLog).where(AuditLog.resource_id == doc_uuid, AuditLog.action == "OVERRIDE_TYPE")
+            )).scalars().first()
             assert audit_override is not None
             assert audit_override.detail.get("new_type") == "QUYET_DINH"
         print("  ✓ PATCH /documents/{id}/type: Ghi đè thành công sang QUYET_DINH, nguồn manual được lưu trữ bền vững.")
@@ -358,9 +333,7 @@ async def run_e2e_tests():
             json={"category_code": "CONG_VAN"},
             headers={"Authorization": f"Bearer {student_token}"},
         )
-        assert rbac_patch.status_code == 403, (
-            f"Student không được phép sửa loại văn bản, status={rbac_patch.status_code}"
-        )
+        assert rbac_patch.status_code == 403, f"Student không được phép sửa loại văn bản, status={rbac_patch.status_code}"
 
         rbac_ocr = await client.post(
             f"/api/v1/documents/{doc_uuid}/ocr-full",
@@ -377,85 +350,69 @@ async def run_e2e_tests():
         test_st_id = f"299{uuid4().hex[:5]}"
         async with AsyncSessionLocal() as session:
             # Doc 1: Khớp chính xác MSSV và tiêu đề học bổng
-            session.add(
-                Document(
-                    id=search_doc1,
-                    title=f"Quyết định khen thưởng học bổng khuyến khích {test_st_id}",
-                    original_filename="qd_hb.pdf",
-                    minio_object_key=f"test/{search_doc1}.pdf",
-                    file_type="pdf",
-                    file_size_bytes=2048,
-                    category_id=cat_map["QUYET_DINH"].id,
-                    uploaded_by=staff_user.id,
-                    ocr_status="APPROVED",
-                )
-            )
-            session.add(
-                DocumentMetadata(
-                    document_id=search_doc1,
-                    student_id=test_st_id,
-                    student_name="Nguyễn Hoàng Nam",
-                    extra={"ocr_scope": "full", "doc_type_code": "QUYET_DINH"},
-                )
-            )
-            session.add(
-                OCRResult(
-                    document_id=search_doc1,
-                    is_latest=True,
-                    raw_text=f"QUYẾT ĐỊNH KHEN THƯỞNG SINH VIÊN {test_st_id}",
-                    corrected_text=f"QUYẾT ĐỊNH KHEN THƯỞNG SINH VIÊN {test_st_id}",
-                    confidence_score=0.98,
-                    ocr_engine="vietocr",
-                    status="DONE",
-                    is_corrected=False,
-                )
-            )
+            session.add(Document(
+                id=search_doc1,
+                title=f"Quyết định khen thưởng học bổng khuyến khích {test_st_id}",
+                original_filename="qd_hb.pdf",
+                minio_object_key=f"test/{search_doc1}.pdf",
+                file_type="pdf",
+                file_size_bytes=2048,
+                category_id=cat_map["QUYET_DINH"].id,
+                uploaded_by=staff_user.id,
+                ocr_status="APPROVED",
+            ))
+            session.add(DocumentMetadata(
+                document_id=search_doc1,
+                student_id=test_st_id,
+                student_name="Nguyễn Hoàng Nam",
+                extra={"ocr_scope": "full", "doc_type_code": "QUYET_DINH"},
+            ))
+            session.add(OCRResult(
+                document_id=search_doc1,
+                is_latest=True,
+                raw_text=f"QUYẾT ĐỊNH KHEN THƯỞNG SINH VIÊN {test_st_id}",
+                corrected_text=f"QUYẾT ĐỊNH KHEN THƯỞNG SINH VIÊN {test_st_id}",
+                confidence_score=0.98,
+                ocr_engine="vietocr",
+                status="DONE",
+                is_corrected=False,
+            ))
 
             # Doc 2: Chỉ khớp một phần từ khóa
-            session.add(
-                Document(
-                    id=search_doc2,
-                    title="Thông báo kế hoạch họp xét",
-                    original_filename="tb_hop.pdf",
-                    minio_object_key=f"test/{search_doc2}.pdf",
-                    file_type="pdf",
-                    file_size_bytes=1024,
-                    category_id=cat_map["THONG_BAO"].id,
-                    uploaded_by=staff_user.id,
-                    ocr_status="APPROVED",
-                )
-            )
-            session.add(
-                DocumentMetadata(
-                    document_id=search_doc2,
-                    extra={"ocr_scope": "first_page", "doc_type_code": "THONG_BAO"},
-                )
-            )
-            session.add(
-                OCRResult(
-                    document_id=search_doc2,
-                    is_latest=True,
-                    raw_text="THÔNG BÁO VỀ CUỘC HỌP XÉT HỌC BỔNG",
-                    corrected_text="THÔNG BÁO VỀ CUỘC HỌP XÉT HỌC BỔNG",
-                    confidence_score=0.95,
-                    ocr_engine="vietocr",
-                    status="DONE",
-                    is_corrected=False,
-                )
-            )
+            session.add(Document(
+                id=search_doc2,
+                title="Thông báo kế hoạch họp xét",
+                original_filename="tb_hop.pdf",
+                minio_object_key=f"test/{search_doc2}.pdf",
+                file_type="pdf",
+                file_size_bytes=1024,
+                category_id=cat_map["THONG_BAO"].id,
+                uploaded_by=staff_user.id,
+                ocr_status="APPROVED",
+            ))
+            session.add(DocumentMetadata(
+                document_id=search_doc2,
+                extra={"ocr_scope": "first_page", "doc_type_code": "THONG_BAO"},
+            ))
+            session.add(OCRResult(
+                document_id=search_doc2,
+                is_latest=True,
+                raw_text="THÔNG BÁO VỀ CUỘC HỌP XÉT HỌC BỔNG",
+                corrected_text="THÔNG BÁO VỀ CUỘC HỌP XÉT HỌC BỔNG",
+                confidence_score=0.95,
+                ocr_engine="vietocr",
+                status="DONE",
+                is_corrected=False,
+            ))
             await session.commit()
 
         # Thực hiện tìm kiếm
-        search_res = await client.get(
-            f"/api/v1/search?q={test_st_id}+hoc+bong", headers={"Authorization": f"Bearer {staff_token}"}
-        )
+        search_res = await client.get(f"/api/v1/search?q={test_st_id}+hoc+bong", headers={"Authorization": f"Bearer {staff_token}"})
         assert search_res.status_code == 200
         s_data = search_res.json()
         assert len(s_data["results"]) > 0
         top_hit = s_data["results"][0]
-        assert str(top_hit["document_id"]) == str(search_doc1), (
-            "Tài liệu khớp chính xác MSSV và tiêu đề phải xếp hạng top 1"
-        )
+        assert str(top_hit["document_id"]) == str(search_doc1), "Tài liệu khớp chính xác MSSV và tiêu đề phải xếp hạng top 1"
         print(f"  ✓ Search Ranking: Tài liệu khớp chính xác (Score: {top_hit['score']}) được ưu tiên xếp đầu.")
 
         # Facets verification
@@ -465,11 +422,7 @@ async def run_e2e_tests():
             print("  ✓ Search Facets: Endpoint trả về cấu trúc hợp lệ.")
 
     # ── 4. Tổng kết số liệu và Viết Báo Cáo docs/doctype_e2e_report.md ─────────
-    es_status_str = (
-        "ONLINE (Native cluster)"
-        if is_es_available()
-        else "OFFLINE (Đã kiểm thử thông qua PostgreSQL / SQLite Fallback Engine)"
-    )
+    es_status_str = "ONLINE (Native cluster)" if is_es_available() else "OFFLINE (Đã kiểm thử thông qua PostgreSQL / SQLite Fallback Engine)"
 
     # Thống kê phân loại
     total_samples = len(classification_results)

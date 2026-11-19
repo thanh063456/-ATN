@@ -3,7 +3,6 @@ backend/app/core/security.py — JWT & Direct Bcrypt Password Hashing
 
 Dùng thư viện bcrypt chuẩn trực tiếp, không phụ thuộc passlib cũ.
 """
-
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -32,9 +31,7 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
 
-def create_access_token(
-    subject: str | Any, extra_claims: dict[str, Any] | None = None, expires_delta: timedelta | None = None
-) -> str:
+def create_access_token(subject: str | Any, extra_claims: dict[str, Any] | None = None, expires_delta: timedelta | None = None) -> str:
     """Tạo JWT access token có thời hạn."""
     now = datetime.now(timezone.utc)
     if expires_delta:
@@ -72,3 +69,4 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         return payload
     except jwt.PyJWTError:
         return None
+

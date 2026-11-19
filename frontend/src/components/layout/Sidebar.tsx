@@ -8,7 +8,7 @@ import {
   Users,
   FolderKanban,
   FileText,
-  UserCircle,
+  Sparkles,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/useAuthStore";
 
@@ -38,23 +38,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       highlight: true,
     },
     {
-      label: role === "STUDENT" ? "Lịch sử upload" : "Quản lý Văn bản & Hồ sơ",
-      path: "/documents",
-      icon: FileCheck2,
-      roles: ["ADMIN", "STAFF", "STUDENT"],
-      badge: role === "STUDENT" ? undefined : "CTSV",
-    },
-    {
       label: "Tra cứu toàn văn",
       path: "/search",
       icon: FileSearch,
       roles: ["ADMIN", "STAFF", "STUDENT"],
     },
     {
-      label: "Hồ sơ cá nhân",
-      path: "/profile",
-      icon: UserCircle,
+      label: role === "STUDENT" ? "Kho tài liệu công khai" : "Phê duyệt & OCR",
+      path: "/documents",
+      icon: FileCheck2,
       roles: ["ADMIN", "STAFF", "STUDENT"],
+      badge: role === "STUDENT" ? undefined : "CTSV",
     },
     {
       label: "Quản trị người dùng",
@@ -74,37 +68,66 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
 
   return (
     <aside
-      className={`h-screen sticky top-0 flex flex-col shrink-0 z-40 bg-[#0a192f] text-slate-200 border-r border-slate-800/80 transition-all duration-200 select-none ${
-        collapsed ? "w-[72px]" : "w-64"
-      }`}
+      style={{
+        width: collapsed ? "var(--sidebar-collapsed-width)" : "var(--sidebar-width)",
+        backgroundColor: "var(--bg-sidebar)",
+        color: "#ffffff",
+        height: "100vh",
+        position: "sticky",
+        top: 0,
+        display: "flex",
+        flexDirection: "column",
+        transition: "width 0.25s ease",
+        zIndex: 50,
+        flexShrink: 0,
+        borderRight: "1px solid rgba(255, 255, 255, 0.08)",
+      }}
     >
-      {/* Brand Header */}
-      <div className="h-[60px] flex items-center gap-3 px-4 border-b border-slate-800/80 shrink-0">
-        <div className="w-8 h-8 rounded-md bg-dlu-navy-800 border border-sky-400/30 flex items-center justify-center shrink-0 shadow-sm text-sky-300">
-          <FileText size={17} />
+      {/* Brand Logo */}
+      <div
+        style={{
+          height: "var(--header-height)",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          padding: "0 1.25rem",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+        }}
+      >
+        <div
+          style={{
+            width: "36px",
+            height: "36px",
+            borderRadius: "10px",
+            background: "linear-gradient(135deg, #6366f1 0%, #4338ca 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            boxShadow: "0 4px 10px rgba(99, 102, 241, 0.4)",
+          }}
+        >
+          <FileText size={20} color="#ffffff" />
         </div>
         {!collapsed && (
-          <div className="overflow-hidden leading-tight">
-            <div className="font-bold text-xs tracking-wider text-white uppercase font-sans">
-              Đại học Đà Lạt
+          <div style={{ overflow: "hidden", whiteSpace: "nowrap" }}>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", letterSpacing: "-0.01em" }}>
+              DocuCTSV <span style={{ color: "#818cf8", fontSize: "0.75rem" }}>OCR</span>
             </div>
-            <div className="text-[11px] text-slate-400 font-medium truncate">
-              Phòng Công tác Sinh viên
+            <div style={{ fontSize: "0.6875rem", color: "var(--gray-400)" }}>
+              Số hóa Tài liệu CTSV
             </div>
           </div>
         )}
       </div>
 
       {/* Nav List */}
-      <nav className="flex-1 px-2.5 py-4 flex flex-col gap-1 overflow-y-auto">
-        <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-1">
-          {!collapsed ? "Hồ sơ & Nghiệp vụ" : "•••"}
+      <div style={{ flex: 1, padding: "1rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.35rem", overflowY: "auto" }}>
+        <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--gray-500)", textTransform: "uppercase", padding: "0.5rem 0.75rem", letterSpacing: "0.05em" }}>
+          {!collapsed ? "Menu Chức năng" : "•••"}
         </div>
-
         {allowedNav.map((item) => {
-          const isActive =
-            location.pathname === item.path ||
-            (item.path !== "/" && location.pathname.startsWith(item.path));
+          const isActive = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
           const Icon = item.icon;
 
           return (
@@ -112,44 +135,57 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
               key={item.path}
               to={item.path}
               title={collapsed ? item.label : undefined}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors relative group ${
-                isActive
-                  ? "bg-white/10 text-white font-semibold border-l-2 border-sky-400 shadow-sm"
-                  : "text-slate-400 hover:text-slate-100 hover:bg-white/5 border-l-2 border-transparent"
-              }`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.85rem",
+                padding: "0.65rem 0.85rem",
+                borderRadius: "var(--radius-md)",
+                fontSize: "0.875rem",
+                fontWeight: isActive ? 600 : 500,
+                color: isActive ? "#ffffff" : "var(--gray-400)",
+                backgroundColor: isActive
+                  ? "rgba(99, 102, 241, 0.2)"
+                  : "transparent",
+                border: isActive ? "1px solid rgba(99, 102, 241, 0.4)" : "1px solid transparent",
+                transition: "all 0.15s ease",
+              }}
             >
-              <Icon
-                size={17}
-                className={`shrink-0 transition-colors ${
-                  isActive ? "text-sky-400" : "text-slate-400 group-hover:text-slate-200"
-                }`}
-              />
-
+              <Icon size={19} color={isActive ? "#818cf8" : "currentColor"} />
               {!collapsed && (
-                <span className="flex-1 truncate tracking-normal">
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {item.label}
                 </span>
               )}
-
               {!collapsed && item.badge && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60 leading-none">
+                <span
+                  style={{
+                    fontSize: "0.6875rem",
+                    padding: "0.1rem 0.45rem",
+                    borderRadius: "4px",
+                    backgroundColor: "rgba(99, 102, 241, 0.3)",
+                    color: "#a5b4fc",
+                    fontWeight: 700,
+                  }}
+                >
                   {item.badge}
                 </span>
               )}
             </Link>
           );
         })}
-      </nav>
+      </div>
 
-      {/* Footer System Info */}
+      {/* Pro tip card / Model badge */}
       {!collapsed && (
-        <div className="p-3 m-2.5 rounded-md bg-white/[0.03] border border-white/5 text-slate-400">
-          <div className="text-[11px] font-semibold text-slate-300">
-            Kho lưu trữ số CTSV
+        <div style={{ padding: "1rem", margin: "0.75rem", backgroundColor: "rgba(255, 255, 255, 0.04)", borderRadius: "var(--radius-md)", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
+            <Sparkles size={16} color="#818cf8" />
+            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#e2e8f0" }}>VietOCR Engine v2.0</span>
           </div>
-          <div className="text-[10px] text-slate-500 mt-0.5">
-            Trường Đại học Đà Lạt
-          </div>
+          <p style={{ fontSize: "0.6875rem", color: "var(--gray-400)", lineHeight: 1.4 }}>
+            Hỗ trợ nhận dạng văn bản tiếng Việt & tìm kiếm Elasticsearch.
+          </p>
         </div>
       )}
     </aside>

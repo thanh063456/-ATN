@@ -11,17 +11,18 @@ Cách dùng:
 """
 
 import argparse
-import re
 import sys
+import os
+import re
 import unicodedata
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 
 # Ensure UTF-8 output on Windows
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 import fitz  # PyMuPDF
 
@@ -29,19 +30,23 @@ import fitz  # PyMuPDF
 def sanitize_filename(name: str, max_length: int = 50) -> str:
     """Chuẩn hóa tên file an toàn cho hệ điều hành, bỏ dấu tiếng Việt và ký tự đặc biệt."""
     # Bỏ dấu tiếng Việt
-    nfkd = unicodedata.normalize("NFKD", name)
+    nfkd = unicodedata.normalize('NFKD', name)
     no_accent = "".join([c for c in nfkd if not unicodedata.combining(c)])
-    no_accent = no_accent.replace("đ", "d").replace("Đ", "D")
+    no_accent = no_accent.replace('đ', 'd').replace('Đ', 'D')
     # Bỏ ký tự đặc biệt
-    clean = re.sub(r"[^a-zA-Z0-9_\-]", "_", no_accent)
-    clean = re.sub(r"_+", "_", clean).strip("_")
+    clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', no_accent)
+    clean = re.sub(r'_+', '_', clean).strip('_')
     if len(clean) > max_length:
-        clean = clean[:max_length].rstrip("_")
+        clean = clean[:max_length].rstrip('_')
     return clean or "doc"
 
 
 def extract_pages_from_pdf(
-    pdf_path: Path, output_dir: Path, prefix: str, dpi: int = 200, max_pages: int = 50
+    pdf_path: Path,
+    output_dir: Path,
+    prefix: str,
+    dpi: int = 200,
+    max_pages: int = 50
 ) -> List[Path]:
     """
     Render từng trang của PDF thành ảnh PNG.
@@ -58,14 +63,14 @@ def extract_pages_from_pdf(
         for page_idx in range(num_pages):
             page = doc.load_page(page_idx)
             pix = page.get_pixmap(matrix=mat, alpha=False)
-
+            
             img_filename = f"{prefix}_p{page_idx + 1:02d}.png"
             img_path = output_dir / img_filename
-
+            
             # Lưu ảnh
             pix.save(str(img_path))
             saved_images.append(img_path)
-
+            
         doc.close()
     except Exception as e:
         print(f"[WARN] Lỗi khi xử lý {pdf_path.name}: {e}", file=sys.stderr)
@@ -76,17 +81,29 @@ def extract_pages_from_pdf(
 def main():
     parser = argparse.ArgumentParser(description="Trích xuất trang PDF thành ảnh chất lượng cao")
     parser.add_argument(
-        "--input",
-        "-i",
+        "--input", "-i",
         type=str,
         default=r"d:\Đồ án tốt nghiệp\CTSV_output",
-        help="Đường dẫn thư mục chứa PDF hoặc file PDF đơn",
+        help="Đường dẫn thư mục chứa PDF hoặc file PDF đơn"
     )
     parser.add_argument(
-        "--output", "-o", type=str, default=r"d:\Đồ án tốt nghiệp\ĐATN\dataset\images", help="Thư mục lưu ảnh đầu ra"
+        "--output", "-o",
+        type=str,
+        default=r"d:\Đồ án tốt nghiệp\ĐATN\dataset\images",
+        help="Thư mục lưu ảnh đầu ra"
     )
-    parser.add_argument("--dpi", type=int, default=200, help="Độ phân giải DPI (mặc định 200 DPI cho OCR)")
-    parser.add_argument("--limit", type=int, default=0, help="Giới hạn số file PDF cần xử lý (0 = tất cả)")
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=200,
+        help="Độ phân giải DPI (mặc định 200 DPI cho OCR)"
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Giới hạn số file PDF cần xử lý (0 = tất cả)"
+    )
 
     args = parser.parse_args()
     input_path = Path(args.input)
@@ -109,7 +126,7 @@ def main():
         return
 
     if args.limit > 0:
-        pdf_files = pdf_files[: args.limit]
+        pdf_files = pdf_files[:args.limit]
 
     print(f"============================================================")
     print(f" BẮT ĐẦU TRÍCH XUẤT ẢNH TRANG TỪ PDF")
@@ -128,14 +145,17 @@ def main():
         file_clean = sanitize_filename(pdf.stem, max_length=30)
         prefix = f"CTSV_{idx:03d}_{folder_clean}_{file_clean}"
 
-        images = extract_pages_from_pdf(pdf_path=pdf, output_dir=output_dir, prefix=prefix, dpi=args.dpi)
+        images = extract_pages_from_pdf(
+            pdf_path=pdf,
+            output_dir=output_dir,
+            prefix=prefix,
+            dpi=args.dpi
+        )
         if images:
             success_docs += 1
             total_pages += len(images)
             if idx % 10 == 0 or idx == len(pdf_files):
-                print(
-                    f"[{idx:03d}/{len(pdf_files):03d}] Đã xử lý: {pdf.name} -> {len(images)} trang (Tổng: {total_pages} trang)"
-                )
+                print(f"[{idx:03d}/{len(pdf_files):03d}] Đã xử lý: {pdf.name} -> {len(images)} trang (Tổng: {total_pages} trang)")
 
     print(f"============================================================")
     print(f" HOÀN TẤT TRÍCH XUẤT:")

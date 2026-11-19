@@ -1,9 +1,9 @@
 from app.worker.celery_app import celery_app
 from app.worker.tasks import (
-    async_process_all_ocr_engines,
     async_process_ocr,
-    process_all_ocr_task,
     process_ocr_task,
+    async_process_all_ocr_engines,
+    process_all_ocr_task,
 )
 
 # Alias app = celery_app for celery CLI
@@ -17,3 +17,4 @@ __all__ = [
     "async_process_all_ocr_engines",
     "process_all_ocr_task",
 ]
+

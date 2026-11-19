@@ -7,7 +7,6 @@ Cung cấp:
 
 Ref: .ai/DECISIONS.md ADR-006 (Object Storage), .ai/CODING_RULES.md (singleton pattern)
 """
-
 from functools import lru_cache
 
 from loguru import logger
@@ -24,14 +23,11 @@ def _create_admin_client() -> Client:
         key = settings.supabase_service_key
         if not key or not url or "YOUR_PROJECT_REF" in url:
             logger.warning("Supabase credentials not configured. Running in offline/local fallback mode.")
-
             class _DummyClient:
                 def __getattr__(self, name):
                     return self
-
                 def __call__(self, *args, **kwargs):
                     return self
-
             return _DummyClient()  # type: ignore
 
         client = create_client(
@@ -42,14 +38,11 @@ def _create_admin_client() -> Client:
         return client
     except Exception as exc:
         logger.warning("Failed to initialize Supabase client ({err}), creating dummy client", err=str(exc))
-
         class _DummyClient:
             def __getattr__(self, name):
                 return self
-
             def __call__(self, *args, **kwargs):
                 return self
-
         return _DummyClient()  # type: ignore
 
 

@@ -1,0 +1,131 @@
+# ==============================================================================
+# docker-compose.cluster.yml — Elasticsearch 8 High-Availability 3-Node Cluster
+# DocuCTSV — Hệ thống Số hóa & OCR Hồ sơ Sinh viên (Trường Đại học Đà Lạt)
+# ==============================================================================
+
+version: "3.8"
+
+networks:
+  ctsv_cluster_net:
+    driver: bridge
+
+volumes:
+  es_data01:
+    driver: local
+  es_data02:
+    driver: local
+  es_data03:
+    driver: local
+  kibana_data:
+    driver: local
+
+services:
+  # ── Node 1: Master / Data Node ─────────────────────────────────────────────
+  es01:
+    build:
+      context: .
+      dockerfile: docker/elasticsearch/Dockerfile
+    image: docuctsv/elasticsearch:8.12.0-vietnamese
+    container_name: ctsv_es01
+    restart: unless-stopped
+    environment:
+      - node.name=es01
+      - cluster.name=ctsv-cluster
+      - discovery.seed_hosts=es02,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - es_data01:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ctsv_cluster_net
+
+  # ── Node 2: Data Node ───────────────────────────────────────────────────────
+  es02:
+    build:
+      context: .
+      dockerfile: docker/elasticsearch/Dockerfile
+    image: docuctsv/elasticsearch:8.12.0-vietnamese
+    container_name: ctsv_es02
+    restart: unless-stopped
+    environment:
+      - node.name=es02
+      - cluster.name=ctsv-cluster
+      - discovery.seed_hosts=es01,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - es_data02:/usr/share/elasticsearch/data
+    networks:
+      - ctsv_cluster_net
+
+  # ── Node 3: Data Node ───────────────────────────────────────────────────────
+  es03:
+    build:
+      context: .
+      dockerfile: docker/elasticsearch/Dockerfile
+    image: docuctsv/elasticsearch:8.12.0-vietnamese
+    container_name: ctsv_es03
+    restart: unless-stopped
+    environment:
+      - node.name=es03
+      - cluster.name=ctsv-cluster
+      - discovery.seed_hosts=es01,es02
+      - cluster.initial_master_nodes=es01,es02,es03
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - es_data03:/usr/share/elasticsearch/data
+    networks:
+      - ctsv_cluster_net
+
+  # ── Kibana Dashboard ────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: ctsv_kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://es01:9200
+      - I18N_LOCALE=en
+    volumes:
+      - kibana_data:/usr/share/kibana/data
+    depends_on:
+      - es01
+    networks:
+      - ctsv_cluster_net
+

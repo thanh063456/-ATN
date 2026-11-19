@@ -1,9 +1,8 @@
-import glob
 import time
-
+import glob
 import torch
 from PIL import Image
-from transformers import AutoTokenizer, VisionEncoderDecoderModel, ViTImageProcessor
+from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
 
 model_name = "./models/trocr-vi/final_model"
 proc = ViTImageProcessor.from_pretrained(model_name)
@@ -28,6 +27,6 @@ with torch.inference_mode():
 t1 = time.perf_counter()
 preds1 = tok.batch_decode(gen1, skip_special_tokens=True)
 
-print(f"FP16 Greedy (beams=1) for 16 lines: {t1 - t0:.2f}s ({((t1 - t0) / 16):.3f}s/line)")
+print(f"FP16 Greedy (beams=1) for 16 lines: {t1 - t0:.2f}s ({((t1 - t0)/16):.3f}s/line)")
 for i, p in enumerate(preds1[:3]):
-    print(f"  Line {i + 1}: {p}")
+    print(f"  Line {i+1}: {p}")

@@ -3,7 +3,7 @@ backend/tests/test_ocr_service.py — OCR Service & Metadata Extraction Unit Tes
 
 Tuân thủ AAA Pattern (Arrange - Act - Assert).
 """
-
+import pytest
 from app.services.ocr_service import ocr_service
 
 

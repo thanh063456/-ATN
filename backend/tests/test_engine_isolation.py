@@ -4,22 +4,22 @@ backend/tests/test_engine_isolation.py — OCR Multi-Engine Isolation & Regressi
 Tuân thủ AAA Pattern (Arrange - Act - Assert).
 Kiểm tra tính độc lập tuyệt đối giữa các OCR engines (vietocr, trocr, tesseract).
 """
-
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import httpx
 import pytest
 import pytest_asyncio
+import httpx
+from sqlalchemy import select
+
+from app.core.constants import OCR_ENGINES
 from app.core.database import AsyncSessionLocal, init_db
 from app.core.exceptions import EngineUnavailableError
 from app.models.documents import Document
 from app.models.ocr_results import OCRResult
 from app.models.processing_jobs import ProcessingJob
-from app.models.users import User
 from app.services.document_service import DocumentService
 from app.worker.tasks import async_process_ocr
-from sqlalchemy import select
+from app.models.users import User
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -94,21 +94,16 @@ async def test_upload_creates_only_default_engine_row():
         await session.commit()
 
     with patch("app.services.storage_service.storage_service.get_file", return_value=b"%PDF-1.4 dummy"):
-        with patch(
-            "app.services.vietocr_service.vietocr_service.extract_text_from_file",
-            return_value=("VietOCR Raw Text", "VietOCR Processed Text", 0.95),
-        ):
-            with patch(
-                "app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}
-            ):
-                with patch(
-                    "app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock
-                ):
+        with patch("app.services.vietocr_service.vietocr_service.extract_text_from_file", return_value=("VietOCR Raw Text", "VietOCR Processed Text", 0.95)):
+            with patch("app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}):
+                with patch("app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock):
                     # Chạy OCR mặc định (engine=None -> vietocr)
                     await async_process_ocr(str(doc_id), engine=None)
 
     async with AsyncSessionLocal() as session:
-        res = await session.execute(select(OCRResult).where(OCRResult.document_id == doc_id))
+        res = await session.execute(
+            select(OCRResult).where(OCRResult.document_id == doc_id)
+        )
         rows = res.scalars().all()
 
         assert len(rows) == 1
@@ -152,20 +147,15 @@ async def test_reprocess_trocr_does_not_overwrite_vietocr():
         await session.commit()
 
     with patch("app.services.storage_service.storage_service.get_file", return_value=b"%PDF-1.4 dummy"):
-        with patch(
-            "app.services.trocr_service.trocr_service.extract_text_from_file",
-            return_value=("TrOCR Raw Text", "TrOCR Processed Text", 0.88),
-        ):
-            with patch(
-                "app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}
-            ):
-                with patch(
-                    "app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock
-                ):
+        with patch("app.services.trocr_service.trocr_service.extract_text_from_file", return_value=("TrOCR Raw Text", "TrOCR Processed Text", 0.88)):
+            with patch("app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}):
+                with patch("app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock):
                     await async_process_ocr(str(doc_id), engine="trocr")
 
     async with AsyncSessionLocal() as session:
-        res = await session.execute(select(OCRResult).where(OCRResult.document_id == doc_id))
+        res = await session.execute(
+            select(OCRResult).where(OCRResult.document_id == doc_id)
+        )
         rows = res.scalars().all()
 
         assert len(rows) == 2
@@ -216,12 +206,8 @@ async def test_tesseract_engine_never_calls_vietocr_service():
     with patch("app.services.storage_service.storage_service.get_file", return_value=b"%PDF-1.4 dummy"):
         with patch("app.services.tesseract_service.tesseract_service.extract_text_from_file", mock_tess):
             with patch("app.services.vietocr_service.vietocr_service.extract_text_from_file", mock_viet):
-                with patch(
-                    "app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}
-                ):
-                    with patch(
-                        "app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock
-                    ):
+                with patch("app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}):
+                    with patch("app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock):
                         await async_process_ocr(str(doc_id), engine="tesseract")
 
     # Assert tesseract was called, vietocr was NEVER called for text extraction
@@ -274,12 +260,8 @@ async def test_trocr_failure_reports_failed_and_never_copies_vietocr():
             "app.services.trocr_service.trocr_service.extract_text_from_file",
             side_effect=EngineUnavailableError("Model weights for TrOCR not found"),
         ):
-            with patch(
-                "app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}
-            ):
-                with patch(
-                    "app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock
-                ):
+            with patch("app.services.ai_service.ai_service.extract_smart_fields", new_callable=AsyncMock, return_value={}):
+                with patch("app.services.search_index_service.search_index_service.index_document", new_callable=AsyncMock):
                     # async_process_ocr handles exception for non-default engine and marks OCRResult as FAILED
                     await async_process_ocr(str(doc_id), engine="trocr")
 

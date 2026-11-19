@@ -7,13 +7,13 @@ If fields cannot be determined or dataset is empty, values remain None/null.
 Does NOT invent or guess values.
 """
 
+import os
 import csv
 import json
-import os
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Dict, List, Any, Optional
 
 FIELDNAMES = [
     "document_id",
@@ -28,7 +28,7 @@ FIELDNAMES = [
     "source",
     "annotation_status",
     "split",
-    "created_at",
+    "created_at"
 ]
 
 
@@ -51,7 +51,7 @@ def generate_inventory_records(raw_dir: str) -> List[Dict[str, Any]]:
     if not os.path.isdir(raw_dir):
         return records
 
-    files = [f for f in os.listdir(raw_dir) if not f.startswith(".")]
+    files = [f for f in os.listdir(raw_dir) if not f.startswith('.')]
     if not files:
         return records
 
@@ -77,14 +77,14 @@ def generate_inventory_records(raw_dir: str) -> List[Dict[str, Any]]:
             "file_type": ext,
             "file_size": fsize,
             "document_type": doc_type,  # None if not adhering to convention
-            "page_count": None,  # Determined during Step 2.2 processing
-            "resolution": None,  # Determined during Step 2.2 processing
-            "language": "vi",  # Vietnamese
-            "quality": None,  # Determined during Step 2.2 quality audit
+            "page_count": None,        # Determined during Step 2.2 processing
+            "resolution": None,        # Determined during Step 2.2 processing
+            "language": "vi",          # Vietnamese
+            "quality": None,           # Determined during Step 2.2 quality audit
             "source": "PHONG_CTSV_SCAN",
             "annotation_status": "UNANNOTATED",
             "split": "UNASSIGNED",
-            "created_at": created_iso,
+            "created_at": created_iso
         }
         records.append(record)
 
@@ -117,13 +117,16 @@ def generate_and_save_inventory(raw_dir: str, metadata_dir: str) -> Dict[str, An
     """Orchestrate inventory generation and export."""
     records = generate_inventory_records(raw_dir)
     paths = export_inventory(records, metadata_dir)
-    return {"count": len(records), "json_file": paths["json_path"], "csv_file": paths["csv_path"]}
+    return {
+        "count": len(records),
+        "json_file": paths["json_path"],
+        "csv_file": paths["csv_path"]
+    }
 
 
 if __name__ == "__main__":
     import sys
-
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding='utf-8')
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     raw_d = os.path.join(base_dir, "dataset", "raw")
     meta_d = os.path.join(base_dir, "dataset", "metadata")

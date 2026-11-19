@@ -6,7 +6,6 @@ QUAN TRỌNG (theo .ai/AGENTS.md):
   - PostgreSQL KHÔNG tự động trigger đẩy dữ liệu sang ES.
   - Elasticsearch không phải bản sao tức thời của PostgreSQL, mà là Search Engine chuyên dụng.
 """
-
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -15,7 +14,6 @@ try:
     from loguru import logger
 except ImportError:
     import logging
-
     logger = logging.getLogger("search_index_service")
 logger: Any = logger
 

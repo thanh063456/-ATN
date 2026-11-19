@@ -7,7 +7,6 @@ Cấu hình Elasticsearch client và khởi tạo index "documents" với Custom
 
 Ref: .ai/research/Elasticsearch.md, .ai/research/VietnameseSearch.md, ADR-005
 """
-
 import socket
 import time
 from typing import Any
@@ -22,7 +21,6 @@ try:
     from loguru import logger
 except ImportError:
     import logging
-
     logger = logging.getLogger("elasticsearch")
 logger: Any = logger
 from app.core.config import settings
@@ -91,6 +89,7 @@ async def close_es_client() -> None:
             _es_client = None
 
 
+
 # ── Index Definition & Mapping ────────────────────────────────────────────────
 INDEX_NAME = settings.es_index_documents
 
@@ -99,23 +98,34 @@ INDEX_SETTINGS: dict[str, Any] = {
     "number_of_replicas": 0,
     "analysis": {
         "filter": {
-            # Từ điển từ đồng nghĩa & viết tắt hành chính ĐH Đà Lạt & Phòng CTSV
-            # Bao gồm cả dạng có dấu và không dấu để tối ưu tìm kiếm hai chiều
+            # Bộ lọc ghép từ phức tiếng Việt (Compound Shingle Filter)
+            # Giúp gom các token đơn thành cụm 2-3 từ: "học bổng", "miễn giảm học phí", "nghĩa vụ quân sự"
+            "vietnamese_compound_shingle": {
+                "type": "shingle",
+                "min_shingle_size": 2,
+                "max_shingle_size": 3,
+                "output_unigrams": True,
+            },
+            # Từ điển từ đồng nghĩa & viết tắt hành chính ĐH Đà Lạt & Phòng CTSV (Toàn diện hai chiều)
             "synonym_ctsv": {
                 "type": "synonym_graph",
                 "synonyms": [
-                    "dlu, dhdl, đhđl, đại học đà lạt, dai hoc da lat",
+                    "dlu, dhdl, đhđl, đại học đà lạt, dai hoc da lat, trường đại học đà lạt, truong dai hoc da lat",
                     "ctsv, công tác sinh viên, phòng công tác sinh viên, cong tac sinh vien, phong cong tac sinh vien",
-                    "mghp, miễn giảm học phí, mien giam hoc phi",
-                    "kkht, học bổng khuyến khích, học bổng khuyến khích học tập, hoc bong khuyen khich, hoc bong khuyen khich hoc tap",
-                    "bảo lưu, nghỉ học tạm thời, tạm dừng học tập, bao luu, nghi hoc tam thoi, tam dung hoc tap",
-                    "thôi học, xin rút hồ sơ, buộc thôi học, thoi hoc, xin rut ho so, buoc thoi hoc",
-                    "bhyt, bhxh, bảo hiểm y tế, bao hiem y te",
+                    "mghp, miễn giảm học phí, mien giam hoc phi, nghị định 81, nghi dinh 81, nd 81, nd81, nđ 81, nđ81, miễn học phí, giảm học phí",
+                    "kkht, học bổng khuyến khích, học bổng khuyến khích học tập, hoc bong khuyen khich, hoc bong khuyen khich hoc tap, quyết định 688, qđ 688, qd 688, hbkk",
+                    "bảo lưu, nghỉ học tạm thời, tạm dừng học tập, bao luu, nghi hoc tam thoi, tam dung hoc tap, điều 12, xin nghi hoc",
+                    "thôi học, xin rút hồ sơ, buộc thôi học, thoi hoc, xin rut ho so, buoc thoi hoc, xóa tên sinh viên, xoa ten",
+                    "bhyt, bhxh, bảo hiểm y tế, bảo hiểm xã hội, bao hiem y te, bao hiem xa hoi, thẻ bảo hiểm",
                     "mssv, mã sinh viên, mã số sinh viên, ma sinh vien, ma so sinh vien",
-                    "gvcn, giáo viên chủ nhiệm, giảng viên chủ nhiệm, giao vien chu nhiem, giang vien chu nhiem",
-                    "nckh, nghiên cứu khoa học, nghien cuu khoa hoc",
-                    "ctxh, công tác xã hội, cong tac xa hoi",
-                    "drl, điểm rèn luyện, diem ren luyen",
+                    "gvcn, giáo viên chủ nhiệm, giảng viên chủ nhiệm, giao vien chu nhiem, giang vien chu nhiem, cố vấn học tập",
+                    "nckh, nghiên cứu khoa học, nghien cuu khoa hoc, đề tài sinh viên",
+                    "ctxh, công tác xã hội, cong tac xa hoi, hoạt động tình nguyện",
+                    "drl, điểm rèn luyện, diem ren luyen, rèn luyện sinh viên, xếp loại rèn luyện",
+                    "tro cap xa hoi, trợ cấp xã hội, qđ 1121, qd 1121, thông tư 13, ttlt 13, sinh viên mồ côi, tàn tật",
+                    "ktx, ký túc xá, ky tuc xa, chỗ ở sinh viên, nhà trọ sinh viên, lưu trú nội trú",
+                    "nvqs, nghĩa vụ quân sự, hoãn quân sự, hoãn đi lính, tạm hoãn nghĩa vụ quân sự",
+                    "k45, k46, k47, k48, khóa 45, khóa 46, khóa 47, khóa 48",
                 ],
             },
         },
@@ -144,6 +154,12 @@ INDEX_SETTINGS: dict[str, Any] = {
                 "tokenizer": "standard",
                 "filter": ["lowercase", "synonym_ctsv", "asciifolding", "trim"],
             },
+            # 5. Phân tích cụm từ phức tiếng Việt chuyên sâu (Compound Phrases Analyzer)
+            "vietnamese_compound": {
+                "type": "custom",
+                "tokenizer": "standard",
+                "filter": ["lowercase", "synonym_ctsv", "vietnamese_compound_shingle", "trim"],
+            },
         },
     },
 }
@@ -153,7 +169,7 @@ INDEX_MAPPINGS: dict[str, Any] = {
         "document_id": {"type": "keyword"},
         "title": {
             "type": "text",
-            "analyzer": "vietnamese_exact",
+            "analyzer": "vietnamese_compound",
             "search_analyzer": "vietnamese_search_synonym",
             "fields": {
                 "ascii": {
@@ -161,12 +177,16 @@ INDEX_MAPPINGS: dict[str, Any] = {
                     "analyzer": "vietnamese_ascii",
                     "search_analyzer": "vietnamese_search_synonym_ascii",
                 },
+                "exact": {
+                    "type": "text",
+                    "analyzer": "vietnamese_exact",
+                },
                 "keyword": {"type": "keyword", "ignore_above": 256},
             },
         },
         "content": {
             "type": "text",
-            "analyzer": "vietnamese_exact",
+            "analyzer": "vietnamese_compound",
             "search_analyzer": "vietnamese_search_synonym",
             "term_vector": "with_positions_offsets",
             "fields": {
@@ -176,11 +196,16 @@ INDEX_MAPPINGS: dict[str, Any] = {
                     "search_analyzer": "vietnamese_search_synonym_ascii",
                     "term_vector": "with_positions_offsets",
                 },
+                "exact": {
+                    "type": "text",
+                    "analyzer": "vietnamese_exact",
+                    "term_vector": "with_positions_offsets",
+                },
             },
         },
         "content_corrected": {
             "type": "text",
-            "analyzer": "vietnamese_exact",
+            "analyzer": "vietnamese_compound",
             "search_analyzer": "vietnamese_search_synonym",
             "term_vector": "with_positions_offsets",
             "fields": {
@@ -188,6 +213,11 @@ INDEX_MAPPINGS: dict[str, Any] = {
                     "type": "text",
                     "analyzer": "vietnamese_ascii",
                     "search_analyzer": "vietnamese_search_synonym_ascii",
+                    "term_vector": "with_positions_offsets",
+                },
+                "exact": {
+                    "type": "text",
+                    "analyzer": "vietnamese_exact",
                     "term_vector": "with_positions_offsets",
                 },
             },
@@ -229,11 +259,28 @@ INDEX_MAPPINGS: dict[str, Any] = {
         "priority_score": {"type": "integer"},
         "metadata_extra": {"type": "object", "dynamic": True},
         "title_suggest": {"type": "search_as_you_type"},
+        # Native kNN Vector Search (HNSW - Hierarchical Navigable Small World)
         "content_vector": {
             "type": "dense_vector",
             "dims": 768,
             "index": True,
             "similarity": "cosine",
+            "index_options": {
+                "type": "hnsw",
+                "m": 16,
+                "ef_construction": 100,
+            },
+        },
+        "title_vector": {
+            "type": "dense_vector",
+            "dims": 768,
+            "index": True,
+            "similarity": "cosine",
+            "index_options": {
+                "type": "hnsw",
+                "m": 16,
+                "ef_construction": 100,
+            },
         },
         # Part C & Document Classification fields
         "doc_type_code": {"type": "keyword"},

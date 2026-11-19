@@ -1,9 +1,8 @@
 """backend/app/models/document_metadata.py — Bảng `document_metadata` (1:1 với documents)"""
-
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, ForeignKey, Index, String, Uuid
+from sqlalchemy import Date, ForeignKey, Index, JSON, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -12,9 +11,13 @@ from app.core.database import Base
 
 class DocumentMetadata(Base):
     __tablename__ = "document_metadata"
-    __table_args__ = (Index("idx_document_metadata_student_id", "student_id"),)
+    __table_args__ = (
+        Index("idx_document_metadata_student_id", "student_id"),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     # 1:1 — document_id UNIQUE
     document_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -27,8 +30,12 @@ class DocumentMetadata(Base):
     document_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     document_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     # Relationships
     document: Mapped["Document"] = relationship("Document", back_populates="metadata_")

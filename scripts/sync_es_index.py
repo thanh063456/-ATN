@@ -11,7 +11,6 @@ Hỗ trợ:
 Sử dụng:
     python scripts/sync_es_index.py [--recreate] [--batch-size 100]
 """
-
 import argparse
 import asyncio
 import os
@@ -43,7 +42,6 @@ try:
     from loguru import logger
 except ImportError:
     import logging
-
     logger = logging.getLogger("sync_es_index")
 logger: Any = logger
 from sqlalchemy import select
@@ -59,20 +57,13 @@ try:
 except ImportError:
     from backend.app.core.config import settings
     from backend.app.core.database import AsyncSessionLocal
-    from backend.app.core.elasticsearch import (
-        INDEX_MAPPINGS,
-        INDEX_NAME,
-        INDEX_SETTINGS,
-        get_es_client,
-        is_es_available,
-    )
+    from backend.app.core.elasticsearch import INDEX_MAPPINGS, INDEX_NAME, INDEX_SETTINGS, get_es_client, is_es_available
     from backend.app.models.documents import Document
+    from backend.app.models.ocr_results import OCRResult
     from backend.app.services.embedding_service import embedding_service
 
 
-async def sync_all_documents(
-    recreate: bool = False, batch_size: int = 100, include_deleted: bool = False
-) -> dict[str, Any]:
+async def sync_all_documents(recreate: bool = False, batch_size: int = 100, include_deleted: bool = False) -> dict[str, Any]:
     """Đồng bộ toàn bộ tài liệu từ PostgreSQL sang Elasticsearch."""
     t0 = time.perf_counter()
 
@@ -118,11 +109,14 @@ async def sync_all_documents(
     # 2. Đọc dữ liệu từ PostgreSQL
     logger.info("Đang nạp danh sách tài liệu từ cơ sở dữ liệu PostgreSQL...")
     async with AsyncSessionLocal() as session:
-        stmt = select(Document).options(
-            selectinload(Document.category),
-            selectinload(Document.metadata_),
-            selectinload(Document.uploader),
-            selectinload(Document.ocr_results),
+        stmt = (
+            select(Document)
+            .options(
+                selectinload(Document.category),
+                selectinload(Document.metadata_),
+                selectinload(Document.uploader),
+                selectinload(Document.ocr_results),
+            )
         )
         if not include_deleted:
             stmt = stmt.where(Document.is_deleted == False)
@@ -217,7 +211,7 @@ async def sync_all_documents(
             failed_count += failed if isinstance(failed, int) else (len(failed) if isinstance(failed, list) else 0)
             logger.info(f"Đã lập chỉ mục {success_count}/{total_docs} tài liệu...")
         except Exception as exc:
-            logger.error(f"Lỗi khi bulk index lô {i}-{i + batch_size}: {exc}")
+            logger.error(f"Lỗi khi bulk index lô {i}-{i+batch_size}: {exc}")
             failed_count += len(chunk)
 
     # Làm tươi index để tìm kiếm thấy ngay

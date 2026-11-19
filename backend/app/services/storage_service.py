@@ -9,7 +9,6 @@ API mapping MinIO → Supabase:
   get_object()    → storage.from_(bucket).download(path)
   remove_object() → storage.from_(bucket).remove([path])
 """
-
 import io
 import os
 import uuid
@@ -23,7 +22,9 @@ from app.core.config import settings
 from app.core.exceptions import StorageException
 
 # Local fallback directory (khi Supabase offline hoặc chạy offline)
-LOCAL_STORAGE_DIR = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../uploads")))
+LOCAL_STORAGE_DIR = Path(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../uploads"))
+)
 
 
 class StorageService:
@@ -43,7 +44,6 @@ class StorageService:
         """Khởi tạo Supabase client lazy (chỉ import khi cần)."""
         try:
             from app.core.supabase_client import supabase_admin
-
             self._client = supabase_admin
             logger.info("Supabase Storage client ready.")
         except Exception as exc:
@@ -86,8 +86,8 @@ class StorageService:
         Supabase Storage yêu cầu key chỉ chứa ASCII — tên file tiếng Việt/Unicode
         được chuyển sang ASCII (unidecode) trước khi tạo key.
         """
-        import re
         import unicodedata
+        import re
 
         now = datetime.now()
         file_uuid = uuid.uuid4()
@@ -221,7 +221,6 @@ class StorageService:
                     )
                     if attempt < 3:
                         import time
-
                         time.sleep(0.4 * attempt)
 
             if last_err:
@@ -266,13 +265,14 @@ class StorageService:
         if self._client:
             for attempt in range(1, 3):
                 try:
-                    res = self._client.storage.from_(bucket).create_signed_url(object_key, expires_in)
+                    res = self._client.storage.from_(bucket).create_signed_url(
+                        object_key, expires_in
+                    )
                     return res.get("signedURL")
                 except Exception as exc:
                     logger.warning("Could not create signed URL (attempt {att}/2): {err}", att=attempt, err=str(exc))
                     if attempt < 2:
                         import time
-
                         time.sleep(0.3)
         return None
 

@@ -16,28 +16,32 @@ export const Card: React.FC<CardProps> = ({
   className = "",
   ...props
 }) => {
-  const paddingClasses = {
-    none: "p-0",
-    sm: "p-3 sm:p-4",
-    md: "p-4 sm:p-6",
-    lg: "p-6 sm:p-8",
-  }[padding];
+  const paddingMap = {
+    none: "0",
+    sm: "1rem",
+    md: "1.5rem",
+    lg: "2rem",
+  };
 
-  const shadowClasses = {
-    none: "shadow-none",
-    sm: "shadow-paper",
-    md: "shadow-paper-hover",
-    lg: "shadow-paper-lg",
-  }[shadow];
-
-  const hoverClass = hoverable
-    ? "transition-all duration-150 hover:shadow-paper-hover hover:border-slate-300"
-    : "";
+  const shadowMap = {
+    none: "none",
+    sm: "var(--shadow-sm)",
+    md: "var(--shadow-md)",
+    lg: "var(--shadow-lg)",
+  };
 
   return (
     <div
-      className={`bg-white rounded-lg border border-slate-200/80 ${paddingClasses} ${shadowClasses} ${hoverClass} ${className}`}
-      style={style}
+      style={{
+        backgroundColor: "var(--bg-surface)",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--border-color)",
+        padding: paddingMap[padding],
+        boxShadow: shadowMap[shadow],
+        transition: hoverable ? "transform 0.2s ease, box-shadow 0.2s ease" : undefined,
+        ...style,
+      }}
+      className={`card ${hoverable ? "card-hover" : ""} ${className}`}
       {...props}
     >
       {children}

@@ -7,10 +7,10 @@ If dataset is empty, records DATASET_STATUS = NOT_PROVIDED and "No dataset avail
 Does NOT invent fake numbers.
 """
 
-import json
 import os
+import json
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Dict, Any
 
 from dataset_statistics import calculate_dataset_statistics
 
@@ -34,7 +34,7 @@ def generate_dataset_report(raw_dir: str, metadata_dir: str, stats_dir: str) -> 
         "dataset_status": status,
         "current_version": stats.get("current_version", "v0.1-draft"),
         "message": "No dataset available." if status == "NOT_PROVIDED" else "Dataset files available.",
-        "statistics": stats,
+        "statistics": stats
     }
 
     with open(report_json_path, "w", encoding="utf-8") as f:
@@ -114,12 +114,8 @@ def generate_dataset_report(raw_dir: str, metadata_dir: str, stats_dir: str) -> 
             num_files=stats["number_of_files"],
             total_size_mb=stats["file_sizes"]["total_bytes"] / (1024 * 1024),
             total_pages=stats["pages"]["total_pages"],
-            file_types_table="\n".join([f"- **{ext}**: {cnt} files" for ext, cnt in stats["file_types"].items()])
-            or "No files",
-            categories_table="\n".join(
-                [f"- **{cat}**: {cnt} docs" for cat, cnt in stats["document_categories"].items()]
-            )
-            or "No categories",
+            file_types_table="\n".join([f"- **{ext}**: {cnt} files" for ext, cnt in stats["file_types"].items()]) or "No files",
+            categories_table="\n".join([f"- **{cat}**: {cnt} docs" for cat, cnt in stats["document_categories"].items()]) or "No categories",
             train_cnt=stats["split_distribution"]["TRAIN"],
             val_cnt=stats["split_distribution"]["VAL"],
             test_cnt=stats["split_distribution"]["TEST"],
@@ -129,13 +125,15 @@ def generate_dataset_report(raw_dir: str, metadata_dir: str, stats_dir: str) -> 
     with open(report_md_path, "w", encoding="utf-8") as f:
         f.write(md_content)
 
-    return {"json_report": report_json_path, "md_report": report_md_path}
+    return {
+        "json_report": report_json_path,
+        "md_report": report_md_path
+    }
 
 
 if __name__ == "__main__":
     import sys
-
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding='utf-8')
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     raw_d = os.path.join(base_dir, "dataset", "raw")
     meta_d = os.path.join(base_dir, "dataset", "metadata")

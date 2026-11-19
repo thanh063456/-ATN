@@ -1,9 +1,7 @@
 """
 backend/tests/conftest.py — Pytest Fixtures & Test Setup
 """
-
 import os
-
 os.environ["APP_ENV"] = "development"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./.agy_runs/test.db"
 os.environ["SUPABASE_URL"] = "http://127.0.0.1:9"
@@ -14,13 +12,13 @@ os.environ["APP_SECRET_KEY"] = "isolated_test_app_secret_key_32_chars_minimum_he
 # Ensure test directory exists
 os.makedirs(".agy_runs", exist_ok=True)
 
-import httpx
 import pytest
 import pytest_asyncio
-from app.core.elasticsearch import is_es_available
+import httpx
 from app.core.security import create_access_token
-from app.main import create_app
 from httpx import ASGITransport
+from app.main import create_app
+from app.core.elasticsearch import is_es_available
 
 
 def pytest_configure(config):
@@ -37,7 +35,6 @@ def pytest_runtest_setup(item):
 async def async_client() -> httpx.AsyncClient:
     """Async test client kết nối trực tiếp app FastAPI in-memory."""
     from app.core.database import init_db
-
     await init_db()
     app = create_app()
     transport = ASGITransport(app=app)

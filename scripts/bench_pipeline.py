@@ -1,8 +1,8 @@
-import argparse
-import json
 import os
 import sys
 import time
+import json
+import argparse
 from pathlib import Path
 
 # Thêm đường dẫn tới backend vào sys.path để import
@@ -10,8 +10,8 @@ backend_dir = Path(__file__).parent.parent / "backend"
 sys.path.insert(0, str(backend_dir))
 
 from app.services.vietocr_service import vietocr_service
+from app.services.trocr_service import trocr_service
 from PIL import Image
-
 
 def get_files_to_test(data_dir: Path):
     pdf_files = list(data_dir.rglob("*.pdf"))
@@ -20,24 +20,19 @@ def get_files_to_test(data_dir: Path):
     # Fallback to PNGs
     return list(data_dir.rglob("*.png"))
 
-
 def compute_cer(hyp: str, ref: str) -> float:
     import Levenshtein
-
     if not ref:
         return 1.0 if hyp else 0.0
     return Levenshtein.distance(hyp, ref) / len(ref)
 
-
 def compute_wer(hyp: str, ref: str) -> float:
     import Levenshtein
-
     hyp_words = hyp.split()
     ref_words = ref.split()
     if not ref_words:
         return 1.0 if hyp_words else 0.0
     return Levenshtein.distance(hyp_words, ref_words) / len(ref_words)
-
 
 def run_benchmark(data_dir: Path):
     print(f"Running benchmark on {data_dir}...")
@@ -58,12 +53,12 @@ def run_benchmark(data_dir: Path):
 
     # Sort files
     files.sort()
-
+    
     t0 = time.time()
     extracted_texts = []
     total_crops = 0
     total_junk = 0
-
+    
     # Process files
     for f in files:
         if f.suffix.lower() == ".pdf":
@@ -73,7 +68,7 @@ def run_benchmark(data_dir: Path):
             img = Image.open(f).convert("RGB")
             raw, proc = vietocr_service._ocr_image(img, is_first_page=True)
             extracted_texts.append(proc)
-
+            
         # Parse debug dump if available
         dump_path = data_dir / f"{f.stem}_dump.json"
         if dump_path.exists():
@@ -84,14 +79,13 @@ def run_benchmark(data_dir: Path):
 
     total_time = time.time() - t0
     final_text = "\n\n".join(extracted_texts).strip()
-
+    
     cer = compute_cer(final_text, gold_text)
     wer = compute_wer(final_text, gold_text)
-
+    
     # Check missing lines
     missing_lines = []
     import Levenshtein
-
     hyp_lines = [line.strip() for line in final_text.split("\n") if line.strip()]
     for g_line in gold_lines:
         best_match = 0
@@ -113,28 +107,26 @@ def run_benchmark(data_dir: Path):
     for ml in missing_lines:
         print(f"  - {ml}")
     print("-" * 50)
-
+    
     return {
         "time": total_time,
         "crops": total_crops,
         "junk": total_junk,
         "cer": cer,
         "wer": wer,
-        "missing": len(missing_lines),
+        "missing": len(missing_lines)
     }
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=str, default="backend/tests/data/thong_bao_1413")
     args = parser.parse_args()
-
+    
     try:
         import Levenshtein
     except ImportError:
         import subprocess
-
         subprocess.check_call([sys.executable, "-m", "pip", "install", "Levenshtein"])
-
+        
     os.environ["OCR_DEBUG_DUMP"] = "1"
     run_benchmark(Path(args.data_dir))

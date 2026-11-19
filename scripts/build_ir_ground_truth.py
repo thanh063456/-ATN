@@ -7,7 +7,6 @@ Kết quả lưu vào `dataset/ir_ground_truth.json`.
 
 Ref: tests/OCRTest.md, tests/PerformanceTest.md
 """
-
 import argparse
 import asyncio
 import json
@@ -22,7 +21,6 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from elasticsearch import AsyncElasticsearch
-
 from backend.app.core.config import settings
 
 # 25 Queries đa dạng độ khó: 10 Dễ, 10 Khó, 5 Âm tính (Negative)
@@ -118,6 +116,7 @@ BENCHMARK_QUERIES: list[dict[str, Any]] = [
         "target_category": "MIEN_GIAM_HOC_PHI",
         "must_contain": ["hỗ trợ", "chi phí học tập"],
     },
+
     # ── 10 QUERY KHÓ (Viết tắt, không dấu, từ đồng nghĩa, cấu trúc phức) ─────
     {
         "id": "Q11",
@@ -209,6 +208,7 @@ BENCHMARK_QUERIES: list[dict[str, Any]] = [
         "target_category": "MIEN_GIAM_HOC_PHI",
         "must_contain": ["học phí", "hộ nghèo", "trợ cấp"],
     },
+
     # ── 5 QUERY ÂM TÍNH (NEGATIVE: Không có tài liệu nào liên quan) ───────────
     {
         "id": "Q21",
@@ -265,7 +265,11 @@ async def build_ground_truth(interactive: bool = False) -> dict:
     es = AsyncElasticsearch(hosts=[settings.es_url])
 
     # Lấy toàn bộ danh sách tài liệu hiện có trong index
-    res = await es.search(index=settings.es_index_documents, size=1000, query={"match_all": {}})
+    res = await es.search(
+        index=settings.es_index_documents,
+        size=1000,
+        query={"match_all": {}}
+    )
     hits = res["hits"]["hits"]
     print(f"Loaded {len(hits)} indexed documents from Elasticsearch.")
 
@@ -291,9 +295,7 @@ async def build_ground_truth(interactive: bool = False) -> dict:
 
                 is_match = False
                 must_contain_raw = q_spec.get("must_contain")
-                must_contain: list[str] = (
-                    [str(x) for x in must_contain_raw] if isinstance(must_contain_raw, list) else []
-                )
+                must_contain: list[str] = [str(x) for x in must_contain_raw] if isinstance(must_contain_raw, list) else []
 
                 if q_spec.get("target_category") and cat == q_spec.get("target_category"):
                     is_match = True
@@ -305,22 +307,22 @@ async def build_ground_truth(interactive: bool = False) -> dict:
                 if is_match and doc_id:
                     relevant_ids.append(str(doc_id))
 
-        ground_truth_dataset.append(
-            {
-                "id": qid,
-                "type": qtype,
-                "query": qtext,
-                "fuzzy": q_spec["fuzzy"],
-                "description": q_spec["description"],
-                "total_relevant_in_index": len(relevant_ids),
-                "relevant_doc_ids": relevant_ids,
-            }
-        )
+        ground_truth_dataset.append({
+            "id": qid,
+            "type": qtype,
+            "query": qtext,
+            "fuzzy": q_spec["fuzzy"],
+            "description": q_spec["description"],
+            "total_relevant_in_index": len(relevant_ids),
+            "relevant_doc_ids": relevant_ids,
+        })
 
     await es.close()
 
     output_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dataset", "ir_ground_truth.json"
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "dataset",
+        "ir_ground_truth.json"
     )
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 

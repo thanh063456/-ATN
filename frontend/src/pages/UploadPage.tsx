@@ -5,8 +5,10 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
+  Sparkles,
   ArrowRight,
   Clock,
+  Loader2,
   Plus,
   Trash2,
   FileText,
@@ -38,8 +40,8 @@ interface QueuedFile {
 
 const getFileIcon = (filename: string) => {
   const ext = filename.split(".").pop()?.toLowerCase();
-  if (ext === "pdf") return <FileText size={18} className="text-rose-600" />;
-  return <Image size={18} className="text-dlu-navy-700" />;
+  if (ext === "pdf") return <FileText size={20} color="var(--danger-500)" />;
+  return <Image size={20} color="var(--primary-500)" />;
 };
 
 const formatSize = (bytes: number) => {
@@ -48,11 +50,11 @@ const formatSize = (bytes: number) => {
 };
 
 const StatusBadge: React.FC<{ status: FileStatus; progress: number }> = ({ status, progress }) => {
-  const styles: Record<FileStatus, string> = {
-    pending: "bg-slate-100 text-slate-600 border-slate-200",
-    uploading: "bg-sky-50 text-sky-800 border-sky-200",
-    success: "bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold",
-    error: "bg-rose-50 text-rose-800 border-rose-200 font-semibold",
+  const styles: Record<FileStatus, React.CSSProperties> = {
+    pending: { backgroundColor: "#f3f4f6", color: "#6b7280" },
+    uploading: { backgroundColor: "var(--primary-50)", color: "var(--primary-700)" },
+    success: { backgroundColor: "#d1fae5", color: "#065f46" },
+    error: { backgroundColor: "#fee2e2", color: "#991b1b" },
   };
   const labels: Record<FileStatus, string> = {
     pending: "Chờ upload",
@@ -61,15 +63,25 @@ const StatusBadge: React.FC<{ status: FileStatus; progress: number }> = ({ statu
     error: "Lỗi",
   };
   const icons: Record<FileStatus, React.ReactNode> = {
-    pending: <Clock size={11} />,
-    uploading: <span className="loading loading-spinner loading-xs text-current" />,
-    success: <CheckCircle2 size={11} />,
-    error: <AlertCircle size={11} />,
+    pending: <Clock size={12} />,
+    uploading: <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />,
+    success: <CheckCircle2 size={12} />,
+    error: <AlertCircle size={12} />,
   };
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border leading-none ${styles[status]}`}
+      style={{
+        ...styles[status],
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        padding: "2px 8px",
+        borderRadius: "9999px",
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+      }}
     >
       {icons[status]}
       {labels[status]}
@@ -121,6 +133,7 @@ export const UploadPage: React.FC = () => {
           errors.push(`"${file.name}" — vượt quá ${MAX_SIZE_MB}MB.`);
           continue;
         }
+        // skip duplicates
         const alreadyIn = queue.some((q) => q.file.name === file.name && q.file.size === file.size);
         if (alreadyIn) continue;
 
@@ -157,8 +170,10 @@ export const UploadPage: React.FC = () => {
     [validateAndAdd, addToast]
   );
 
+  // Lắng nghe sự kiện dán file / ảnh từ Clipboard (Ctrl + V)
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
+      // Bỏ qua nếu người dùng đang gõ vào input hoặc textarea
       const target = e.target as HTMLElement;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
         return;
@@ -175,6 +190,7 @@ export const UploadPage: React.FC = () => {
           const file = item.getAsFile();
           if (file) {
             let processedFile = file;
+            // Nếu ảnh chụp màn hình dán trực tiếp tên mặc định là image.png
             if (file.name === "image.png" || !file.name || file.name === "blob") {
               const now = new Date();
               const timestamp = `${now.getHours()}${now.getMinutes()}${now.getSeconds()}_${now.getDate()}${now.getMonth() + 1}`;
@@ -207,10 +223,7 @@ export const UploadPage: React.FC = () => {
     };
   }, [validateAndAdd, addToast]);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -236,6 +249,7 @@ export const UploadPage: React.FC = () => {
     const shouldMerge = mergeImages && currentPendingImages.length >= 2;
 
     if (shouldMerge) {
+      // Sắp xếp tự nhiên theo tên file / số thứ tự trang
       const sortedImages = [...currentPendingImages].sort((a, b) =>
         a.file.name.localeCompare(b.file.name, undefined, { numeric: true, sensitivity: "base" })
       );
@@ -266,6 +280,7 @@ export const UploadPage: React.FC = () => {
         failCount += sortedImages.length;
       }
 
+      // Xử lý các file còn lại nếu có (ví dụ file PDF đi kèm)
       const nonImages = pending.filter((q) => !isImageFile(q.file.name));
       for (const item of nonImages) {
         updateItem(item.id, { status: "uploading", progress: 20 });
@@ -318,36 +333,41 @@ export const UploadPage: React.FC = () => {
   const allDone = queue.length > 0 && queue.every((q) => q.status === "success" || q.status === "error");
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <div className="animate-fade-in" style={{ maxWidth: "860px", margin: "0 auto" }}>
       {/* Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--gray-900)" }}>
           Upload & Số hóa Tài liệu CTSV
         </h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+        <p style={{ fontSize: "0.875rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>
           Hệ thống sẽ tự động lưu file an toàn trên MinIO/Supabase, trích xuất văn bản tiếng Việt bằng OCR và đánh chỉ mục Elasticsearch.
         </p>
       </div>
 
       {/* Dropzone */}
-      <Card padding="lg">
+      <Card padding="lg" style={{ marginBottom: "1.25rem" }}>
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg p-6 sm:p-10 text-center cursor-pointer transition-all ${
-            isDragging
-              ? "border-sky-500 bg-sky-50/70"
-              : "border-slate-300 hover:border-slate-400 bg-slate-50/60"
-          }`}
+          style={{
+            border: `2px dashed ${isDragging ? "var(--primary-500)" : "var(--border-color)"}`,
+            backgroundColor: isDragging ? "var(--primary-50)" : "var(--gray-50)",
+            borderRadius: "var(--radius-lg)",
+            padding: "2.25rem 1.5rem",
+            textAlign: "center",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            position: "relative",
+          }}
         >
           <input
             ref={fileInputRef}
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.tiff"
             multiple
-            className="hidden"
+            style={{ display: "none" }}
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
                 validateAndAdd(e.target.files);
@@ -356,25 +376,52 @@ export const UploadPage: React.FC = () => {
             }}
           />
 
-          <div className="w-12 h-12 rounded-full bg-white text-dlu-navy-800 inline-flex items-center justify-center shadow-sm mb-3 border border-slate-200">
-            <UploadCloud size={24} />
+          <div
+            style={{
+              width: "54px",
+              height: "54px",
+              borderRadius: "50%",
+              backgroundColor: isDragging ? "var(--primary-100)" : "#ffffff",
+              color: "var(--primary-600)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "var(--shadow-sm)",
+              marginBottom: "0.85rem",
+            }}
+          >
+            <UploadCloud size={28} />
           </div>
 
-          <div className="text-sm sm:text-base font-bold text-slate-800">
-            Kéo thả <span className="text-dlu-navy-700">nhiều file</span>, <span className="text-dlu-navy-700">dán từ Clipboard</span> hoặc:
+          <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--gray-800)" }}>
+            Kéo thả <span style={{ color: "var(--primary-600)" }}>nhiều file</span>, <span style={{ color: "var(--primary-600)" }}>dán từ Clipboard</span> hoặc:
           </div>
 
           {/* Quick Action Buttons inside Dropzone */}
-          <div className="flex items-center justify-center gap-2.5 mt-3 flex-wrap">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.75rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 fileInputRef.current?.click();
               }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 rounded-md text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition-colors"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 16px",
+                backgroundColor: "#ffffff",
+                border: "1px solid var(--primary-300, #a5b4fc)",
+                borderRadius: "8px",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                color: "var(--primary-700, #4338ca)",
+                cursor: "pointer",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                transition: "all 0.15s ease",
+              }}
             >
-              <UploadCloud size={14} className="text-dlu-navy-700" /> Chọn file từ máy tính
+              <UploadCloud size={16} /> Chọn file từ máy tính
             </button>
 
             <button
@@ -383,31 +430,66 @@ export const UploadPage: React.FC = () => {
                 e.stopPropagation();
                 setIsCameraOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-dlu-navy-900 hover:bg-dlu-navy-800 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 16px",
+                backgroundColor: "#6366f1",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                color: "#ffffff",
+                cursor: "pointer",
+                boxShadow: "0 2px 4px rgba(99, 102, 241, 0.3)",
+                transition: "all 0.15s ease",
+              }}
             >
-              <Camera size={14} /> Chụp ảnh tài liệu (Camera)
+              <Camera size={16} /> Chụp ảnh tài liệu (Camera)
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-2 mt-4 text-xs text-slate-500 flex-wrap">
-            <span>PDF, JPG, PNG, TIFF · Tối đa 50MB mỗi file</span>
-            <span>•</span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-dlu-navy-800 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded">
-              <ClipboardPaste size={11} /> Hỗ trợ dán (Ctrl + V)
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.8125rem", color: "var(--gray-500)" }}>
+              PDF, JPG, PNG, TIFF · Tối đa 50MB mỗi file
+            </span>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "0.72rem",
+                fontWeight: 600,
+                color: "var(--primary-700)",
+                backgroundColor: "var(--primary-50)",
+                border: "1px solid var(--primary-200)",
+                padding: "2px 8px",
+                borderRadius: "6px",
+              }}
+            >
+              <ClipboardPaste size={12} /> Hỗ trợ dán (Ctrl + V)
             </span>
           </div>
         </div>
 
-        {/* Global category selector */}
+        {/* Global category selector (shown when queue empty) */}
         {queue.length === 0 && (
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+          <div style={{ marginTop: "1.25rem" }}>
+            <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-700)", marginBottom: "0.4rem" }}>
               Loại danh mục (áp dụng cho tất cả file)
             </label>
             <select
               value={globalCategory}
               onChange={(e) => setGlobalCategory(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs sm:text-sm bg-white text-slate-800 outline-none focus:ring-2 focus:ring-dlu-navy-500/20 focus:border-dlu-navy-600"
+              style={{
+                width: "100%",
+                padding: "0.65rem 0.85rem",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--border-color)",
+                fontSize: "0.875rem",
+                backgroundColor: "#ffffff",
+              }}
             >
               <option value="">-- Tự động nhận diện qua OCR --</option>
               <option value="DON_NGHI_HOC">Đơn xin nghỉ học tạm thời / bảo lưu</option>
@@ -422,36 +504,52 @@ export const UploadPage: React.FC = () => {
 
       {/* Queue list */}
       {queue.length > 0 && (
-        <Card padding="md">
+        <Card padding="lg" style={{ marginBottom: "1.25rem" }}>
           {/* Queue header */}
-          <div className="flex items-center justify-between mb-3.5 pb-2.5 border-b border-slate-100 flex-wrap gap-2">
-            <div className="font-bold text-xs sm:text-sm text-slate-900">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+            <div style={{ fontWeight: 700, fontSize: "0.9375rem", color: "var(--gray-800)" }}>
               Danh sách file ({queue.length})
             </div>
-            <div className="flex items-center gap-1.5">
+            <div style={{ display: "flex", gap: "0.5rem" }}>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isRunning}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "4px",
+                  padding: "5px 10px", fontSize: "0.8rem", fontWeight: 600,
+                  borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)",
+                  backgroundColor: "#fff", cursor: isRunning ? "not-allowed" : "pointer", color: "var(--gray-700)",
+                }}
               >
-                <Plus size={13} /> Thêm file
+                <Plus size={14} /> Thêm file
               </button>
               <button
                 type="button"
                 onClick={() => setIsCameraOpen(true)}
                 disabled={isRunning}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "4px",
+                  padding: "5px 10px", fontSize: "0.8rem", fontWeight: 600,
+                  borderRadius: "var(--radius-md)", border: "1px solid var(--primary-300)",
+                  backgroundColor: "var(--primary-50)", cursor: isRunning ? "not-allowed" : "pointer", color: "var(--primary-700)",
+                }}
               >
-                <Camera size={13} /> Chụp ảnh
+                <Camera size={14} /> Chụp ảnh
               </button>
               <button
                 type="button"
                 onClick={() => setQueue((prev) => prev.filter((q) => q.status !== "pending"))}
                 disabled={isRunning || pendingCount === 0}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "4px",
+                  padding: "5px 10px", fontSize: "0.8rem", fontWeight: 600,
+                  borderRadius: "var(--radius-md)", border: "1px solid #fecaca",
+                  backgroundColor: "#fff5f5", cursor: isRunning || pendingCount === 0 ? "not-allowed" : "pointer",
+                  color: "var(--danger-600)", opacity: pendingCount === 0 ? 0.5 : 1,
+                }}
               >
-                <Trash2 size={13} /> Xóa chờ
+                <Trash2 size={14} /> Xóa chờ
               </button>
             </div>
           </div>
@@ -459,30 +557,33 @@ export const UploadPage: React.FC = () => {
           {/* Banner tùy chọn ghép nhiều ảnh thành 1 tài liệu PDF */}
           {canMerge && (
             <div
-              className={`rounded-md p-3.5 mb-3 transition-all border ${
-                mergeImages
-                  ? "bg-indigo-50/70 border-indigo-200 text-indigo-950"
-                  : "bg-slate-50 border-slate-200 text-slate-800"
-              }`}
+              style={{
+                backgroundColor: mergeImages ? "#eef2ff" : "#f9fafb",
+                border: `1.5px solid ${mergeImages ? "#818cf8" : "var(--border-color)"}`,
+                borderRadius: "var(--radius-md)",
+                padding: "0.85rem 1rem",
+                marginBottom: "0.85rem",
+                transition: "all 0.2s ease",
+              }}
             >
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <label className="flex items-center gap-2 cursor-pointer font-bold text-xs sm:text-sm">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: 700, fontSize: "0.875rem", color: mergeImages ? "#3730a3" : "var(--gray-800)" }}>
                   <input
                     type="checkbox"
                     checked={mergeImages}
                     onChange={(e) => setMergeImages(e.target.checked)}
-                    className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                    style={{ width: "18px", height: "18px", accentColor: "#6366f1", cursor: "pointer" }}
                   />
                   <span>⚡ Ghép các file ảnh thành 1 tài liệu nhiều trang (PDF)</span>
                 </label>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono">
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: mergeImages ? "#4f46e5" : "var(--gray-500)", backgroundColor: mergeImages ? "#e0e7ff" : "var(--gray-200)", padding: "2px 8px", borderRadius: "9999px" }}>
                   {pendingImages.length} trang ảnh
                 </span>
               </div>
 
               {mergeImages && (
-                <div className="mt-2.5 pt-2.5 border-t border-indigo-200/60">
-                  <label className="block text-[11px] font-semibold text-indigo-900 mb-1">
+                <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px dashed #c7d2fe" }}>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "#4338ca", marginBottom: "0.3rem" }}>
                     Tiêu đề tài liệu hợp nhất (gồm {pendingImages.length} trang ảnh):
                   </label>
                   <input
@@ -490,9 +591,18 @@ export const UploadPage: React.FC = () => {
                     value={mergedTitle}
                     onChange={(e) => setMergedTitle(e.target.value)}
                     placeholder="Nhập tiêu đề tài liệu sau khi ghép các trang ảnh..."
-                    className="w-full px-3 py-1.5 text-xs font-semibold rounded border border-indigo-300 bg-white text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                    style={{
+                      width: "100%",
+                      padding: "0.5rem 0.75rem",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                      borderRadius: "6px",
+                      border: "1px solid #a5b4fc",
+                      backgroundColor: "#ffffff",
+                      color: "var(--gray-900)",
+                    }}
                   />
-                  <div className="text-[10px] text-indigo-700 mt-1">
+                  <div style={{ fontSize: "0.72rem", color: "#6366f1", marginTop: "4px" }}>
                     ✓ Các ảnh sẽ được ghép nối theo thứ tự trang tự nhiên thành 1 file PDF thống nhất, giữ nguyên chất lượng và chạy OCR cho toàn bộ các trang.
                   </div>
                 </div>
@@ -501,123 +611,150 @@ export const UploadPage: React.FC = () => {
           )}
 
           {/* File rows */}
-          <div className="space-y-2">
-            {queue.map((item) => {
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {queue.map((item, idx) => {
               const imageIndex = pendingImages.findIndex((pi) => pi.id === item.id);
               return (
-                <div
-                  key={item.id}
-                  className={`rounded-md border p-3 transition-colors ${
-                    item.status === "success"
-                      ? "bg-emerald-50/50 border-emerald-200"
-                      : item.status === "error"
-                      ? "bg-rose-50/50 border-rose-200"
-                      : "bg-slate-50/60 border-slate-200"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Icon */}
-                    <div className="shrink-0">
-                      {item.status === "success" ? (
-                        <CheckCircle2 size={18} className="text-emerald-600" />
-                      ) : item.status === "error" ? (
-                        <AlertCircle size={18} className="text-rose-600" />
-                      ) : (
-                        getFileIcon(item.file.name)
+              <div
+                key={item.id}
+                style={{
+                  borderRadius: "var(--radius-md)",
+                  border: `1px solid ${item.status === "success" ? "#bbf7d0" : item.status === "error" ? "#fecaca" : "var(--border-color)"}`,
+                  backgroundColor: item.status === "success" ? "#f0fdf4" : item.status === "error" ? "#fff5f5" : "var(--gray-50)",
+                  padding: "0.75rem 1rem",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  {/* Icon */}
+                  <div style={{ flexShrink: 0 }}>
+                    {item.status === "success" ? (
+                      <CheckCircle2 size={20} color="#16a34a" />
+                    ) : item.status === "error" ? (
+                      <AlertCircle size={20} color="var(--danger-500)" />
+                    ) : (
+                      getFileIcon(item.file.name)
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {mergeImages && canMerge && isImageFile(item.file.name) && imageIndex !== -1 && (
+                        <span style={{
+                          backgroundColor: "#6366f1",
+                          color: "#fff",
+                          fontSize: "0.65rem",
+                          fontWeight: 700,
+                          padding: "1px 6px",
+                          borderRadius: "4px",
+                          flexShrink: 0,
+                        }}>
+                          Trang {imageIndex + 1}
+                        </span>
                       )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        {mergeImages && canMerge && isImageFile(item.file.name) && imageIndex !== -1 && (
-                          <span className="bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0">
-                            Trang {imageIndex + 1}
-                          </span>
-                        )}
-                        {item.status === "pending" ? (
-                          <input
-                            type="text"
-                            value={item.title}
-                            onChange={(e) => updateItem(item.id, { title: e.target.value })}
-                            className="w-full text-xs font-semibold text-slate-900 border-none bg-transparent outline-none p-0 focus:underline"
-                          />
-                        ) : (
-                          <div className="text-xs font-semibold text-slate-900 truncate">
-                            {item.title || item.file.name}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        {item.file.name} · {formatSize(item.file.size)}
-                        {item.status === "error" && (
-                          <span className="text-rose-600 font-medium ml-1.5">— {item.error}</span>
-                        )}
-                      </div>
-
-                      {/* Progress bar */}
-                      {item.status === "uploading" && (
-                        <div className="mt-1.5 h-1.5 bg-sky-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-sky-600 rounded-full transition-all duration-300"
-                            style={{ width: `${item.progress}%` }}
-                          />
+                      {item.status === "pending" ? (
+                        <input
+                          type="text"
+                          value={item.title}
+                          onChange={(e) => updateItem(item.id, { title: e.target.value })}
+                          style={{
+                            width: "100%", fontSize: "0.8rem", fontWeight: 600,
+                            color: "var(--gray-900)", border: "none", background: "transparent",
+                            outline: "none", padding: 0,
+                          }}
+                        />
+                      ) : (
+                        <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--gray-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {item.title || item.file.name}
                         </div>
                       )}
                     </div>
+                    <div style={{ fontSize: "0.7rem", color: "var(--gray-500)", marginTop: "2px" }}>
+                      {item.file.name} · {formatSize(item.file.size)}
+                      {item.status === "error" && (
+                        <span style={{ color: "var(--danger-600)", marginLeft: "6px" }}>— {item.error}</span>
+                      )}
+                    </div>
 
-                    {/* Status badge */}
-                    <StatusBadge status={item.status} progress={item.progress} />
-
-                    {/* View result */}
-                    {item.status === "success" && item.result && (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/documents/${item.result!.id}`)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-colors"
-                      >
-                        Xem <ArrowRight size={10} />
-                      </button>
-                    )}
-
-                    {/* Remove (pending) */}
-                    {item.status === "pending" && !isRunning && (
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.id)}
-                        className="text-slate-400 hover:text-slate-700 p-1 shrink-0"
-                        title="Xóa khỏi danh sách"
-                      >
-                        <X size={15} />
-                      </button>
-                    )}
-
-                    {/* Retry (error) */}
-                    {item.status === "error" && !isRunning && (
-                      <button
-                        type="button"
-                        onClick={() => updateItem(item.id, { status: "pending", error: undefined, progress: 0 })}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded bg-rose-100 text-rose-800 hover:bg-rose-200 transition-colors"
-                      >
-                        Thử lại
-                      </button>
+                    {/* Progress bar */}
+                    {item.status === "uploading" && (
+                      <div style={{ marginTop: "6px", height: "4px", backgroundColor: "var(--primary-100)", borderRadius: "9999px", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            height: "100%", width: `${item.progress}%`,
+                            backgroundColor: "var(--primary-600)", borderRadius: "9999px", transition: "width 0.3s ease",
+                          }}
+                        />
+                      </div>
                     )}
                   </div>
+
+                  {/* Status badge */}
+                  <StatusBadge status={item.status} progress={item.progress} />
+
+                  {/* View result */}
+                  {item.status === "success" && item.result && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/documents/${item.result!.id}`)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "4px",
+                        padding: "4px 8px", fontSize: "0.7rem", fontWeight: 600,
+                        borderRadius: "var(--radius-sm)", border: "1px solid #bbf7d0",
+                        backgroundColor: "#f0fdf4", cursor: "pointer", color: "#16a34a", whiteSpace: "nowrap",
+                      }}
+                    >
+                      Xem <ArrowRight size={11} />
+                    </button>
+                  )}
+
+                  {/* Remove (pending) */}
+                  {item.status === "pending" && !isRunning && (
+                    <button
+                      type="button"
+                      onClick={() => removeItem(item.id)}
+                      style={{ color: "var(--gray-400)", padding: "4px", cursor: "pointer", border: "none", background: "transparent", flexShrink: 0 }}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+
+                  {/* Retry (error) */}
+                  {item.status === "error" && !isRunning && (
+                    <button
+                      type="button"
+                      onClick={() => updateItem(item.id, { status: "pending", error: undefined, progress: 0 })}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "4px",
+                        padding: "4px 8px", fontSize: "0.7rem", fontWeight: 600,
+                        borderRadius: "var(--radius-sm)", border: "1px solid #fecaca",
+                        backgroundColor: "#fff5f5", cursor: "pointer", color: "var(--danger-600)", whiteSpace: "nowrap",
+                      }}
+                    >
+                      Thử lại
+                    </button>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
           </div>
 
           {/* Summary */}
           {allDone && (
             <div
-              className={`mt-3 p-3 rounded-md border text-xs font-semibold flex items-center gap-2 ${
-                successItems.length === queue.length
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                  : "bg-amber-50 text-amber-800 border-amber-200"
-              }`}
+              style={{
+                marginTop: "1rem", padding: "0.75rem 1rem",
+                borderRadius: "var(--radius-md)",
+                backgroundColor: successItems.length === queue.length ? "#d1fae5" : "#fef3c7",
+                border: `1px solid ${successItems.length === queue.length ? "#6ee7b7" : "#fde68a"}`,
+                fontSize: "0.8125rem", fontWeight: 600,
+                color: successItems.length === queue.length ? "#065f46" : "#92400e",
+                display: "flex", alignItems: "center", gap: "0.5rem",
+              }}
             >
-              <CheckCircle2 size={15} />
+              <CheckCircle2 size={16} />
               {successItems.length}/{queue.length} file tải lên thành công
               {queue.length - successItems.length > 0 && ` · ${queue.length - successItems.length} file lỗi`}
             </div>
@@ -626,25 +763,23 @@ export const UploadPage: React.FC = () => {
       )}
 
       {/* Action bar */}
-      <div className="flex justify-between items-center gap-3 flex-wrap">
-        <div className="text-xs text-slate-500">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div style={{ fontSize: "0.8125rem", color: "var(--gray-500)" }}>
           {queue.length > 0 && (
             <>
-              <span className="font-semibold text-slate-800">{queue.length}</span> file trong hàng đợi
-              {pendingCount > 0 && (
-                <> · <span className="font-semibold text-dlu-navy-800">{pendingCount}</span> chờ upload</>
-              )}
+              <span style={{ fontWeight: 600, color: "var(--gray-700)" }}>{queue.length}</span> file trong hàng đợi
+              {pendingCount > 0 && <> · <span style={{ fontWeight: 600, color: "var(--primary-700)" }}>{pendingCount}</span> chờ upload</>}
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div style={{ display: "flex", gap: "0.75rem" }}>
           <Button type="button" variant="outline" onClick={() => navigate("/")} disabled={isRunning}>
             Hủy bỏ
           </Button>
 
           {allDone && successItems.length > 0 ? (
-            <Button variant="primary" rightIcon={<ArrowRight size={15} />} onClick={() => navigate("/documents")}>
+            <Button variant="primary" rightIcon={<ArrowRight size={16} />} onClick={() => navigate("/documents")}>
               Xem tất cả tài liệu
             </Button>
           ) : (
@@ -652,7 +787,7 @@ export const UploadPage: React.FC = () => {
               variant="primary"
               disabled={pendingCount === 0 || isRunning}
               isLoading={isRunning}
-              leftIcon={<UploadCloud size={16} />}
+              leftIcon={<Sparkles size={17} />}
               onClick={handleUploadAll}
             >
               {isRunning
@@ -671,6 +806,8 @@ export const UploadPage: React.FC = () => {
         onClose={() => setIsCameraOpen(false)}
         onCapture={handleCameraCapture}
       />
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };

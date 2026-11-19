@@ -12,17 +12,6 @@ export interface DocumentSummary {
   created_at: string;
 }
 
-export interface ApprovalInfo {
-  status: string;
-  action: string;
-  approver_id?: string;
-  approver_name?: string;
-  approver_role?: string;
-  approver_role_label?: string;
-  timestamp?: string;
-  note?: string;
-}
-
 export interface DocumentListItem extends DocumentSummary {
   page_count?: number;
   category_id?: string;
@@ -41,7 +30,6 @@ export interface DocumentListItem extends DocumentSummary {
   tags?: string[];
   priority_score?: number;
   ocr_progress?: number;  // 0-100 tiến độ OCR thực tế
-  approval_info?: ApprovalInfo;
 }
 
 export interface DocumentListResponse {
@@ -114,7 +102,6 @@ export interface DocumentDetail extends DocumentSummary {
   priority_score?: number;
   file_url?: string;
   is_public?: boolean;
-  approval_info?: ApprovalInfo;
 }
 
 export interface TagSummaryItem {
@@ -140,32 +127,9 @@ export interface VerificationData {
   student_id?: string;
   approved_at?: string;
   approved_by_name?: string;
-  approved_by_role?: string;
-  approved_by_role_label?: string;
   verification_code: string;
   qr_payload: string;
   issued_by: string;
-}
-
-export interface DocumentNotificationItem {
-  id: string;
-  document_id: string;
-  document_title: string;
-  action: string;
-  status: string;
-  actor_id?: string;
-  actor_name: string;
-  actor_role: string;
-  actor_role_label: string;
-  message: string;
-  created_at: string;
-  is_read?: boolean;
-}
-
-export interface DocumentNotificationsResponse {
-  items: DocumentNotificationItem[];
-  total: number;
-  unread_count: number;
 }
 
 export interface UploadResponse {
@@ -190,7 +154,6 @@ export interface ListDocumentsParams {
   categoryId?: string;
   tag?: string;
   search?: string;
-  onlyMyUploads?: boolean;
 }
 
 export interface AIRefineResponse {
@@ -253,7 +216,6 @@ export const documentsApi = {
         category_id: params?.categoryId,
         tag: params?.tag && params.tag !== "ALL" ? params.tag : undefined,
         search: params?.search?.trim() || undefined,
-        only_my_uploads: params?.onlyMyUploads || undefined,
       },
     });
     return res.data;
@@ -380,101 +342,10 @@ export const documentsApi = {
     return res.data;
   },
 
-  getNotifications: async (limit = 20): Promise<DocumentNotificationsResponse> => {
-    const res = await apiClient.get<DocumentNotificationsResponse>("/documents/notifications", {
-      params: { limit },
-    });
-    return res.data;
-  },
-
   exportExcelUrl: (status?: string, categoryId?: string) => {
     const params = new URLSearchParams();
     if (status && status !== "ALL") params.append("ocr_status", status);
     if (categoryId) params.append("category_id", categoryId);
     return `${API_BASE_URL}/documents/export/excel?${params.toString()}`;
   },
-
-  detectStamp: async (id: string, page = 0): Promise<StampDetectionData> => {
-    const res = await apiClient.post<StampDetectionData>(`/documents/${id}/detect-stamp?page=${page}`);
-    return res.data;
-  },
-
-  extractTables: async (id: string, page?: number, ocrCells = true): Promise<TableExtractionData> => {
-    const url =
-      page !== undefined && page >= 0
-        ? `/documents/${id}/extract-tables?page=${page}&ocr_cells=${ocrCells}`
-        : `/documents/${id}/extract-tables?ocr_cells=${ocrCells}`;
-    const res = await apiClient.post<TableExtractionData>(url);
-    return res.data;
-  },
-
-  getCategories: async (): Promise<CategoryAdminItem[]> => {
-    const res = await apiClient.get<CategoryAdminItem[]>("/documents/categories");
-    return res.data;
-  },
-
-  createCategory: async (payload: { name: string; code: string; description?: string }): Promise<CategoryAdminItem> => {
-    const res = await apiClient.post<CategoryAdminItem>("/documents/categories", payload);
-    return res.data;
-  },
-
-  toggleCategoryStatus: async (id: string): Promise<{ id: string; is_active: boolean }> => {
-    const res = await apiClient.patch<{ id: string; is_active: boolean }>(`/documents/categories/${id}/status`);
-    return res.data;
-  },
 };
-
-export interface CategoryAdminItem {
-  id: string;
-  name: string;
-  code: string;
-  description: string;
-  is_active: boolean;
-  doc_count: number;
-}
-
-export interface DetectedStampItem {
-  bbox: [number, number, number, number];
-  confidence: number;
-  area: number;
-  aspect_ratio: number;
-  image_base64: string;
-  is_circular: boolean;
-}
-
-export interface StampDetectionData {
-  document_id: string;
-  has_stamp: boolean;
-  stamps: DetectedStampItem[];
-  cleaned_image_base64: string;
-  red_pixel_ratio: number;
-}
-
-export interface TableCellItem {
-  row_idx: number;
-  col_idx: number;
-  bbox: [number, number, number, number];
-  text: string;
-}
-
-export interface ExtractedTableItem {
-  table_idx: number;
-  page_num?: number;
-  bbox: [number, number, number, number];
-  headers: string[];
-  rows: string[][];
-  cells: TableCellItem[];
-  row_count: number;
-  col_count: number;
-  markdown: string;
-  html: string;
-}
-
-export interface TableExtractionData {
-  document_id: string;
-  has_table: boolean;
-  tables: ExtractedTableItem[];
-  total_tables: number;
-  total_cells: number;
-}
-

@@ -8,12 +8,10 @@ Verifies:
       and strictly refuses to fallback to SQLite.
     - In staging/production, configuring SQLite URL raises RuntimeError.
 """
-
-from unittest.mock import patch
-
-import app.core.database as db_module
 import pytest
+from unittest.mock import patch
 from app.core.config import Settings
+import app.core.database as db_module
 
 
 @pytest.mark.asyncio

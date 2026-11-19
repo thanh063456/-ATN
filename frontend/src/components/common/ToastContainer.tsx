@@ -39,7 +39,7 @@ const ToastItem: React.FC<{ toast: ToastMessage; onClose: () => void }> = ({ toa
         return <AlertTriangle size={20} color="#d97706" />;
       case "info":
       default:
-        return <Info size={20} color="#1e40af" />;
+        return <Info size={20} color="#4f46e5" />;
     }
   };
 

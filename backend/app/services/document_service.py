@@ -10,7 +10,6 @@ Tuân thủ .ai/CODING_RULES.md:
 - Service layer chỉ raise custom exception (AppException).
 - Không import trực tiếp HTTPException.
 """
-
 from datetime import datetime
 from uuid import UUID
 
@@ -20,12 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import DocumentNotFoundException
-from app.models.documents import OCR_STATUS_PENDING, Document
-from app.models.processing_jobs import JOB_STATUS_PENDING, ProcessingJob
+from app.models.documents import Document, OCR_STATUS_PENDING
+from app.models.processing_jobs import ProcessingJob, JOB_STATUS_PENDING
 from app.models.roles import Role
 from app.models.users import User
 from app.schemas.documents import (
-    ApprovalInfo,
     DocumentDetailResponse,
     DocumentMetadataResponse,
     OCRResultResponse,
@@ -121,7 +119,8 @@ class DocumentService:
         await self.db.refresh(document)
         await self.db.refresh(job)
 
-        logger.info("Created Document (id={doc_id}) and ProcessingJob (id={job_id})", doc_id=document.id, job_id=job.id)
+        logger.info("Created Document (id={doc_id}) and ProcessingJob (id={job_id})",
+                    doc_id=document.id, job_id=job.id)
         return document, job
 
     async def update_job_celery_task_id(self, job_id: UUID, celery_task_id: str) -> None:
@@ -231,54 +230,6 @@ class DocumentService:
                 latest_job.ocr_progress = 100
                 latest_job.status = "SUCCESS"
 
-        # Trích xuất thông tin phê duyệt / từ chối
-        approval_info = None
-        if document.metadata_ and document.metadata_.extra and "approval" in document.metadata_.extra:
-            appr = document.metadata_.extra["approval"]
-            approval_info = ApprovalInfo(
-                status=appr.get("status", effective_ocr_status),
-                action=appr.get("action", "APPROVE_DOCUMENT"),
-                approver_id=appr.get("approver_id"),
-                approver_name=appr.get("approver_name"),
-                approver_role=appr.get("approver_role"),
-                approver_role_label=appr.get("approver_role_label"),
-                timestamp=appr.get("timestamp") or appr.get("approved_at"),
-                note=appr.get("note"),
-            )
-        elif effective_ocr_status in ("APPROVED", "REJECTED"):
-            from app.models.audit_logs import AuditLog
-
-            audit_stmt = (
-                select(AuditLog, User, Role)
-                .outerjoin(User, AuditLog.user_id == User.id)
-                .outerjoin(Role, User.role_id == Role.id)
-                .where(
-                    AuditLog.resource_id == document.id,
-                    AuditLog.action.in_(["APPROVE_DOCUMENT", "REJECT_DOCUMENT"]),
-                )
-                .order_by(AuditLog.created_at.desc())
-                .limit(1)
-            )
-            audit_res = await self.db.execute(audit_stmt)
-            audit_row = audit_res.first()
-            if audit_row:
-                audit_obj, actor_obj, role_obj = audit_row
-                role_code = role_obj.name if role_obj else "STAFF"
-                role_lbl = (
-                    "Quản trị viên (ADMIN)" if role_code == "ADMIN" else "Cán bộ Công tác Sinh viên (CTSV)"
-                )
-                actor_nm = actor_obj.full_name if actor_obj else "Cán bộ xét duyệt"
-                approval_info = ApprovalInfo(
-                    status="APPROVED" if audit_obj.action == "APPROVE_DOCUMENT" else "REJECTED",
-                    action=audit_obj.action,
-                    approver_id=str(actor_obj.id) if actor_obj else None,
-                    approver_name=actor_nm,
-                    approver_role=role_code,
-                    approver_role_label=role_lbl,
-                    timestamp=audit_obj.created_at,
-                    note=audit_obj.detail.get("note") if audit_obj.detail else None,
-                )
-
         return DocumentDetailResponse(
             id=document.id,
             title=document.title,
@@ -300,5 +251,4 @@ class DocumentService:
             metadata=meta_response,
             tags=doc_tags,
             priority_score=doc_priority,
-            approval_info=approval_info,
         )

@@ -1,32 +1,29 @@
 """
 backend/app/main.py — FastAPI application entry point
 """
-
 import logging
 import re
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
+from typing import Any
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
 try:
     from loguru import logger
 except ImportError:
     import logging
-
     logger = logging.getLogger("main")
 logger: Any = logger
 
 import uuid
-
 try:
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
 except ImportError:
     _rate_limit_exceeded_handler = None  # type: ignore
-    RateLimitExceeded = Exception  # type: ignore
+    RateLimitExceeded = Exception        # type: ignore
 
 from app.core.config import settings
 from app.core.elasticsearch import init_elasticsearch_index
@@ -57,15 +54,16 @@ class MaskTokenAccessLogFilter(logging.Filter):
         if record.args:
             if isinstance(record.args, tuple):
                 record.args = tuple(
-                    self.TOKEN_REGEX.sub(r"\g<1>***", arg) if isinstance(arg, str) else arg for arg in record.args
+                    self.TOKEN_REGEX.sub(r'\g<1>***', arg) if isinstance(arg, str) else arg
+                    for arg in record.args
                 )
             elif isinstance(record.args, dict):
                 record.args = {
-                    k: (self.TOKEN_REGEX.sub(r"\g<1>***", v) if isinstance(v, str) else v)
+                    k: (self.TOKEN_REGEX.sub(r'\g<1>***', v) if isinstance(v, str) else v)
                     for k, v in record.args.items()
                 }
         if isinstance(record.msg, str):
-            record.msg = self.TOKEN_REGEX.sub(r"\g<1>***", record.msg)
+            record.msg = self.TOKEN_REGEX.sub(r'\g<1>***', record.msg)
         return True
 
 
@@ -93,7 +91,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"Starting {settings.app_name} [{settings.app_env}]")
     # Khởi tạo Database schema và seed data
     from app.core.database import init_db
-
     try:
         await init_db()
     except Exception as exc:
@@ -105,7 +102,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Khởi tạo và kiểm tra PyTorch CUDA device
     try:
         import torch
-
         if torch.cuda.is_available():
             device_name = torch.cuda.get_device_name(0)
             vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
@@ -117,15 +113,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning(f"CUDA check on startup: {exc}")
     # Khởi động trước OCR models (TrOCR & VietOCR) trong background thread để tránh cold-start delay
     import asyncio
-
     def _warmup_ocr():
         try:
             if getattr(settings, "trocr_model_name", None):
                 from app.services.trocr_engine import trocr_engine
-
                 trocr_engine.get_model()
             from app.services.vietocr_engine import vietocr_engine
-
             vietocr_engine.get_predictor()
             logger.info("OCR engines (TrOCR & VietOCR) pre-warmed in background")
         except Exception as _w_err:
@@ -145,11 +138,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"Shutting down {settings.app_name}")
     # Đóng kết nối Elasticsearch client
     from app.core.elasticsearch import close_es_client
-
     await close_es_client()
     # Dispose async engine để tránh ResourceWarning
     from app.core.database import engine
-
     await engine.dispose()
 
 
@@ -158,7 +149,8 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Student Document OCR API",
         description=(
-            "Hệ thống số hóa và quản lý tài liệu Công tác sinh viên ứng dụng OCR và Elasticsearch - Đại học Đà Lạt"
+            "Hệ thống số hóa và quản lý tài liệu Công tác sinh viên "
+            "ứng dụng OCR và Elasticsearch - Đại học Đà Lạt"
         ),
         version="0.1.0",
         docs_url="/docs" if not settings.is_production else None,
@@ -202,7 +194,9 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
-        logger.warning(f"AppException: status={exc.status_code} message={exc.message} path={request.url.path}")
+        logger.warning(
+            f"AppException: status={exc.status_code} message={exc.message} path={request.url.path}"
+        )
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message},
@@ -212,7 +206,9 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-        logger.exception(f"Unhandled exception [request_id={request_id}]: path={request.url.path} error={exc}")
+        logger.exception(
+            f"Unhandled exception [request_id={request_id}]: path={request.url.path} error={exc}"
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
@@ -225,17 +221,16 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     API_PREFIX = "/api/v1"
 
-    app.include_router(health.router)  # /health, /health/ping (no prefix)
-    app.include_router(auth.router, prefix=API_PREFIX)  # /api/v1/auth
+    app.include_router(health.router)                        # /health, /health/ping (no prefix)
+    app.include_router(auth.router, prefix=API_PREFIX)       # /api/v1/auth
     app.include_router(documents.router, prefix=API_PREFIX)  # /api/v1/documents
-    app.include_router(search.router, prefix=API_PREFIX)  # /api/v1/search
-    app.include_router(stats.router, prefix=API_PREFIX)  # /api/v1/stats
-    app.include_router(verify.router, prefix=API_PREFIX)  # /api/v1/verify
+    app.include_router(search.router, prefix=API_PREFIX)     # /api/v1/search
+    app.include_router(stats.router, prefix=API_PREFIX)      # /api/v1/stats
+    app.include_router(verify.router, prefix=API_PREFIX)     # /api/v1/verify
 
     @app.get(f"{API_PREFIX}/doc-types", tags=["documents"], summary="Danh sách cấu hình phân loại văn bản (Doc Types)")
     async def get_doc_types():
         from app.core.doc_types_config import DOC_TYPES_CONFIG
-
         return [t.model_dump() for t in DOC_TYPES_CONFIG.types]
 
     # ── Root ──────────────────────────────────────────────────────────────────
@@ -243,10 +238,10 @@ def create_app() -> FastAPI:
     async def root() -> dict:
         return {
             "service": settings.app_name,
-            "env": settings.app_env,
+            "env":     settings.app_env,
             "version": "0.1.0",
-            "docs": "/docs",
-            "health": "/health",
+            "docs":    "/docs",
+            "health":  "/health",
         }
 
     return app

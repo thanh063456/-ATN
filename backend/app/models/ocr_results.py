@@ -7,11 +7,10 @@ QUAN TRỌNG: Quan hệ 1 Document → NHIỀU OCRResult (KHÔNG phải 1:1).
   - Khi insert kết quả mới, phải reset is_latest=False cho tất cả bản ghi cũ.
   Ref: .ai/AGENTS.md §4, .ai/design/Database.md §2.5
 """
-
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, JSON, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -32,7 +31,9 @@ class OCRResult(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     # KHÔNG có unique=True — 1 document có thể có nhiều OCR runs
     document_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -40,9 +41,7 @@ class OCRResult(Base):
         nullable=False,
     )
     is_latest: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
+        Boolean, nullable=False, default=True,
         comment="True = kết quả OCR mới nhất của document này.",
     )
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -61,12 +60,21 @@ class OCRResult(Base):
         nullable=True,
     )
     corrected_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     # Relationships
     document: Mapped["Document"] = relationship("Document", back_populates="ocr_results")
-    corrector: Mapped["User | None"] = relationship("User", foreign_keys=[corrected_by])
+    corrector: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[corrected_by]
+    )
 
     def __repr__(self) -> str:
-        return f"<OCRResult id={self.id} doc={self.document_id} latest={self.is_latest} engine={self.ocr_engine!r}>"
+        return (
+            f"<OCRResult id={self.id} doc={self.document_id} "
+            f"latest={self.is_latest} engine={self.ocr_engine!r}>"
+        )

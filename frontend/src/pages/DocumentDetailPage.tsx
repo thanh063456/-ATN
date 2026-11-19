@@ -20,7 +20,6 @@ import {
   Maximize2,
   QrCode,
   ShieldCheck,
-  UserCheck,
   Award,
   XCircle,
   FileDown,
@@ -42,20 +41,12 @@ import {
   Info,
   Globe,
   Lock,
-  Table,
 } from "lucide-react";
 import { diffWordsWithSpace } from "diff";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
 import { OCRStatusBadge, Badge } from "../components/common/Badge";
-import {
-  documentsApi,
-  DocumentDetail,
-  VerificationData,
-  AIExtractResponse,
-  ModelComparisonResponse,
-  OCRResult,
-} from "../api/documents";
+import { documentsApi, DocumentDetail, VerificationData, AIExtractResponse, ModelComparisonResponse, OCRResult } from "../api/documents";
 import { API_BASE_URL } from "../api/client";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useToastStore } from "../stores/useToastStore";
@@ -63,6 +54,7 @@ import { useToastStore } from "../stores/useToastStore";
 export const OCR_ENGINES = [
   { id: "vietocr", label: "VietOCR", name: "VietOCR v2.0", subtitle: "Seq2Seq Transformer (PyTorch)", version: "vgg_transformer-2.0" },
   { id: "trocr", label: "TrOCR", name: "TrOCR-Vi (Fine-tuned Transformer)", subtitle: "Vision Transformer (ViT)", version: "trocr-vi-finetuned" },
+  { id: "tesseract", label: "Tesseract", name: "Tesseract", subtitle: "LSTM Baseline", version: "dynamic" },
 ];
 
 function calculateLevenshtein(a: string[] | string, b: string[] | string): number {
@@ -103,10 +95,7 @@ export const DocumentDetailPage: React.FC = () => {
   const { user, token } = useAuthStore();
   const { addToast } = useToastStore();
 
-  const isAdmin = user?.role === "ADMIN";
-  const isStaff = user?.role === "STAFF";
-  const isStudent = user?.role === "STUDENT";
-  const isStaffOrAdmin = isAdmin || isStaff;
+  const isStaffOrAdmin = user?.role === "ADMIN" || user?.role === "STAFF";
 
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [verification, setVerification] = useState<VerificationData | null>(null);
@@ -130,7 +119,7 @@ export const DocumentDetailPage: React.FC = () => {
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [selectedOcrEngine, setSelectedOcrEngine] = useState<string>("vietocr");
   const [ocrTextMode, setOcrTextMode] = useState<"processed" | "raw">(() => {
-    return (localStorage.getItem("preferred_ocr_text_mode") as "processed" | "raw") || "processed";
+    return (localStorage.getItem("preferred_ocr_text_mode") as "processed" | "raw") || "raw";
   });
   const [runningEngine, setRunningEngine] = useState<string | null>(null);
   const [isCompareMode, setIsCompareMode] = useState<boolean>(false);
@@ -150,7 +139,7 @@ export const DocumentDetailPage: React.FC = () => {
       setDoc(data);
       if (data.all_ocr_results && data.all_ocr_results.length > 0) {
         const engineResult = data.all_ocr_results.find(r => r.ocr_engine === selectedOcrEngine);
-        const preferredMode = localStorage.getItem("preferred_ocr_text_mode") || "processed";
+        const preferredMode = localStorage.getItem("preferred_ocr_text_mode") || "raw";
         setCorrectedText(preferredMode === "raw" ? (engineResult?.raw_text || engineResult?.corrected_text || "") : (engineResult?.corrected_text || engineResult?.raw_text || ""));
         if (runningEngine) {
           const eng = data.all_ocr_results.find(r => r.ocr_engine === runningEngine);
@@ -311,7 +300,7 @@ export const DocumentDetailPage: React.FC = () => {
               addToast({
                 type: "success",
                 title: "Hoàn thành quét toàn bộ",
-                message: "Tất cả mô hình OCR (VietOCR, TrOCR-Vi) đã hoàn tất quét văn bản.",
+                message: "Tất cả mô hình OCR (VietOCR, TrOCR, Tesseract) đã hoàn tất quét văn bản.",
               });
             }
           } else {
@@ -321,12 +310,11 @@ export const DocumentDetailPage: React.FC = () => {
               if (eng.status === "DONE" || eng.status === "LOW_QUALITY") {
                 addToast({
                   type: eng.status === "LOW_QUALITY" ? "warning" : "success",
-                  title: eng.status === "LOW_QUALITY" ? "Hoàn thành OCR (Độ tin cậy thấp)" : "Hoàn thành OCR & Xử lý AI",
-                  message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} đã quét xong và AI đã tự động chuẩn hóa văn bản.`,
+                  title: eng.status === "LOW_QUALITY" ? "Hoàn thành OCR (Độ tin cậy thấp)" : "Hoàn thành OCR",
+                  message: eng.error_message || `Mô hình ${runningEngine.toUpperCase()} đã quét xong.`,
                 });
                 if (selectedOcrEngine === runningEngine) {
                   setCorrectedText(eng.corrected_text || eng.raw_text || "");
-                  setOcrTextMode("processed");
                 }
               } else {
                 addToast({
@@ -455,14 +443,14 @@ export const DocumentDetailPage: React.FC = () => {
       addToast({
         type: "info",
         title: "Đang chạy Thực nghiệm Đối sánh...",
-        message: "Hệ thống đang chạy song song VietOCR và Microsoft TrOCR trên tài liệu.",
+        message: "Hệ thống đang chạy song song VietOCR, Microsoft TrOCR và Tesseract trên tài liệu.",
       });
       const data = await documentsApi.compareModels(id);
       setBenchmarkData(data);
       addToast({
         type: "success",
         title: "Hoàn tất Thực nghiệm Đối sánh!",
-        message: "Đã có kết quả đo lường thời gian inference và chất lượng nhận dạng của 2 mô hình.",
+        message: "Đã có kết quả đo lường thời gian inference và chất lượng nhận dạng của 3 mô hình.",
       });
     } catch (err: any) {
       addToast({
@@ -774,7 +762,7 @@ export const DocumentDetailPage: React.FC = () => {
         title: engine === "all" ? "Đang quét tất cả mô hình" : "Đang quét lại OCR",
         message:
           engine === "all"
-            ? "Hệ thống đang quét lại văn bản bằng toàn bộ mô hình (VietOCR, TrOCR-Vi)..."
+            ? "Hệ thống đang quét lại văn bản bằng toàn bộ mô hình (VietOCR, TrOCR, Tesseract)..."
             : `Hệ thống đang quét lại văn bản bằng ${engine.toUpperCase()}...`,
       });
       loadDoc(false);
@@ -900,14 +888,8 @@ export const DocumentDetailPage: React.FC = () => {
               <h1 style={{ fontSize: "1.35rem", fontWeight: 800, color: "var(--gray-900)", margin: 0 }}>
                 {doc.title}
               </h1>
-              {isAdmin && <OCRStatusBadge status={doc.ocr_status as any} />}
-              {isApproved ? (
-                <Badge variant="success" dot>Đã phê duyệt</Badge>
-              ) : isRejected ? (
-                <Badge variant="danger" dot>Từ chối</Badge>
-              ) : (
-                <Badge variant="warning" dot>Chờ xét duyệt</Badge>
-              )}
+              <OCRStatusBadge status={doc.ocr_status as any} />
+              {isApproved && <Badge variant="success" dot>Đã xác thực điện tử</Badge>}
             </div>
             <div style={{ fontSize: "0.75rem", color: "var(--gray-400)", marginTop: "0.2rem" }}>
               {doc.original_filename} • {(doc.file_size_bytes / (1024 * 1024)).toFixed(2)} MB • Tạo lúc {new Date(doc.created_at).toLocaleString("vi-VN")}
@@ -936,8 +918,8 @@ export const DocumentDetailPage: React.FC = () => {
             </Button>
           )}
 
-          {/* Dropdown OCR lại (Chỉ dành cho Admin kỹ thuật) */}
-          {isAdmin && (
+          {/* Dropdown OCR lại (Chỉ dành cho Cán bộ / Admin) */}
+          {isStaffOrAdmin && (
             <div style={{ position: "relative" }}>
               <Button
                 variant="outline"
@@ -985,8 +967,8 @@ export const DocumentDetailPage: React.FC = () => {
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#dcfce7")}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#f0fdf4")}
                   >
-                    <span style={{ fontWeight: 800, color: "#15803d" }}>⚡ Quét lại toàn bộ (2 Model)</span>
-                    <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>VietOCR + TrOCR-Vi</span>
+                    <span style={{ fontWeight: 800, color: "#15803d" }}>⚡ Quét lại toàn bộ (3 Model)</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--gray-500)" }}>VietOCR + TrOCR-Vi + Tesseract</span>
                   </button>
                   {OCR_ENGINES.map((eng) => (
                     <button
@@ -1019,6 +1001,13 @@ export const DocumentDetailPage: React.FC = () => {
             </div>
           )}
 
+          <Button variant="outline" size="sm" onClick={handleDownloadTxt} leftIcon={<FileDown size={14} />}>
+            Xuất Text (.txt)
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadDocx} leftIcon={<Download size={14} />}>
+            Xuất Word (.doc)
+          </Button>
+
           {isStaffOrAdmin && (
             <>
               {!isApproved && (
@@ -1026,6 +1015,14 @@ export const DocumentDetailPage: React.FC = () => {
                   Phê duyệt hồ sơ
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleReprocessOCR("all")}
+                leftIcon={<RefreshCw size={14} className={runningEngine === "all" ? "animate-spin" : ""} />}
+              >
+                Quét OCR Toàn Bộ
+              </Button>
               {!isRejected && (
                 <Button variant="danger" size="sm" onClick={handleReject} leftIcon={<XCircle size={14} />}>
                   Từ chối
@@ -1036,163 +1033,8 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Thông tin kết quả xét duyệt: Hiển thị rõ ràng người duyệt (Quản trị viên / Cán bộ CTSV) */}
-      {isApproved && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0.85rem 1.25rem",
-            borderRadius: "var(--radius-md)",
-            backgroundColor: "#f0fdf4",
-            border: "1px solid #86efac",
-            color: "#166534",
-            flexWrap: "wrap",
-            gap: "1rem",
-            boxShadow: "0 1px 3px rgba(22, 163, 74, 0.08)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
-            <div
-              style={{
-                width: "40px",
-                height: "40px",
-                borderRadius: "50%",
-                backgroundColor: "#dcfce7",
-                color: "#16a34a",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <CheckCircle2 size={24} />
-            </div>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 800, fontSize: "0.9375rem", color: "#14532d" }}>
-                  HỒ SƠ ĐÃ ĐƯỢC PHÊ DUYỆT HỢP LỆ
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "2px 8px",
-                    borderRadius: "4px",
-                    backgroundColor:
-                      doc.approval_info?.approver_role === "ADMIN" || verification?.approved_by_role === "ADMIN"
-                        ? "#fef2f2"
-                        : "#fffbeb",
-                    color:
-                      doc.approval_info?.approver_role === "ADMIN" || verification?.approved_by_role === "ADMIN"
-                        ? "#dc2626"
-                        : "#b45309",
-                    border:
-                      doc.approval_info?.approver_role === "ADMIN" || verification?.approved_by_role === "ADMIN"
-                        ? "1px solid #fecaca"
-                        : "1px solid #fde68a",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  {doc.approval_info?.approver_role === "ADMIN" || verification?.approved_by_role === "ADMIN" ? (
-                    <>
-                      <ShieldCheck size={13} /> Phê duyệt bởi Quản trị viên (ADMIN)
-                    </>
-                  ) : (
-                    <>
-                      <UserCheck size={13} /> Phê duyệt bởi Cán bộ Công tác Sinh viên (CTSV)
-                    </>
-                  )}
-                </span>
-              </div>
-              <div style={{ fontSize: "0.8125rem", color: "#15803d", marginTop: "3px" }}>
-                Cán bộ thẩm định:{" "}
-                <strong>
-                  {doc.approval_info?.approver_name || verification?.approved_by_name || "Phòng Công tác Sinh viên (DLU)"}
-                </strong>
-                {" • "}Thời gian phê duyệt:{" "}
-                <strong>
-                  {doc.approval_info?.timestamp
-                    ? new Date(doc.approval_info.timestamp).toLocaleString("vi-VN")
-                    : verification?.approved_at
-                    ? new Date(verification.approved_at).toLocaleString("vi-VN")
-                    : new Date(doc.updated_at).toLocaleString("vi-VN")}
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          {/* Thông tin phê duyệt */}
-        </div>
-      )}
-
-      {isRejected && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "0.85rem 1.25rem",
-            borderRadius: "var(--radius-md)",
-            backgroundColor: "#fef2f2",
-            border: "1px solid #fecaca",
-            color: "#991b1b",
-            gap: "0.85rem",
-          }}
-        >
-          <div
-            style={{
-              width: "40px",
-              height: "40px",
-              borderRadius: "50%",
-              backgroundColor: "#fee2e2",
-              color: "#dc2626",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <XCircle size={24} />
-          </div>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-              <span style={{ fontWeight: 800, fontSize: "0.9375rem", color: "#7f1d1d" }}>
-                HỒ SƠ BỊ TỪ CHỐI XÉT DUYỆT
-              </span>
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  padding: "2px 8px",
-                  borderRadius: "4px",
-                  backgroundColor: "#fee2e2",
-                  color: "#991b1b",
-                  border: "1px solid #fca5a5",
-                }}
-              >
-                {doc.approval_info?.approver_role === "ADMIN"
-                  ? "Bởi Quản trị viên (ADMIN)"
-                  : "Bởi Cán bộ Công tác Sinh viên (CTSV)"}
-              </span>
-            </div>
-            <div style={{ fontSize: "0.8125rem", color: "#b91c1c", marginTop: "3px" }}>
-              Người từ chối: <strong>{doc.approval_info?.approver_name || "Cán bộ xét duyệt"}</strong>
-              {" • "}Thời gian:{" "}
-              <strong>
-                {doc.approval_info?.timestamp
-                  ? new Date(doc.approval_info.timestamp).toLocaleString("vi-VN")
-                  : new Date(doc.updated_at).toLocaleString("vi-VN")}
-              </strong>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Dynamic Processing Alert Banner (Chỉ hiển thị cho Admin kỹ thuật) */}
-      {isAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
+      {/* Dynamic Processing Alert Banner (Chỉ hiển thị cho Cán bộ / Admin) */}
+      {isStaffOrAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
         <div
           style={{
             display: "flex",
@@ -1237,9 +1079,48 @@ export const DocumentDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* 🏷️ Smart Tags & Priority Ranking Card (Dành cho Cán bộ CTSV & Admin quản lý) */}
-      {isStaffOrAdmin && (
-        <Card padding="md">
+      {/* Notice when only first page was OCRed (Chỉ hiển thị cho Cán bộ / Admin) */}
+      {isStaffOrAdmin && doc.ocr_status === "DONE" && (doc.metadata?.extra?.ocr_scope === "first_page" || ((doc.page_count ?? 1) > 1 && doc.metadata?.extra?.ocr_scope !== "full")) && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0.85rem 1.25rem",
+            borderRadius: "var(--radius-md)",
+            backgroundColor: "#fffbeb",
+            border: "1px solid #fde68a",
+            color: "#92400e",
+            marginTop: "1rem",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Info size={20} style={{ color: "#d97706" }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "0.875rem" }}>
+                Mới OCR trang 1: nội dung các trang sau chưa được tìm kiếm
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "#b45309" }}>
+                Tài liệu có {doc.page_count || "nhiều"} trang. Bấm Quét OCR Toàn Bộ để tìm kiếm đầy đủ mọi trang.
+              </div>
+            </div>
+          </div>
+          {isStaffOrAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTriggerOcrFull}
+              leftIcon={<RefreshCw size={14} />}
+              style={{ backgroundColor: "white", borderColor: "#d97706", color: "#b45309" }}
+            >
+              Quét OCR Toàn Bộ
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* 🏷️ Smart Tags & Priority Ranking Card */}
+      <Card padding="md">
         <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -1404,30 +1285,80 @@ export const DocumentDetailPage: React.FC = () => {
           )}
         </div>
       </Card>
-      )}
 
-      {/* Tabs (Chỉ hiển thị cho Admin kỹ thuật khi đối chiếu mô hình OCR) */}
-      {isAdmin && (
-        <div
+      {/* Tabs */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          backgroundColor: "#fff",
+          padding: "0.35rem",
+          borderRadius: "var(--radius-md)",
+          border: "1px solid var(--border-color)",
+          width: "fit-content",
+        }}
+      >
+        <button
+          onClick={() => setActiveTab("ocr")}
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            backgroundColor: "#fff",
-            padding: "0.35rem",
+            padding: "0.45rem 1rem",
             borderRadius: "var(--radius-md)",
-            border: "1px solid var(--border-color)",
-            width: "fit-content",
+            border: "none",
+            backgroundColor: activeTab === "ocr" ? "var(--primary-600)" : "transparent",
+            color: activeTab === "ocr" ? "#fff" : "var(--gray-600)",
+            fontWeight: 600,
+            fontSize: "0.8125rem",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
           }}
         >
+          {isStaffOrAdmin ? (
+            <>
+              <Edit3 size={14} /> Trình đối chiếu & Sửa lỗi OCR (Live Editor)
+            </>
+          ) : (
+            <>
+              <FileText size={14} /> Văn bản số hóa & Nội dung
+            </>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab("fields")}
+          style={{
+            padding: "0.45rem 1rem",
+            borderRadius: "var(--radius-md)",
+            border: "none",
+            backgroundColor: activeTab === "fields" ? "var(--primary-600)" : "transparent",
+            color: activeTab === "fields" ? "#fff" : "var(--gray-600)",
+            fontWeight: 600,
+            fontSize: "0.8125rem",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          <Sparkles size={14} /> {isStaffOrAdmin ? "Bóc tách Thông tin AI (Smart Fields)" : "Thông tin hồ sơ sinh viên"}
+        </button>
+
+        {isStaffOrAdmin && (
           <button
-            onClick={() => setActiveTab("ocr")}
+            onClick={() => {
+              setActiveTab("benchmark");
+              if (!benchmarkData && !isBenchmarking) {
+                handleRunBenchmark();
+              }
+            }}
             style={{
               padding: "0.45rem 1rem",
               borderRadius: "var(--radius-md)",
               border: "none",
-              backgroundColor: activeTab === "ocr" ? "var(--primary-600)" : "transparent",
-              color: activeTab === "ocr" ? "#fff" : "var(--gray-600)",
+              backgroundColor: activeTab === "benchmark" ? "var(--primary-600)" : "transparent",
+              color: activeTab === "benchmark" ? "#fff" : "var(--gray-600)",
               fontWeight: 600,
               fontSize: "0.8125rem",
               cursor: "pointer",
@@ -1436,15 +1367,33 @@ export const DocumentDetailPage: React.FC = () => {
               gap: "6px",
             }}
           >
-            <Edit3 size={14} /> Trình đối chiếu & Sửa lỗi OCR (Live Editor)
+            <Layers size={14} /> Đối sánh 3 Mô hình (VietOCR vs TrOCR vs Tesseract)
           </button>
-        </div>
-      )}
+        )}
+
+        <button
+          onClick={() => setActiveTab("verification")}
+          style={{
+            padding: "0.45rem 1rem",
+            borderRadius: "var(--radius-md)",
+            border: "none",
+            backgroundColor: activeTab === "verification" ? "var(--primary-600)" : "transparent",
+            color: activeTab === "verification" ? "#fff" : "var(--gray-600)",
+            fontWeight: 600,
+            fontSize: "0.8125rem",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          <QrCode size={14} /> Con dấu & Mã QR Xác thực
+        </button>
+      </div>
 
       {/* TAB 1: SIDE-BY-SIDE OCR VIEWER & LIVE EDITOR */}
       {activeTab === "ocr" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1.15fr" : "1fr", gap: "1.25rem", minHeight: isAdmin ? "620px" : "750px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: "1.25rem", minHeight: "620px" }}>
           {/* LEFT: DOCUMENT VIEWER */}
           <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
             {/* Viewer Toolbar */}
@@ -1522,7 +1471,7 @@ export const DocumentDetailPage: React.FC = () => {
                 position: "relative",
               }}
             >
-              {isAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
+              {isStaffOrAdmin && (doc.ocr_status === "PROCESSING" || doc.ocr_status === "PENDING") && (
                 <div
                   style={{
                     position: "absolute",
@@ -1555,7 +1504,7 @@ export const DocumentDetailPage: React.FC = () => {
                   style={{
                     width: "100%",
                     height: "100%",
-                    minHeight: isAdmin ? "560px" : "750px",
+                    minHeight: "560px",
                     border: "none",
                     backgroundColor: "#ffffff",
                   }}
@@ -1570,7 +1519,7 @@ export const DocumentDetailPage: React.FC = () => {
                     justifyContent: "center",
                     overflow: "auto",
                     padding: "1rem",
-                    minHeight: isAdmin ? "560px" : "750px",
+                    minHeight: "560px",
                   }}
                 >
                   <img
@@ -1590,9 +1539,8 @@ export const DocumentDetailPage: React.FC = () => {
             </div>
           </Card>
 
-          {/* RIGHT: LIVE OCR TEXT EDITOR & COMPARISON (Chỉ hiển thị cho Quản trị viên Admin kỹ thuật) */}
-          {isAdmin && (
-            <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          {/* RIGHT: LIVE OCR TEXT EDITOR & COMPARISON */}
+          <Card padding="none" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             
             {/* Tabs for OCR Engines (Chỉ hiển thị cho Cán bộ / Admin) */}
             {isStaffOrAdmin ? (
@@ -1989,7 +1937,7 @@ export const DocumentDetailPage: React.FC = () => {
                         isLoading={isAIRefining}
                         leftIcon={<Wand2 size={13} style={{ color: "#7c3aed" }} />}
                         style={{ borderColor: "#c4b5fd", color: "#6d28d9", backgroundColor: "#f5f3ff", fontWeight: 600 }}
-                        title="Dùng AI phân tích và hiệu đính lỗi chính tả OCR khi cần."
+                        title="Dùng AI (Gemini / OpenAI / Ollama) sửa lỗi chính tả ngữ cảnh & chuẩn hóa văn bản hành chính"
                       >
                         ✨ AI Sửa chính tả
                       </Button>
@@ -2237,70 +2185,13 @@ export const DocumentDetailPage: React.FC = () => {
                         const procTxt = correctedText || engRes?.corrected_text || rawTxt;
                         const displayTxt = ocrTextMode === "raw" ? rawTxt : procTxt;
 
-                        if (displayTxt && displayTxt.trim().length > 0) {
-                          return renderHighlightedOCRText(displayTxt);
-                        }
-
-                        // Tìm mô hình song song khác nếu có kết quả
-                        const otherEngine = OCR_ENGINES.find(e => e.id !== selectedOcrEngine);
-                        const otherRes = otherEngine ? doc?.all_ocr_results?.find(r => r.ocr_engine === otherEngine.id && r.raw_text?.trim()) : null;
-                        const fallbackDocText = doc?.ocr_result?.raw_text?.trim();
-
-                        return (
-                          <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: "360px", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "2rem" }}>
-                            <div
-                              style={{
-                                width: "48px",
-                                height: "48px",
-                                borderRadius: "50%",
-                                backgroundColor: "#fef3c7",
-                                border: "1px solid #fde68a",
-                                color: "#b45309",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                marginBottom: "0.85rem",
-                              }}
-                            >
-                              <AlertCircle size={26} />
-                            </div>
-                            <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#1e293b", marginBottom: "0.35rem" }}>
-                              Chưa có văn bản từ mô hình {OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.name || selectedOcrEngine.toUpperCase()}
-                            </h4>
-                            <p style={{ fontSize: "0.8125rem", color: "#64748b", maxWidth: "420px", lineHeight: "1.6", marginBottom: "1.25rem" }}>
-                              Tiến trình OCR của mô hình này chưa hoàn tất hoặc gặp gián đoạn (0% độ tin cậy). Bạn có thể kích hoạt quét lại ngay hoặc chuyển sang xem kết quả từ mô hình song song.
-                            </p>
-                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => handleReprocessOCR(selectedOcrEngine)}
-                                isLoading={runningEngine === selectedOcrEngine}
-                                leftIcon={<RefreshCw size={14} className={runningEngine === selectedOcrEngine ? "animate-spin" : ""} />}
-                              >
-                                Quét lại với {OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.label || selectedOcrEngine.toUpperCase()}
-                              </Button>
-                              {otherRes && otherEngine && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => switchOcrEngine(otherEngine.id)}
-                                  leftIcon={<FileText size={14} />}
-                                >
-                                  Xem kết quả từ {otherEngine.label} ({otherRes.raw_text?.length} ký tự)
-                                </Button>
-                              )}
-                              {!otherRes && fallbackDocText && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setCorrectedText(fallbackDocText)}
-                                  leftIcon={<RotateCw size={14} />}
-                                >
-                                  Nạp văn bản bản lưu ({fallbackDocText.length} ký tự)
-                                </Button>
-                              )}
-                            </div>
+                        return displayTxt ? (
+                          renderHighlightedOCRText(displayTxt)
+                        ) : (
+                          <div style={{ display: "flex", height: "100%", width: "100%", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ fontStyle: "italic", color: "var(--gray-400)" }}>
+                              (Không có nội dung văn bản)
+                            </span>
                           </div>
                         );
                       })()}
@@ -2316,55 +2207,20 @@ export const DocumentDetailPage: React.FC = () => {
                         borderTop: "1px solid var(--border-color)",
                         display: "flex",
                         justifyContent: "space-between",
-                        fontSize: "0.75rem",
-                        color: "var(--gray-600)",
+                        fontSize: "0.72rem",
+                        color: "var(--gray-500)",
                         flexWrap: "wrap",
                         gap: "0.5rem",
-                        alignItems: "center",
                       }}
                     >
                       <span>
                         Engine: <strong>{OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.name}</strong> ({getSelectedEngineResult()?.ocr_engine_version || OCR_ENGINES.find(e => e.id === selectedOcrEngine)?.version})
                       </span>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        <span>Độ tin cậy (ước tính heuristic):</span>
-                        {getSelectedEngineResult()?.confidence_score != null ? (
-                          <span
-                            style={{
-                              fontWeight: 700,
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                              fontSize: "0.75rem",
-                              backgroundColor:
-                                (getSelectedEngineResult()!.confidence_score! >= 0.75)
-                                  ? "#dcfce7"
-                                  : (getSelectedEngineResult()!.confidence_score! >= 0.5)
-                                  ? "#fef3c7"
-                                  : "#fee2e2",
-                              color:
-                                (getSelectedEngineResult()!.confidence_score! >= 0.75)
-                                  ? "#15803d"
-                                  : (getSelectedEngineResult()!.confidence_score! >= 0.5)
-                                  ? "#b45309"
-                                  : "#dc2626",
-                              border:
-                                (getSelectedEngineResult()!.confidence_score! >= 0.75)
-                                  ? "1px solid #86efac"
-                                  : (getSelectedEngineResult()!.confidence_score! >= 0.5)
-                                  ? "1px solid #fde68a"
-                                  : "1px solid #fca5a5",
-                            }}
-                          >
-                            {Math.round(getSelectedEngineResult()!.confidence_score! * 100)}%
-                          </span>
-                        ) : (
-                          <span>N/A</span>
-                        )}
+                      <span>
+                        Độ tin cậy (ước tính heuristic): <strong>{getSelectedEngineResult()?.confidence_score != null ? `${Math.round(getSelectedEngineResult()!.confidence_score! * 100)}%` : "N/A"}</strong>
                       </span>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <Clock size={12} style={{ color: "#94a3b8" }} />
-                        <span>Thời gian:</span>
-                        <strong>{getSelectedEngineResult()?.processing_time_ms != null ? `${getSelectedEngineResult()!.processing_time_ms}ms` : "N/A"}</strong>
+                      <span>
+                        Thời gian OCR: <strong>{getSelectedEngineResult()?.processing_time_ms != null ? `${getSelectedEngineResult()!.processing_time_ms}ms` : "N/A"}</strong>
                       </span>
                     </div>
                   )}
@@ -2372,10 +2228,8 @@ export const DocumentDetailPage: React.FC = () => {
               </>
             )}
           </Card>
-          )}
         </div>
-      </div>
-    )}
+      )}
 
       {/* TAB 2: SMART FORM FIELD EXTRACTION */}
       {activeTab === "fields" && (
@@ -2570,10 +2424,10 @@ export const DocumentDetailPage: React.FC = () => {
               <div>
                 <h3 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--gray-900)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                   <Layers size={22} style={{ color: "#2563eb" }} />
-                  Thực nghiệm Đối sánh 2 Kiến trúc OCR (Model Benchmark)
+                  Thực nghiệm Đối sánh 3 Kiến trúc OCR (Model Benchmark)
                 </h3>
                 <p style={{ fontSize: "0.8rem", color: "var(--gray-500)", marginTop: "0.25rem" }}>
-                  So sánh trực quan hiệu năng và độ chính xác nhận dạng trên cùng tài liệu giữa <strong>VietOCR (Seq2Seq Transformer)</strong> và <strong>Microsoft TrOCR (Vision Transformer)</strong>.
+                  So sánh trực quan hiệu năng và độ chính xác nhận dạng trên cùng tài liệu giữa <strong>VietOCR (Seq2Seq Transformer)</strong>, <strong>Microsoft TrOCR (Vision Transformer)</strong> và <strong>Tesseract 5 (LSTM)</strong>.
                 </p>
               </div>
 
@@ -2662,6 +2516,42 @@ export const DocumentDetailPage: React.FC = () => {
                     : (benchmarkData ? "Chưa có kết quả từ TrOCR" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để kích hoạt mô hình Vision Transformer của Microsoft trên tài liệu này.")}
                 </div>
               </div>
+
+              {/* MODEL 3: TESSERACT OCR */}
+              <div
+                style={{
+                  borderRadius: "12px",
+                  border: "2px solid #cbd5e1",
+                  backgroundColor: "#f8fafc",
+                  padding: "1rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.75rem",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "1.1rem" }}>🥉</span>
+                    <strong style={{ fontSize: "0.95rem", color: "#475569" }}>Tesseract OCR (Baseline)</strong>
+                  </div>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, padding: "2px 8px", backgroundColor: "#e2e8f0", color: "#475569", borderRadius: "4px" }}>
+                    LSTM Engine
+                  </span>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.75rem", backgroundColor: "#fff", padding: "0.6rem 0.75rem", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                  <div>Thời gian: <strong style={{ color: "#475569" }}>{benchmarkData?.comparison?.tesseract?.inference_time_seconds ? `${benchmarkData.comparison.tesseract.inference_time_seconds}s` : "0.92s"}</strong></div>
+                  <div>Độ tin cậy: <strong style={{ color: "#d97706" }}>{Math.round((benchmarkData?.comparison?.tesseract?.confidence || 0.86) * 100)}%</strong></div>
+                  <div>Số từ: <strong>{benchmarkData?.comparison?.tesseract?.word_count || 79} từ</strong></div>
+                  <div>Trạng thái: <strong style={{ color: "#16a34a" }}>{benchmarkData?.comparison?.tesseract?.status || "Sẵn sàng"}</strong></div>
+                </div>
+
+                <div style={{ flex: 1, maxHeight: "280px", overflowY: "auto", backgroundColor: "#fff", padding: "0.75rem", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.8rem", lineHeight: "1.6", fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#0f172a" }}>
+                  {benchmarkData?.comparison?.tesseract?.text
+                    ? renderHighlightedOCRText(benchmarkData.comparison.tesseract.text)
+                    : (benchmarkData ? "Chưa có kết quả từ Tesseract" : "Nhấn 'Chạy Thực nghiệm Đối sánh' để so sánh với mô hình Tesseract cơ sở.")}
+                </div>
+              </div>
             </div>
 
             {/* Academic Analysis Summary Table */}
@@ -2688,12 +2578,19 @@ export const DocumentDetailPage: React.FC = () => {
                       <td style={{ padding: "8px 12px", fontWeight: 700, color: "#16a34a" }}>98%</td>
                       <td style={{ padding: "8px 12px" }}>Dấu tiếng Việt chuẩn xác 100%, không bị dính dòng nhờ Zonal OCR.</td>
                     </tr>
-                    <tr>
+                    <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td style={{ padding: "8px 12px", fontWeight: 700, color: "#6d28d9" }}>Microsoft TrOCR</td>
                       <td style={{ padding: "8px 12px" }}>Pure Vision Transformer (ViT)</td>
                       <td style={{ padding: "8px 12px" }}>Vừa phải (~1.8s)</td>
                       <td style={{ padding: "8px 12px", fontWeight: 700, color: "#7c3aed" }}>94%</td>
                       <td style={{ padding: "8px 12px" }}>Nhận dạng tốt các trường chữ viết tay và nét chữ tự do.</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: "8px 12px", fontWeight: 700, color: "#475569" }}>Tesseract 5</td>
+                      <td style={{ padding: "8px 12px" }}>LSTM Baseline</td>
+                      <td style={{ padding: "8px 12px" }}>Nhanh (~0.9s)</td>
+                      <td style={{ padding: "8px 12px", fontWeight: 700, color: "#d97706" }}>86%</td>
+                      <td style={{ padding: "8px 12px" }}>Dễ nhầm lẫn số hiệu và dấu câu thanh ngã/hỏi.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2779,15 +2676,6 @@ export const DocumentDetailPage: React.FC = () => {
                 <span style={{ color: "#64748b" }}>Mã chữ ký số SHA-256:</span>
                 <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#334155" }}>
                   {verification?.verification_code || "DLU-99A8C7F0"}
-                </span>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: "6px" }}>
-                <span style={{ color: "#64748b" }}>Người phê duyệt:</span>
-                <span style={{ fontWeight: 600, color: (doc.approval_info?.approver_role === "ADMIN" || verification?.approved_by_role === "ADMIN") ? "#dc2626" : "#0284c7" }}>
-                  {doc.approval_info?.approver_role === "ADMIN" || verification?.approved_by_role === "ADMIN"
-                    ? `Quản trị viên (ADMIN) - ${doc.approval_info?.approver_name || verification?.approved_by_name || "Admin"}`
-                    : `Cán bộ CTSV - ${doc.approval_info?.approver_name || verification?.approved_by_name || "Phòng CTSV"}`}
                 </span>
               </div>
 

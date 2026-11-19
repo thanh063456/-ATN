@@ -8,7 +8,6 @@ Chịu trách nhiệm:
 
 Mọi ngưỡng số đọc từ app.core.config.settings.
 """
-
 import glob
 import os
 import re
@@ -29,7 +28,6 @@ class VietOCREngine:
         if self._settings is None:
             try:
                 from app.core.config import settings
-
                 self._settings = settings
             except Exception:
                 pass
@@ -42,7 +40,6 @@ class VietOCREngine:
             _s = self._get_settings()
             _req = getattr(_s, "ocr_device", "cuda") if _s else "cuda"
             import torch
-
             _target = "cuda" if (_req in ("cuda", "auto") and torch.cuda.is_available()) else "cpu"
             if self._predictor.config.get("device") != _target:
                 logger.info("Migrating VietOCR predictor to {dev}...", dev=_target)
@@ -54,7 +51,6 @@ class VietOCREngine:
         orig_requests_get = None
         try:
             import urllib3
-
             urllib3.disable_warnings()
             import requests
             from vietocr.tool import utils as vocr_utils
@@ -68,7 +64,6 @@ class VietOCREngine:
             vocr_utils.requests.get = _scoped_get
 
             import torch
-
             torch.set_num_threads(min(8, os.cpu_count() or 4))
 
             from vietocr.tool.config import Cfg
@@ -77,14 +72,13 @@ class VietOCREngine:
             config = Cfg.load_config_from_name("vgg_transformer")
 
             _s = self._get_settings()
-            _device = getattr(_s, "ocr_device", "cuda") if _s else "cuda"
+            _device     = getattr(_s, "ocr_device", "cuda")           if _s else "cuda"
             _beamsearch = getattr(_s, "ocr_beamsearch_enabled", False) if _s else False
-            _beam_size = getattr(_s, "ocr_beam_size", 4) if _s else 4
-            _fast_mode = getattr(_s, "ocr_fast_mode", False) if _s else False
+            _beam_size  = getattr(_s, "ocr_beam_size", 4)             if _s else 4
+            _fast_mode  = getattr(_s, "ocr_fast_mode", False)         if _s else False
 
             if _device in ("cuda", "auto"):
                 import torch
-
                 if not torch.cuda.is_available():
                     logger.warning("CUDA không khả dụng cho VietOCR, tự động fallback sang CPU")
                     _device = "cpu"
@@ -127,10 +121,9 @@ class VietOCREngine:
             if best_weights and os.path.exists(best_weights):
                 logger.info("Loading fine-tuned VietOCR weights: {path}", path=best_weights)
                 config["weights"] = best_weights
-
+                
                 # Check for sidecar JSON
                 import json
-
                 sidecar_path = best_weights.replace(".pth", ".json")
                 if os.path.exists(sidecar_path):
                     try:
@@ -159,7 +152,6 @@ class VietOCREngine:
             if _quantize:
                 try:
                     import torch
-
                     torch.backends.quantized.engine = "fbgemm"  # tốt cho Intel x86
                     self._predictor.model = torch.quantization.quantize_dynamic(
                         self._predictor.model,
@@ -179,7 +171,6 @@ class VietOCREngine:
                 try:
                     import requests
                     from vietocr.tool import utils as vocr_utils
-
                     requests.get = orig_requests_get
                     vocr_utils.requests.get = orig_requests_get
                 except Exception:
@@ -188,9 +179,7 @@ class VietOCREngine:
         return self._predictor
 
     # ── Batch Predict ─────────────────────────────────────────────────────────
-    def predict_batch_padded(
-        self, images: list[Image.Image], return_prob: bool = False
-    ) -> list[str] | tuple[list[str], list[float]]:
+    def predict_batch_padded(self, images: list[Image.Image], return_prob: bool = False) -> list[str] | tuple[list[str], list[float]]:
         """
         Pad tất cả ảnh dòng về cùng h=32, w=max_w rồi predict 1 batch duy nhất.
         Tăng throughput CPU gấp 3-5x so với predict từng ảnh đơn lẻ.
@@ -271,65 +260,43 @@ class VietOCREngine:
             return []
 
         _s = self._get_settings()
-        _max_lines = getattr(_s, "ocr_max_lines_per_page", 300) if _s else 300
-        _batch_size = getattr(_s, "ocr_batch_size", 32) if _s else 32  # 16 -> 32
+        _max_lines  = getattr(_s, "ocr_max_lines_per_page", 300) if _s else 300
+        _batch_size = getattr(_s, "ocr_batch_size", 32)          if _s else 32  # 16 -> 32
 
         imgs = line_images[:_max_lines] if _max_lines > 0 else line_images
 
         # Tiền xử lý từng dòng
-        cleaned: list[Image.Image] = [preprocess_fn(li) if preprocess_fn else li for li in imgs]
+        cleaned: list[Image.Image] = [
+            preprocess_fn(li) if preprocess_fn else li for li in imgs
+        ]
         total_lines = len(cleaned)
 
         # Sort-by-width: nhóm dòng có độ rộng gần nhau vào cùng batch
         indexed = sorted(enumerate(cleaned), key=lambda iv: iv[1].size[0])
-        orig_indices = [i for i, _ in indexed]
+        orig_indices  = [i for i, _ in indexed]
         sorted_images = [img for _, img in indexed]
 
-        # Nhóm dòng theo width buckets thông minh để tránh đệm trắng quá lớn làm méo chữ số hẹp (như số 4 viết tay)
-        batches: list[list[Image.Image]] = []
-        batches_idx: list[list[int]] = []
-        cur_batch: list[Image.Image] = []
-        cur_batch_idx: list[int] = []
-
-        for im, idx in zip(sorted_images, orig_indices):
-            if not cur_batch:
-                cur_batch.append(im)
-                cur_batch_idx.append(idx)
-            elif (im.size[0] / max(1, cur_batch[0].size[0]) <= 1.45) and len(cur_batch) < _batch_size:
-                cur_batch.append(im)
-                cur_batch_idx.append(idx)
-            else:
-                batches.append(cur_batch)
-                batches_idx.append(cur_batch_idx)
-                cur_batch = [im]
-                cur_batch_idx = [idx]
-        if cur_batch:
-            batches.append(cur_batch)
-            batches_idx.append(cur_batch_idx)
-
-        # OCR theo từng width bucket
+        # OCR theo batch (sorted by width)
         sorted_texts: dict[int, str] = {}
         sorted_probs: dict[int, float] = {}
-        processed_count = 0
-        for batch, batch_idx in zip(batches, batches_idx):
-            wmin = batch[0].size[0]
-            wmax = batch[-1].size[0]
+        for batch_start in range(0, total_lines, _batch_size):
+            batch     = sorted_images[batch_start: batch_start + _batch_size]
+            batch_idx = orig_indices[batch_start: batch_start + _batch_size]
             logger.info(
                 "[VietOCR] Dòng {s}-{e}/{t} (w={wmin}-{wmax}px)",
-                s=processed_count + 1,
-                e=processed_count + len(batch),
+                s=batch_start + 1,
+                e=min(batch_start + _batch_size, total_lines),
                 t=total_lines,
-                wmin=wmin,
-                wmax=wmax,
+                wmin=batch[0].size[0],
+                wmax=batch[-1].size[0],
             )
-            processed_count += len(batch)
             try:
                 texts, probs = self.predict_batch_padded(batch, return_prob=True)
             except Exception:
                 # safety fallback if something really bad happens
                 texts = self.predict_batch_padded(batch, return_prob=False)
                 probs = [0.8] * len(texts)
-
+                
             for orig_i, txt, p in zip(batch_idx, texts, probs):
                 sorted_texts[orig_i] = str(txt).strip() if txt else ""
                 sorted_probs[orig_i] = float(p)
@@ -341,7 +308,7 @@ class VietOCREngine:
             prob = sorted_probs.get(i, 0.0)
             if txt:
                 # Add a small heuristic penalty for garbled lines but mostly trust real prob
-                bad = len(re.findall(r"[%~^|<>{}\\[\]\\\\]", txt))
+                bad  = len(re.findall(r'[%~^|<>{}\\[\]\\\\]', txt))
                 if bad > 0:
                     prob = max(0.1, prob - (bad / max(len(txt), 1)))
                 line_results.append((txt, round(prob, 3)))

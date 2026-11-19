@@ -1,20 +1,21 @@
-import React, { useEffect } from "react";
+import React, { useEffect, Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppLayout } from "./components/layout/AppLayout";
-import { LoginPage } from "./pages/LoginPage";
-import { RegisterPage } from "./pages/RegisterPage";
-import { VerifyPage } from "./pages/VerifyPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { UploadPage } from "./pages/UploadPage";
-import { SearchPage } from "./pages/SearchPage";
-import { DocumentsPage } from "./pages/DocumentsPage";
-import { DocumentDetailPage } from "./pages/DocumentDetailPage";
-import { UserManagementPage } from "./pages/UserManagementPage";
-import { CategoryManagementPage } from "./pages/CategoryManagementPage";
-import { ProfilePage } from "./pages/ProfilePage";
 import { useAuthStore } from "./stores/useAuthStore";
 import { supabase } from "./lib/supabase";
+
+// Code splitting các trang lớn bằng React.lazy để tối ưu bundle size ban đầu (<200kB)
+const LoginPage = lazy(() => import("./pages/LoginPage").then(m => ({ default: m.LoginPage })));
+const RegisterPage = lazy(() => import("./pages/RegisterPage").then(m => ({ default: m.RegisterPage })));
+const VerifyPage = lazy(() => import("./pages/VerifyPage").then(m => ({ default: m.VerifyPage })));
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then(m => ({ default: m.DashboardPage })));
+const UploadPage = lazy(() => import("./pages/UploadPage").then(m => ({ default: m.UploadPage })));
+const SearchPage = lazy(() => import("./pages/SearchPage").then(m => ({ default: m.SearchPage })));
+const DocumentsPage = lazy(() => import("./pages/DocumentsPage").then(m => ({ default: m.DocumentsPage })));
+const DocumentDetailPage = lazy(() => import("./pages/DocumentDetailPage").then(m => ({ default: m.DocumentDetailPage })));
+const UserManagementPage = lazy(() => import("./pages/UserManagementPage").then(m => ({ default: m.UserManagementPage })));
+const CategoryManagementPage = lazy(() => import("./pages/CategoryManagementPage").then(m => ({ default: m.CategoryManagementPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,7 +40,7 @@ const useSupabaseAuth = () => {
           } else {
             // Không có session hợp lệ → xóa token cũ khỏi localStorage
             const storedToken = localStorage.getItem("access_token");
-            if (storedToken && !storedToken.startsWith("demo_")) {
+            if (storedToken) {
               console.warn("[Auth] Stored token invalid, clearing...");
               localStorage.removeItem("access_token");
               localStorage.removeItem("user_profile");
@@ -55,11 +56,8 @@ const useSupabaseAuth = () => {
           if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
             if (session) setSession(session);
           } else if (event === "SIGNED_OUT") {
-            // Token hết hạn hoặc bị thu hồi → chỉ gọi nếu còn token hoặc đang authenticated
-            const storedToken = localStorage.getItem("access_token");
-            if (storedToken || useAuthStore.getState().isAuthenticated) {
-              logout();
-            }
+            // Token hết hạn hoặc bị thu hồi → logout sạch
+            logout();
           }
         }
       );
@@ -86,15 +84,15 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#0e1e33",
+          backgroundColor: "#0f172a",
         }}
       >
         <div
           style={{
             width: 36,
             height: 36,
-            border: "3px solid rgba(255, 255, 255, 0.15)",
-            borderTopColor: "#60a5fa",
+            border: "3px solid rgba(99,102,241,0.3)",
+            borderTopColor: "#6366f1",
             borderRadius: "50%",
             animation: "spin 0.7s linear infinite",
           }}
@@ -115,37 +113,58 @@ export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          {/* Public Auth & Verification Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify/:id" element={<VerifyPage />} />
+        <Suspense
+          fallback={
+            <div
+              style={{
+                minHeight: "100vh",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f8fafc",
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  border: "3px solid #e2e8f0",
+                  borderTopColor: "#4f46e5",
+                  borderRadius: "50%",
+                  animation: "spin 0.6s linear infinite",
+                }}
+              />
+            </div>
+          }
+        >
+          <Routes>
+            {/* Public Auth & Verification Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify/:id" element={<VerifyPage />} />
 
-          {/* Protected Application Routes */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<DashboardPage />} />
-            <Route path="upload" element={<UploadPage />} />
-            <Route path="search" element={<SearchPage />} />
-            <Route path="documents" element={<DocumentsPage />} />
-            <Route path="document" element={<Navigate to="/documents" replace />} />
-            <Route path="docs" element={<Navigate to="/documents" replace />} />
-            <Route path="documents/:id" element={<DocumentDetailPage />} />
-            <Route path="document/:id" element={<Navigate to="/documents/:id" replace />} />
-            <Route path="admin/users" element={<UserManagementPage />} />
-            <Route path="admin/categories" element={<CategoryManagementPage />} />
-            <Route path="profile" element={<ProfilePage />} />
-          </Route>
+            {/* Protected Application Routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<DashboardPage />} />
+              <Route path="upload" element={<UploadPage />} />
+              <Route path="search" element={<SearchPage />} />
+              <Route path="documents" element={<DocumentsPage />} />
+              <Route path="documents/:id" element={<DocumentDetailPage />} />
+              <Route path="admin/users" element={<UserManagementPage />} />
+              <Route path="admin/categories" element={<CategoryManagementPage />} />
+            </Route>
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </QueryClientProvider>
   );

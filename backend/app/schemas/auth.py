@@ -1,16 +1,13 @@
 """
 backend/app/schemas/auth.py — Pydantic Schemas for Authentication & User Roles
 """
-
 from datetime import datetime
 from uuid import UUID
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class SignupRequest(BaseModel):
     """Payload đăng ký tài khoản mới (tạo trực tiếp có auto-confirm email)."""
-
     email: str
     password: str
     full_name: str
@@ -19,13 +16,11 @@ class SignupRequest(BaseModel):
 
 class ConfirmEmailRequest(BaseModel):
     """Yêu cầu xác nhận email thủ công hoặc tự động."""
-
     email: str
 
 
 class RegisterRequest(BaseModel):
     """Payload từ frontend sau khi Supabase Auth signup thành công."""
-
     full_name: str
     mssv: str | None = Field(None, description="Mã số sinh viên (STUDENT only)")
     supabase_uid: str | None = Field(None, description="Supabase auth.users.id")
@@ -35,7 +30,6 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     """Kept for backward compat — dùng khi test với username/password trực tiếp."""
-
     username: str
     password: str
 
@@ -45,13 +39,6 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: "UserResponse"
-
-
-class UpdateProfileRequest(BaseModel):
-    """Payload cập nhật thông tin cá nhân."""
-
-    full_name: str | None = None
-    mssv: str | None = None
 
 
 class UserResponse(BaseModel):
@@ -66,24 +53,3 @@ class UserResponse(BaseModel):
     role_name: str
     is_active: bool
     created_at: datetime
-
-
-class CreateUserByAdminRequest(BaseModel):
-    username: str
-    email: str
-    full_name: str
-    password: str = "Dlu@123456"
-    role: str = "STAFF"
-    mssv: str | None = None
-
-
-class UserAdminItemResponse(BaseModel):
-    id: str
-    username: str
-    fullName: str
-    email: str
-    mssv: str | None = None
-    role: str
-    isActive: bool
-    lastLogin: str
-    createdAt: str

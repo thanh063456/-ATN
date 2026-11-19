@@ -106,12 +106,14 @@ export const RegisterPage: React.FC = () => {
   if (success) {
     return (
       <div style={pageStyle}>
+        <div style={blobStyle1} />
+        <div style={blobStyle2} />
         <div style={{ ...cardStyle, textAlign: "center" }} className="animate-fade-in">
-          <div style={{ ...logoStyle, backgroundColor: "#166534", border: "1px solid rgba(22, 101, 52, 0.2)" }}>
-            <CheckCircle2 size={24} color="#fff" />
+          <div style={{ ...logoStyle, background: "linear-gradient(135deg,#22c55e,#16a34a)" }}>
+            <CheckCircle2 size={26} color="#fff" />
           </div>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#0f172a", marginTop: "1rem" }}>
-            Đăng ký tài khoản thành công
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#0f172a", marginTop: "1rem" }}>
+            Đăng ký thành công! 🎉
           </h2>
           <p style={{ color: "#64748b", fontSize: "0.875rem", marginTop: "0.5rem", lineHeight: 1.6 }}>
             Tài khoản <strong>{email}</strong> đã được kích hoạt thành công.
@@ -125,13 +127,14 @@ export const RegisterPage: React.FC = () => {
               alignItems: "center",
               gap: "0.5rem",
               marginTop: "1.5rem",
-              padding: "0.65rem 1.25rem",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "#1e40af",
+              padding: "0.7rem 1.5rem",
+              borderRadius: 10,
+              background: "linear-gradient(135deg,#6366f1,#4f46e5)",
               color: "#fff",
-              fontWeight: 600,
-              fontSize: "0.875rem",
+              fontWeight: 700,
+              fontSize: "0.9rem",
               textDecoration: "none",
+              boxShadow: "0 4px 12px rgba(79,70,229,0.3)",
             }}
           >
             Đến trang đăng nhập <ArrowRight size={16} />
@@ -143,6 +146,9 @@ export const RegisterPage: React.FC = () => {
 
   return (
     <div style={pageStyle}>
+      <div style={blobStyle1} />
+      <div style={blobStyle2} />
+
       <div style={cardStyle} className="animate-fade-in">
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
@@ -358,7 +364,7 @@ export const RegisterPage: React.FC = () => {
 
         <p style={{ textAlign: "center", fontSize: "0.8rem", color: "var(--gray-500)", marginTop: "1rem" }}>
           Đã có tài khoản?{" "}
-          <Link to="/login" style={{ color: "#1e40af", fontWeight: 600, textDecoration: "none" }}>
+          <Link to="/login" style={{ color: "#6366f1", fontWeight: 600, textDecoration: "none" }}>
             Đăng nhập
           </Link>
         </p>
@@ -373,9 +379,36 @@ const pageStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  backgroundColor: "#0e1e33",
+  backgroundColor: "#0f172a",
+  backgroundImage:
+    "radial-gradient(at 0% 0%, rgba(99,102,241,0.18) 0, transparent 55%), radial-gradient(at 100% 100%, rgba(6,182,212,0.12) 0, transparent 55%)",
   padding: "1.5rem",
   position: "relative",
+  overflow: "hidden",
+};
+
+const blobStyle1: React.CSSProperties = {
+  position: "absolute",
+  width: 380,
+  height: 380,
+  borderRadius: "50%",
+  background: "rgba(99,102,241,0.07)",
+  filter: "blur(60px)",
+  top: -100,
+  left: -100,
+  pointerEvents: "none",
+};
+
+const blobStyle2: React.CSSProperties = {
+  position: "absolute",
+  width: 300,
+  height: 300,
+  borderRadius: "50%",
+  background: "rgba(6,182,212,0.06)",
+  filter: "blur(50px)",
+  bottom: -80,
+  right: -80,
+  pointerEvents: "none",
 };
 
 const cardStyle: React.CSSProperties = {
@@ -383,29 +416,28 @@ const cardStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: 440,
   backgroundColor: "#ffffff",
-  borderRadius: "var(--radius-lg)",
-  border: "1px solid var(--border-color)",
-  boxShadow: "var(--shadow-md)",
-  padding: "2rem",
+  borderRadius: 20,
+  boxShadow: "0 24px 48px -12px rgba(0,0,0,0.28)",
+  padding: "2rem 2rem",
 };
 
 const logoStyle: React.CSSProperties = {
-  width: 44,
-  height: 44,
-  borderRadius: "var(--radius-sm)",
-  backgroundColor: "#1e3a8a",
-  border: "1px solid rgba(255, 255, 255, 0.2)",
+  width: 50,
+  height: 50,
+  borderRadius: 14,
+  background: "linear-gradient(135deg,#6366f1,#4338ca)",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
+  boxShadow: "0 8px 16px rgba(99,102,241,0.35)",
   marginBottom: "0.75rem",
 };
 
 const titleStyle: React.CSSProperties = {
-  fontSize: "1.25rem",
-  fontWeight: 700,
+  fontSize: "1.35rem",
+  fontWeight: 800,
   color: "#0f172a",
-  letterSpacing: "0.02em",
+  letterSpacing: "-0.03em",
   margin: 0,
 };
 
@@ -422,7 +454,7 @@ const subtitleStyle: React.CSSProperties = {
 const tabContainerStyle: React.CSSProperties = {
   display: "flex",
   backgroundColor: "#f1f5f9",
-  borderRadius: "var(--radius-sm)",
+  borderRadius: 10,
   padding: 4,
   marginBottom: "1.25rem",
   gap: 4,
@@ -432,7 +464,7 @@ const tabStyle: React.CSSProperties = {
   flex: 1,
   textAlign: "center",
   padding: "0.45rem",
-  borderRadius: "var(--radius-sm)",
+  borderRadius: 8,
   fontSize: "0.85rem",
   fontWeight: 600,
   color: "#64748b",
@@ -471,7 +503,7 @@ const iconStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.6rem 0.875rem 0.6rem 2.5rem",
-  borderRadius: "var(--radius-sm)",
+  borderRadius: 10,
   border: "1.5px solid #e2e8f0",
   fontSize: "0.875rem",
   color: "#0f172a",
@@ -498,7 +530,7 @@ const eyeButtonStyle: React.CSSProperties = {
 const errorBoxStyle: React.CSSProperties = {
   backgroundColor: "#fef2f2",
   border: "1px solid #fecaca",
-  borderRadius: "var(--radius-sm)",
+  borderRadius: 8,
   padding: "0.65rem 0.875rem",
   color: "#dc2626",
   fontSize: "0.8rem",
@@ -507,19 +539,19 @@ const errorBoxStyle: React.CSSProperties = {
 
 const submitBtnStyle: React.CSSProperties = {
   width: "100%",
-  padding: "0.65rem",
-  borderRadius: "var(--radius-md)",
+  padding: "0.75rem",
+  borderRadius: 10,
   border: "none",
-  backgroundColor: "#1e40af",
+  background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
   color: "#ffffff",
-  fontWeight: 600,
-  fontSize: "0.875rem",
+  fontWeight: 700,
+  fontSize: "0.9rem",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   gap: "0.5rem",
-  boxShadow: "var(--shadow-sm)",
-  transition: "background-color 0.15s",
+  boxShadow: "0 4px 14px rgba(79,70,229,0.35)",
+  transition: "transform 0.15s, box-shadow 0.15s",
 };
 
 const spinnerStyle: React.CSSProperties = {

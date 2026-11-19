@@ -1,6 +1,5 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   Menu,
   Search,
@@ -8,10 +7,10 @@ import {
   ShieldCheck,
   UserCheck,
   GraduationCap,
+  Activity,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/useAuthStore";
 import { Badge } from "../common/Badge";
-import { NotificationDropdown } from "./NotificationDropdown";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -19,7 +18,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { user, logout } = useAuthStore();
 
   const getRoleBadgeVariant = () => {
@@ -47,25 +45,42 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const getRoleIcon = () => {
     switch (user?.role) {
       case "ADMIN":
-        return <ShieldCheck size={13} className="text-rose-600" />;
+        return <ShieldCheck size={13} color="#ef4444" />;
       case "STAFF":
-        return <UserCheck size={13} className="text-amber-600" />;
+        return <UserCheck size={13} color="#d97706" />;
       default:
-        return <GraduationCap size={13} className="text-sky-600" />;
+        return <GraduationCap size={13} color="#0284c7" />;
     }
   };
 
   return (
-    <header className="h-[60px] bg-white border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30 shadow-sm">
+    <header
+      style={{
+        height: "var(--header-height)",
+        backgroundColor: "var(--bg-surface)",
+        borderBottom: "1px solid var(--border-color)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 1.5rem",
+        position: "sticky",
+        top: 0,
+        zIndex: 40,
+      }}
+    >
       {/* Left section: Toggle & Quick Search */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
         <button
           onClick={onToggleSidebar}
-          className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-          title="Thu gọn / Mở rộng menu"
-          aria-label="Toggle Sidebar"
+          style={{
+            padding: "0.5rem",
+            borderRadius: "var(--radius-sm)",
+            color: "var(--gray-600)",
+            display: "flex",
+          }}
+          title="Toggle Sidebar"
         >
-          <Menu size={19} />
+          <Menu size={20} />
         </button>
 
         <form
@@ -75,76 +90,113 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             const term = target?.value?.trim();
             if (term) {
               navigate(`/search?q=${encodeURIComponent(term)}`);
+            } else {
+              navigate("/search");
             }
           }}
-          className="flex items-center gap-2 bg-slate-100/80 hover:bg-slate-100 focus-within:bg-white focus-within:ring-2 focus-within:ring-dlu-navy-500/20 focus-within:border-dlu-navy-600 border border-slate-200 rounded-md px-3 py-1.5 w-64 sm:w-80 md:w-96 transition-all"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            backgroundColor: "var(--gray-100)",
+            padding: "0.35rem 0.75rem",
+            borderRadius: "var(--radius-md)",
+            width: "300px",
+            border: "1px solid var(--border-color)",
+          }}
         >
-          <Search size={15} className="text-slate-400 shrink-0" />
+          <Search size={15} color="var(--gray-500)" />
           <input
             name="headerSearch"
             type="text"
-            placeholder="Tra cứu số hiệu văn bản, tiêu đề hoặc MSSV..."
-            className="border-none bg-transparent outline-none text-xs text-slate-800 placeholder-slate-400 w-full"
+            placeholder="Tra cứu MSSV, tiêu đề, nội dung..."
+            style={{
+              border: "none",
+              backgroundColor: "transparent",
+              outline: "none",
+              fontSize: "0.8125rem",
+              width: "100%",
+              color: "var(--gray-800)",
+            }}
           />
-          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-white border border-slate-200 rounded shadow-2xs">
-            ↵
+          <kbd
+            style={{
+              padding: "0.1rem 0.35rem",
+              backgroundColor: "#ffffff",
+              border: "1px solid var(--border-color)",
+              borderRadius: "4px",
+              fontSize: "0.6875rem",
+              color: "var(--gray-500)",
+              cursor: "pointer",
+            }}
+          >
+            Enter
           </kbd>
         </form>
       </div>
 
-      {/* Right section: System status, Role Indicator, Profile */}
-      <div className="flex items-center gap-2 sm:gap-4">
-        {/* Backend Status indicator */}
-        <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-600 bg-emerald-50/80 border border-emerald-200/60 px-2 py-0.5 rounded-full">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-medium text-emerald-800 text-[11px]">Hệ thống sẵn sàng</span>
+      {/* Right section: System status, Static Role Indicator, Profile */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+        {/* Backend & ES Live Status indicator */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "var(--success-700)", backgroundColor: "var(--success-50)", padding: "0.25rem 0.6rem", borderRadius: "9999px", border: "1px solid #bbf7d0" }}>
+          <Activity size={13} className="animate-pulse" />
+          <span style={{ fontWeight: 600 }}>Hệ thống Online</span>
         </div>
 
-        {/* Static Role Display */}
-        <div className="hidden sm:flex items-center gap-1.5">
-          <Badge variant={getRoleBadgeVariant()} size="sm">
-            <span className="inline-flex items-center gap-1">
+        {/* Static Role Display (Fixed, no dropdown change) */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--gray-500)", fontWeight: 500 }}>Vai trò:</span>
+          <Badge variant={getRoleBadgeVariant()}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
               {getRoleIcon()}
               <span>{getRoleLabel()}</span>
             </span>
           </Badge>
         </div>
 
-        {/* Nút Chuông Thông Báo Xét Duyệt Hồ Sơ */}
-        <NotificationDropdown />
-
-        {/* User Info Chip */}
-        <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200">
-          <button
-            onClick={() => navigate("/profile")}
-            className="flex items-center gap-2 p-1 sm:px-2 sm:py-1 rounded-md hover:bg-slate-100 transition-colors text-left"
-            title="Xem hồ sơ cá nhân & các tài liệu đã tải lên"
-          >
-            <div className="w-8 h-8 rounded-full bg-dlu-navy-900 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              {user?.fullName?.charAt(0) || "U"}
-            </div>
-
-            <div className="hidden md:flex flex-col leading-tight">
-              <span className="text-xs font-semibold text-slate-800 truncate max-w-[140px]">
-                {user?.fullName || "Người dùng"}
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">
-                {user?.mssv ? `MSSV: ${user.mssv}` : user?.role}
-              </span>
-            </div>
-          </button>
-
-          <button
-            onClick={async () => {
-              queryClient.clear();
-              await logout();
-              navigate("/login", { replace: true });
+        {/* User Info */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", paddingLeft: "0.75rem", borderLeft: "1px solid var(--border-color)" }}>
+          <div
+            style={{
+              width: "34px",
+              height: "34px",
+              borderRadius: "50%",
+              backgroundColor: "var(--primary-100)",
+              color: "var(--primary-700)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 700,
+              fontSize: "0.875rem",
             }}
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-            title="Đăng xuất"
-            aria-label="Đăng xuất"
           >
-            <LogOut size={16} />
+            {user?.fullName?.charAt(0) || "U"}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--gray-900)" }}>
+              {user?.fullName}
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.6875rem", color: "var(--gray-500)" }}>
+              {getRoleIcon()}
+              <span>{user?.mssv ? `MSSV: ${user.mssv}` : user?.role}</span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              logout();
+              navigate("/login");
+            }}
+            style={{
+              padding: "0.45rem",
+              color: "var(--gray-400)",
+              borderRadius: "var(--radius-sm)",
+              display: "flex",
+            }}
+            title="Đăng xuất"
+          >
+            <LogOut size={17} />
           </button>
         </div>
       </div>
