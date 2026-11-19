@@ -1319,7 +1319,7 @@ async def get_trending_searches(
     summary="Thống kê chi tiết cụm chỉ mục Elasticsearch (Cluster Health & Index Stats)",
 )
 async def get_elasticsearch_stats(
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
 ) -> dict[str, Any]:
     """
     Báo cáo tài nguyên Elasticsearch:
