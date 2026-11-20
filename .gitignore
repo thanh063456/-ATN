@@ -122,3 +122,5 @@ scripts/_audit.*
 scripts/_review.*
 scripts/_*.py
 scripts/_*.ps1
+
+batch_ocr_progress.json
