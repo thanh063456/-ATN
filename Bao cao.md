@@ -7,7 +7,7 @@
 * **Chuyên ngành**: Công nghệ Thông tin
 * **Nhóm sinh viên thực hiện (3 thành viên)**:
   1. **Ngô Công Thành** – MSSV: 2212461 *(Trưởng nhóm)*
-  2. **Phan Thành Phát** – MSSV: 2212463
+  2. **Phan Thành Phát** – MSSV: 2212436
   3. **Lý Gia Bảo** – MSSV: 2213934
 * **Giảng viên hướng dẫn**: ThS. / TS. [Tên Giảng Viên Hướng Dẫn]
 * **Thời gian báo cáo**: Học kỳ I, Năm học 2025 – 2026
@@ -77,8 +77,8 @@ Hệ thống gồm 6 phân hệ module, mỗi thành viên trong nhóm phụ tr�
 |:---:|---|---|---|:---:|:---:|
 | **1** | **Module 1: Thu Thập & Tiền Xử Lý Ảnh** | • Thu thập tập dữ liệu 13.125 mẫu ảnh CTSV ĐH Đà Lạt.<br>• Thuật toán Deskew xoay thẳng góc nghiêng.<br>• Thuật toán lọc đường kẻ chấm form `...........`.<br>• Phóng đại dòng chữ viết tay ($1.5\times - 2.5\times$) & tăng tương phản CLAHE. | • OpenCV (cv2)<br>• PyMuPDF (fitz)<br>• Pillow / NumPy | **Ngô Công Thành**<br>*(MSSV: 2212461 - Trưởng nhóm)* | **100%** |
 | **2** | **Module 2: Mô Hình AI & VietOCR Pipeline** | • Cắt dòng chữ tự động (Line Segmentation).<br>• Huấn luyện & Fine-tune VietOCR Transformer (`vgg_transformer`).<br>• Giải thuật bóc tách cấu trúc lưới Bảng biểu (Table Grid) ra Markdown.<br>• Hậu xử lý chuẩn hóa Unicode NFC và sửa từ điển hành chính. | • PyTorch 2.x<br>• VietOCR Transformer<br>• Albumentations | **Ngô Công Thành**<br>*(MSSV: 2212461 - Trưởng nhóm)* | **100%** |
-| **3** | **Module 3: Bóc Tách Thực Thể & Elasticsearch** | • Bộ luật Regex trích xuất MSSV 7 số, Họ tên, Ngày ban hành, Số hiệu.<br>• Cấu hình cụm chỉ mục Elasticsearch 8.12.0 tiếng Việt.<br>• Xây dựng API tìm kiếm mờ (Fuzzy Query) và trích đoạn nổi bật (Highlighting). | • Elasticsearch 8.x<br>• Regular Expressions<br>• Unicodedata | **Phan Thành Phát**<br>*(MSSV: 2212463)* | **100%** |
-| **4** | **Module 4: Backend REST API & Quản Trị CSDL** | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên FastAPI.<br>• Tác vụ xử lý OCR nền bất đồng bộ (`asyncio.to_thread`) không gây nghẽn luồng.<br>• Quản trị phiên làm việc và caching với Redis 7. | • FastAPI<br>• PostgreSQL (Supabase)<br>• Redis 7 Cache<br>• SQLAlchemy Async | **Phan Thành Phát**<br>*(MSSV: 2212463)* | **100%** |
+| **3** | **Module 3: Bóc Tách Thực Thể & Elasticsearch** | • Bộ luật Regex trích xuất MSSV 7 số, Họ tên, Ngày ban hành, Số hiệu.<br>• Cấu hình cụm chỉ mục Elasticsearch 8.12.0 tiếng Việt.<br>• Xây dựng API tìm kiếm mờ (Fuzzy Query) và trích đoạn nổi bật (Highlighting). | • Elasticsearch 8.x<br>• Regular Expressions<br>• Unicodedata | **Phan Thành Phát**<br>*(MSSV: 2212436)* | **100%** |
+| **4** | **Module 4: Backend REST API & Quản Trị CSDL** | • Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên PostgreSQL.<br>• Xây dựng 25+ RESTful API endpoints trên FastAPI.<br>• Tác vụ xử lý OCR nền bất đồng bộ (`asyncio.to_thread`) không gây nghẽn luồng.<br>• Quản trị phiên làm việc và caching với Redis 7. | • FastAPI<br>• PostgreSQL (Supabase)<br>• Redis 7 Cache<br>• SQLAlchemy Async | **Phan Thành Phát**<br>*(MSSV: 2212436)* | **100%** |
 | **5** | **Module 5: Frontend Web SPA & Trình Đối Soát** | • Thiết kế giao diện Web SPA React 18, TypeScript, TailwindCSS.<br>• Xây dựng Dashboard KPI, Upload kéo thả & Chụp ảnh Camera.<br>• **Trình đối soát Side-by-Side Live Editor** nhúng trực tiếp file gốc.<br>• Cơ chế Real-time Live Auto-Polling cập nhật OCR tức thì. | • React 18 + TypeScript<br>• Vite & Zustand<br>• TailwindCSS<br>• Axios Client | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | **100%** |
 | **6** | **Module 6: Bảo Mật, Xác Thực Số & DevOps** | • Mã băm SHA-256 kiểm tra tính toàn vẹn tài liệu gốc.<br>• Trang Xác thực công khai mã QR an toàn (tuân thủ Nghị định 13/2023/NĐ-CP).<br>• Thiết lập hệ thống phân quyền RBAC 3 vai trò (Admin, Staff, Student).<br>• Đóng gói Docker Compose đồng bộ 4 container vi dịch vụ. | • SHA-256 Hash<br>• QR Generator<br>• JWT Auth & RBAC<br>• Docker Compose | **Lý Gia Bảo**<br>*(MSSV: 2213934)* | **100%** |
 
@@ -168,7 +168,7 @@ Hệ thống được đóng gói hoàn chỉnh theo kiến trúc hướng dịc
    - Thuật toán bóc tách cấu trúc lưới Bảng biểu (Table Grid) chuyển đổi tự động sang **Markdown Table**.
    - Hậu xử lý chuẩn hóa Unicode NFC và sửa lỗi từ điển hành chính tiếng Việt.
 
-2. **Phân hệ Backend API, CSDL & Elasticsearch** *(Phan Thành Phát - 2212463)*:
+2. **Phân hệ Backend API, CSDL & Elasticsearch** *(Phan Thành Phát - 2212436)*:
    - Thiết kế lược đồ CSDL quan hệ chuẩn 3NF trên **PostgreSQL (Supabase Cloud)**.
    - Xây dựng **25+ RESTful API endpoints** trên **FastAPI**, tài liệu hóa OpenAPI/Swagger đầy đủ.
    - Tối ưu hóa tác vụ OCR nền bất đồng bộ (`asyncio.to_thread`) — Web Server luôn phản hồi dưới 1 giây và không bị nghẽn luồng.
@@ -205,5 +205,5 @@ Hệ thống được đóng gói hoàn chỉnh theo kiến trúc hướng dịc
 |:---:|:---:|:---:|
 | *(Ký và ghi rõ họ tên)* | *(Ký và ghi rõ họ tên)* | *(Ký và ghi rõ họ tên)* |
 | <br><br><br> | <br><br><br> | <br><br><br> |
-| **Ngô Công Thành**<br>MSSV: 2212461 | **Phan Thành Phát**<br>MSSV: 2212463 | **Lý Gia Bảo**<br>MSSV: 2213934 |
+| **Ngô Công Thành**<br>MSSV: 2212461 | **Phan Thành Phát**<br>MSSV: 2212436 | **Lý Gia Bảo**<br>MSSV: 2213934 |
 

@@ -1,5 +1,5 @@
 # HƯỚNG DẪN KIỂM THỬ PHÂN HỆ ELASTICSEARCH & SEARCH API (DocuCTSV)
-**Thành viên phụ trách**: Phan Thành Phát (MSSV: 2212463)  
+**Thành viên phụ trách**: Phan Thành Phát (MSSV: 2212436)  
 **Phân hệ**: Module 3 & Module 4 — Máy chủ tìm kiếm Elasticsearch, CSDL & Backend Search API  
 **Mục tiêu**: Hướng dẫn chi tiết cho các thành viên trong nhóm kiểm thử toàn bộ 16 tính năng tìm kiếm, đánh giá IR, chống làm giả số, quản lý SLA và tích hợp Side-by-Side Live Editor.
 
@@ -276,7 +276,7 @@ Truy cập: 👉 [http://localhost:3000/search](http://localhost:3000/search)
 - **Payload mẫu**:
   ```json
   {
-    "student_id": "2212463",
+    "student_id": "2212436",
     "commune": "Đạ Chais",
     "district": "Lạc Dương",
     "province": "Lâm Đồng",
@@ -288,7 +288,7 @@ Truy cập: 👉 [http://localhost:3000/search](http://localhost:3000/search)
   ```bash
   curl -X POST "http://127.0.0.1:8000/api/v1/search/geo/verify-priority-area" \
        -H "Content-Type: application/json" \
-       -d "{\"student_id\":\"2212463\",\"commune\":\"Đạ Chais\",\"district\":\"Lạc Dương\",\"province\":\"Lâm Đồng\",\"latitude\":12.0833,\"longitude\":108.6167}"
+       -d "{\"student_id\":\"2212436\",\"commune\":\"Đạ Chais\",\"district\":\"Lạc Dương\",\"province\":\"Lâm Đồng\",\"latitude\":12.0833,\"longitude\":108.6167}"
   ```
 - **Kết quả kỳ vọng**: Trả về `is_eligible: true`, `priority_zone: "Khu vực III (Xã đặc biệt khó khăn)"`, `subsidy_percentage: 100`, trích dẫn căn cứ pháp lý Quyết định 861/QĐ-TTg.
 
@@ -300,7 +300,7 @@ Truy cập: 👉 [http://localhost:3000/search](http://localhost:3000/search)
 - **Tính năng Đột phá**: Thuật toán tính toán `Dropout Risk Assessment` (Nguy cơ bỏ học) dựa trên các trọng số: nợ học phí kéo dài, điểm rèn luyện thấp, vắng học, nộp đơn muộn.
 - **Kiểm thử bằng cURL**:
   ```bash
-  curl -X GET "http://127.0.0.1:8000/api/v1/search/students/2212463/entity-graph"
+  curl -X GET "http://127.0.0.1:8000/api/v1/search/students/2212436/entity-graph"
   ```
 - **Kết quả kỳ vọng**: Trả về cấu trúc đồ thị mạng lưới gồm `nodes` và `edges`, kèm đánh giá chi tiết `risk_assessment` (mức độ rủi ro `LOW`/`MEDIUM`/`HIGH`, điểm số `risk_score` 0-100, và danh sách các yếu tố nguy cơ `risk_factors`).
 
@@ -352,5 +352,5 @@ Toàn bộ các giải pháp nâng cao cho đề tài Khóa luận tốt nghiệ
 13. `run_app.bat` & `run_app.ps1`: Script chạy nhanh một cú click cho Windows.
 
 ---
-*Tài liệu được soạn thảo và kiểm thử bởi Phan Thành Phát (MSSV: 2212463) phục vụ dự án DocuCTSV - Trường Đại học Đà Lạt.*
+*Tài liệu được soạn thảo và kiểm thử bởi Phan Thành Phát (MSSV: 2212436) phục vụ dự án DocuCTSV - Trường Đại học Đà Lạt.*
 

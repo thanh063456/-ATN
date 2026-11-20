@@ -5,7 +5,7 @@
 * **Giảng viên hướng dẫn**: ThS. Đặng Thế Nguyên
 * **Sinh viên thực hiện**:
   * **Ngô Công Thành** (MSSV: 2212461) – *Trưởng nhóm (Phụ trách AI, Xử lý ảnh & Pipeline OCR)*
-  * **Phan Thành Phát** (MSSV: 2212463) – *Thành viên (Phụ trách Backend API, CSDL & Máy chủ tìm kiếm Elasticsearch)*
+  * **Phan Thành Phát** (MSSV: 2212436) – *Thành viên (Phụ trách Backend API, CSDL & Máy chủ tìm kiếm Elasticsearch)*
   * **Lý Gia Bảo** (MSSV: 2213934) – *Thành viên (Phụ trách Giao diện Web SPA, Trình đối soát & Đóng gói Docker)*
 * **Thời lượng chuẩn**: **10 phút** (+ 5–10 phút hỏi đáp cùng Hội đồng).
 
