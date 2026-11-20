@@ -2390,7 +2390,7 @@ async def check_document_validity(
 )
 async def get_trending_topics(
     db: AsyncSession = Depends(get_db),
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: User = Depends(require_roles(["ADMIN", "STAFF"])),
 ) -> TrendingTopicsResponse:
     # Mẫu từ khóa đặc thù theo dõi tại ĐH Đà Lạt
     curated_topics = [
@@ -4176,7 +4176,7 @@ async def get_ocr_quality_distribution(
     # 1. Truy vấn từ CSDL PostgreSQL (Dual-engine fallback)
     stmt = select(OCRResult.confidence_score).where(OCRResult.confidence_score.isnot(None))
     res = await db.execute(stmt)
-    raw_scores = res.scalars().all()
+    raw_scores = list(res.scalars().all())
     confidences: list[float] = [float(r) for r in raw_scores if r is not None]
 
     total_count = len(confidences) if confidences else 156
@@ -4185,10 +4185,10 @@ async def get_ocr_quality_distribution(
 
     avg_conf = round(float(sum(confidences) / len(confidences)), 4)
 
-    excellent = sum(1 for c in confidences if c >= 0.90)
-    good = sum(1 for c in confidences if 0.75 <= c < 0.90)
-    review_needed = sum(1 for c in confidences if 0.60 <= c < 0.75)
-    poor = sum(1 for c in confidences if c < 0.60)
+    excellent = sum(1 for c in confidences if float(c) >= 0.90)
+    good = sum(1 for c in confidences if 0.75 <= float(c) < 0.90)
+    review_needed = sum(1 for c in confidences if 0.60 <= float(c) < 0.75)
+    poor = sum(1 for c in confidences if float(c) < 0.60)
     skewed_count = max(int(total_count * 0.08), 12)
 
     total_safe = max(len(confidences), 1)
